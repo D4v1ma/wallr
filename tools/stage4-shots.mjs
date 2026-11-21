@@ -11,7 +11,7 @@ const errs = [];
 page.on('pageerror', (e) => errs.push(e.message));
 await page.route('https://cdnjs.cloudflare.com/**', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: readFileSync(threePath) }));
 await page.route('https://fonts.**', (r) => r.abort());
-await page.goto(new URL('../index.html', import.meta.url).href);
+await page.goto(new URL('../index.html', import.meta.url).href + '?map=range');
 await page.waitForFunction(() => window.__SF, null, { timeout: 120000 });
 const ev = (f, a) => page.evaluate(f, a);
 const wait = (ms) => page.waitForTimeout(ms);

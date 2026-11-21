@@ -2,18 +2,9 @@
 // route, the carrier plants while the rest escort), Wardens split between the sites, then
 // retake and defuse after a plant. Orders are re-evaluated twice a second.
 
-// Positions per site: Warden holds (facing the Raider approach) and Raider plant spots. [x, y, z, yawDeg]
-const SITE_SPOTS = {
-  A: { hold: [[1150, 0, -200, 95], [1110, 0, -600, 70], [960, 0, -570, 75], [900, 0, -330, 95], [1180, 0, -420, 90]], plant: [[980, 0, -470], [1110, 0, -330], [830, 0, -520]],
-    smoke: [[560, 0, -170], [760, 0, -260]] },
-  B: { hold: [[800, 104, 368, 95], [1000, 0, 560, 90], [620, 0, 470, 80], [940, 0, 610, 95], [990, 0, 450, 100]], plant: [[760, 0, 520], [920, 0, 480], [640, 0, 600]],
-    smoke: [[420, 0, 380], [600, 0, 300]] },
-};
-// Ways out of the hall: the roller door (center) and the hall door (south); Raiders gather just inside.
-const ROUTES = { roller: [40, 0, 0], door: [60, 0, 448] };
-// (beside each exit against the wall, so nobody waiting there has a sightline across the yard)
-const STACKS = { roller: [-60, 0, -190], door: [-60, 0, 345] };
-const STACK_YAW = { roller: Math.atan2(-(16 + 60), -(0 + 190)), door: Math.atan2(-(16 + 60), -(448 - 345)) };
+// Per-map data (L.tactics): routes { name: { stack, yaw, via } } where Raiders gather out of sight
+// and then pass through `via`; siteRoutes { A: [main, flank] }; sites { A: { hold, plant, smoke } }
+// with hold spots as [x, y, z, yawDeg] facing the Raider approach.
 const PUSH_BY = 22;          // seconds into the round when the Raiders go even if not everyone has gathered
 
 const Tactics = {
@@ -22,7 +13,8 @@ const Tactics = {
   onRoundStart() {
     const sites = Bomb.sites();
     const site = sites.length ? sites[Math.floor(this.rnd() * sites.length)] : null;
-    this.plan = { site, route: site && site.name === 'B' ? 'door' : 'roller', go: false };
+    const T = Game.L.tactics, routes = (T && site && T.siteRoutes[site.name]) || [];
+    this.plan = { site, route: routes[0], flank: routes[1] || routes[0], go: false };
     let i = 0;
     for (const a of Actors.list) {
       if (!a.brain) continue;
@@ -71,7 +63,9 @@ const Tactics = {
 
   assign() {
     const plan = this.plan;
-    if (!plan || !plan.site) return;
+    const T = Game.L.tactics;
+    if (!plan || !plan.site || !T) return;
+    const SPOTS = T.sites, R = T.routes;
     const st = Bomb.state, bpos = Bomb.where();
     const raiders = Actors.list.filter((a) => a.alive && a.team === TEAM.RAIDERS && a.brain);
     const wardens = Actors.list.filter((a) => a.alive && a.team === TEAM.WARDENS && a.brain);
@@ -82,29 +76,29 @@ const Tactics = {
       for (const a of raiders) { const d = Math.hypot(a.player.pos[0] - bpos[0], a.player.pos[2] - bpos[2]); if (d < best) { best = d; fetcher = a; } }
     }
     // gather inside the hall, then go together (with smoke cover when someone carries one)
-    const routeOf = (i) => (i % 3 === 2 ? (plan.route === 'roller' ? 'door' : 'roller') : plan.route);   // one in three flanks
+    const routeOf = (i) => (i % 3 === 2 ? plan.flank : plan.route);   // one in three flanks
     if (!plan.go && st !== 'planted') {
-      const gathered = raiders.filter((a, i) => Math.hypot(a.player.pos[0] - STACKS[routeOf(i)][0], a.player.pos[2] - STACKS[routeOf(i)][2]) < 260).length;
+      const gathered = raiders.filter((a, i) => Math.hypot(a.player.pos[0] - R[routeOf(i)].stack[0], a.player.pos[2] - R[routeOf(i)].stack[2]) < 260).length;
       if (gathered >= Math.ceil(raiders.length * 0.6) || Match.liveT > PUSH_BY || st === 'dropped') {
         plan.go = true;
         let k = 0;
-        for (const a of raiders) if (a.loadout.byId('smoke')) a.brain.smokeAt = SITE_SPOTS[plan.site.name].smoke[k++ % 2].slice();
+        for (const a of raiders) if (a.loadout.byId('smoke')) a.brain.smokeAt = SPOTS[plan.site.name].smoke[k++ % 2].slice();
       }
     }
     raiders.forEach((a, i) => {
-      const b = a.brain, spots = SITE_SPOTS[plan.site.name];
+      const b = a.brain, spots = SPOTS[plan.site.name];
       if (!plan.go && st !== 'planted') {
-        const sp = STACKS[routeOf(i)];
-        b.setOrder({ kind: 'stack', pos: sp.slice(), yaw: STACK_YAW[routeOf(i)], spread: 28 });
+        const rt = R[routeOf(i)];
+        b.setOrder({ kind: 'stack', pos: rt.stack.slice(), yaw: rt.yaw, spread: 28 });
       } else if (st === 'planted') {
         const ang = (i / Math.max(1, raiders.length)) * TAU + 0.7, r = 220 + (i % 2) * 120;
         b.setOrder({ kind: 'guard', pos: [Bomb.pos[0] + Math.cos(ang) * r, Bomb.pos[1], Bomb.pos[2] + Math.sin(ang) * r], face: Bomb.pos });
       } else if (Bomb.carrier === a) {
-        b.setOrder({ kind: 'plant', pos: this.spot(spots.plant, i).pos, via: ROUTES[routeOf(i)], site: plan.site });
+        b.setOrder({ kind: 'plant', pos: this.spot(spots.plant, i).pos, via: R[routeOf(i)].via, site: plan.site });
       } else if (a === fetcher) {
         b.setOrder({ kind: 'pickup', pos: bpos.slice() });
       } else {
-        b.setOrder({ kind: 'goto', pos: this.spot(spots.plant, i + 1).pos, via: ROUTES[routeOf(i)], spread: 90 });
+        b.setOrder({ kind: 'goto', pos: this.spot(spots.plant, i + 1).pos, via: R[routeOf(i)].via, spread: 90 });
       }
     });
     if (st === 'planted') {
@@ -116,7 +110,7 @@ const Tactics = {
       });
     } else {
       wardens.forEach((a, i) => {
-        const site = Bomb.sites()[a.brain.post % Bomb.sites().length], s = this.spot(SITE_SPOTS[site.name].hold, i);
+        const site = Bomb.sites()[a.brain.post % Bomb.sites().length], s = this.spot(SPOTS[site.name].hold, i);
         a.brain.setOrder({ kind: 'hold', pos: s.pos, yaw: s.yaw });
       });
     }

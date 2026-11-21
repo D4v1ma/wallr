@@ -193,6 +193,40 @@ function texSiteSign(letter, seed) {
   return P.toCanvas();
 }
 
+// Freight wagon side (fit): ribbed rusty body, sliding door, stencilled marks, hazard placard.
+function texWagon(seed, paint = [0.44, 0.21, 0.13]) {
+  const W = 256, H = 128, P = new Pix(W, H);
+  P.map((x, y, c) => {
+    const u = x / W, v = y / H, rib = x % 18;
+    let k = 0.88 + fbm(u * 6, v * 3, 6, 3, 3, seed) * 0.2 + (hashi(x, y, seed) - 0.5) * 0.05;
+    if (rib < 2) k *= 1.18; else if (rib < 4) k *= 0.72;
+    k *= 1 - smoothstep(0.55, 1, fbm(u * 24, v * 2, 24, 2, 3, seed + 1)) * 0.25 * v;   // rust runs
+    if (y < 6 || y > H - 8) k *= 0.6;
+    c[0] = paint[0] * k; c[1] = paint[1] * k; c[2] = paint[2] * k;
+  });
+  const ink = [0.9, 0.86, 0.76];
+  P.stamp((ctx) => { ctx.fillRect(98, 10, 60, 112); }, [paint[0] * 0.8, paint[1] * 0.8, paint[2] * 0.8], 0.9);
+  P.stamp((ctx) => { ctx.lineWidth = 3; ctx.strokeRect(98, 10, 60, 112); ctx.fillRect(150, 58, 4, 16); }, [0.12, 0.08, 0.06], 0.9);
+  P.stamp((ctx) => {
+    ctx.font = `15px ${STENCIL_FONT}`; ctx.fillText('SPX 40217', 14, 104);
+    ctx.font = `8px ${STENCIL_FONT}`; ctx.fillText('CAP 60T · TARE 22T', 14, 116); ctx.fillText('SALTPAN DEPOT', 176, 116);
+  }, ink, 0.92, 0.35, seed + 2);
+  P.stamp((ctx) => { ctx.beginPath(); ctx.moveTo(212, 30); ctx.lineTo(228, 46); ctx.lineTo(212, 62); ctx.lineTo(196, 46); ctx.closePath(); ctx.fill(); }, [0.92, 0.66, 0.1], 0.95, 0.2, seed + 3);
+  return P.toCanvas();
+}
+
+// Window (fit): steel frame, four dusty panes with a sky reflection.
+function texWindow(seed) {
+  const W = 128, P = new Pix(W);
+  P.map((x, y, c) => {
+    const u = x / W, v = y / W, frame = x < 7 || x > W - 8 || y < 7 || y > W - 8 || Math.abs(x - 64) < 3 || Math.abs(y - 64) < 3;
+    if (frame) { const k = 0.85 + (hashi(x, y, seed) - 0.5) * 0.08; c[0] = 0.5 * k; c[1] = 0.52 * k; c[2] = 0.5 * k; return; }
+    const refl = clamp(1 - Math.abs((u - v) * 1.6 - 0.1), 0, 1) * 0.35, dust = fbm(u * 5, v * 5, 5, 5, 3, seed + 1) * 0.12 + v * 0.1;
+    c[0] = 0.1 + refl * 0.5 + dust; c[1] = 0.13 + refl * 0.55 + dust; c[2] = 0.17 + refl * 0.6 + dust * 0.9;
+  });
+  return P.toCanvas();
+}
+
 function texLabelBox(num, seed) {
   const W = 128, P = new Pix(W);
   P.map((x, y, c) => {
@@ -448,6 +482,22 @@ const TEX_DEFS = {
   sign_step:      { gen: () => texSign(['STEP TEST', '16 · 18 · 20 UNITS'], [0.18, 0.18, 0.17], [0.92, 0.7, 0.14], 44), fit: true, surf: 'metal' },
   sign_out:       { gen: () => texSign(['RANGE  ►', 'YARD 2'], [0.13, 0.2, 0.32], [0.9, 0.88, 0.82], 45), fit: true, surf: 'metal' },
   site_a:         { gen: () => texSiteSign('A', 58), fit: true, surf: 'metal' },
+  // Saltpan Depot
+  asphalt:        { gen: () => texAsphalt(71), world: 192, surf: 'concrete' },
+  ballast:        { gen: () => texBallast(72), world: 64, surf: 'sand' },
+  timber:         { gen: () => texWoodPlanks(73, [0.3, 0.22, 0.15]), world: 96, surf: 'wood' },
+  shed:           { gen: () => texCorrugated(74, [0.46, 0.49, 0.46]), world: 128, surf: 'metal' },
+  shed_roof:      { gen: () => texCorrugated(75, [0.38, 0.4, 0.39], 8, false), world: 128, surf: 'metal' },
+  wagon:          { gen: () => texWagon(76), fit: true, surf: 'metal' },
+  wagon_blue:     { gen: () => texWagon(77, [0.16, 0.27, 0.38]), fit: true, surf: 'metal' },
+  window:         { gen: () => texWindow(78), fit: true, surf: 'metal' },
+  plaster_warm:   { gen: () => texPlaster(79, [0.78, 0.66, 0.52]), world: 128, surf: 'plaster' },
+  sign_depot:     { gen: () => texSign(['SALTPAN DEPOT', 'AUTHORISED VEHICLES ONLY'], [0.12, 0.22, 0.35], [0.9, 0.88, 0.82], 80), fit: true, surf: 'metal' },
+  sign_weigh:     { gen: () => texSign(['WEIGHBRIDGE', 'STOP · WEIGH · PROCEED'], [0.86, 0.66, 0.12], [0.08, 0.07, 0.06], 81), fit: true, surf: 'metal' },
+  sign_shed4:     { gen: () => texSign(['SHED 4', 'LOADING BAY · KEEP CLEAR'], [0.24, 0.33, 0.27], [0.9, 0.88, 0.8], 82), fit: true, surf: 'metal' },
+  sign_platform:  { gen: () => texSign(['PLATFORM 2', 'STAND BEHIND THE LINE'], [0.13, 0.2, 0.32], [0.9, 0.88, 0.82], 83), fit: true, surf: 'metal' },
+  sign_culvert:   { gen: () => texSign(['CULVERT', 'FLOOD RISK · KEEP OUT'], [0.8, 0.22, 0.14], [0.95, 0.92, 0.86], 84), fit: true, surf: 'metal' },
+  sign_salt:      { gen: () => texSign(['SALT STORE', 'NO NAKED FLAMES'], [0.5, 0.47, 0.42], [0.1, 0.09, 0.08], 85), fit: true, surf: 'metal' },
   site_b:         { gen: () => texSiteSign('B', 59), fit: true, surf: 'metal' },
   jump32:         { gen: () => texLabelBox('32', 50), fit: true, surf: 'concrete' },
   jump48:         { gen: () => texLabelBox('48', 51), fit: true, surf: 'concrete' },

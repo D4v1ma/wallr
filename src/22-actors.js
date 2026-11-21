@@ -68,7 +68,7 @@ class Actor {
       if (attacker.team !== this.team) { attacker.kills++; Actors.score[attacker.team]++; } else attacker.kills--;
     }
     Actors.feed.push({ killer: attacker ? attacker.name : '', kTeam: attacker ? attacker.team : this.team, victim: this.name, vTeam: this.team,
-      weapon: def ? def.name : '', hs: headshot, age: 0, me: !!(attacker && attacker.isMe) || this.isMe });
+      weapon: def ? def.name : '', wid: def ? def.id : '', hs: headshot, age: 0, me: !!(attacker && attacker.isMe) || this.isMe });
     if (Actors.feed.length > 6) Actors.feed.shift();
     this.model.deathDir = headshot ? 1 : (Math.random() < 0.5 ? 1 : -1);
     if (typeof Snd !== 'undefined' && Snd.death) Snd.death(this.player.pos.slice());

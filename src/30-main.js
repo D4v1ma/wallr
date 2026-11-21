@@ -142,7 +142,7 @@ function handleHotkeys() {
   const pl = Game.player;
   if (Input.pressed('KeyV')) { pl.noclip = !pl.noclip; if (!pl.noclip) pl.vel = [0, 0, 0]; HUD.note(pl.noclip ? 'Noclip on · Space up, C down' : 'Noclip off'); }
   if (Input.pressed('F1') || Input.pressed('Backquote')) { HUD.debug = !HUD.debug; $('hud-debug').hidden = !HUD.debug; }
-  if (Input.pressed('KeyH')) Settings.set('showHints', !Settings.v.showHints);
+  if (Input.pressed('KeyH')) { const shown = !HUD.el['hud-hint'].hidden; HUD.hintPinned = !shown; Settings.set('showHints', !shown); }
   if (Input.pressed('KeyB') || Input.touch.buyEdge) { Input.touch.buyEdge = false; BuyMenu.toggle(); }
   if (BuyMenu.open) {
     for (let n = 1; n <= 9; n++) if (Input.pressed('Digit' + n)) BuyMenu.press(n);
@@ -301,16 +301,22 @@ async function boot(hot) {
   await yieldUI();
   const tex = await generateTextures((f) => Menu.loading('Generating textures', f * 0.26));
   R.makeTextures(tex);
-  Menu.loading('Building the range', 0.28); await yieldUI();
-  const L = compileLevel(buildTestRange(), tex);
+  // ?map=range (or depot) in the page address overrides the saved choice
+  let qmap = null;
+  try { qmap = new URLSearchParams(location.search).get('map'); } catch (e) { qmap = null; }
+  const mapKey = MAPS[qmap] ? qmap : MAPS[Settings.v.map] ? Settings.v.map : 'depot', mapDef = MAPS[mapKey];
+  Menu.loading(`Building ${mapDef.name}`, 0.28); await yieldUI();
+  const L = compileLevel(mapDef.build(), tex);
+  L.name = mapDef.name; L.key = mapKey;
   Game.L = L;
   const bake = await bakeLighting(L, (f) => Menu.loading('Compiling lighting', 0.29 + f * 0.62));
   L.probes = bake.probes; L.bakeStats = bake.stats;
   Menu.loading('Mapping bot routes', 0.93); await yieldUI();
   Nav.build(L);
+  Radar.build(L);
   Menu.loading('Uploading to the GPU', 0.97); await yieldUI();
   R.buildWorld(L, bake);
-  FX.init(L); Ents.init(L); Grenades.init(L); Items.init(); Viewmodel.build();
+  FX.init(L); Ents.init(L); Grenades.init(L); Items.init(); Viewmodel.build(); WeaponIcons.build();
   Game.player = new Player(L.cw);
   Game.loadout = new Loadout();
   Actors.init();
@@ -344,7 +350,7 @@ async function boot(hot) {
 
   // Test/debug hooks (harmless in normal play).
   window.__SF = {
-    Game, R, Ents, FX, Input, Ballistics, Grenades, Settings, Viewmodel, Snd, Actors, Nav, Bots, Items, Bomb, Match, SHOP, Tactics, BuyMenu,
+    Game, R, Ents, FX, Input, Ballistics, Grenades, Settings, Viewmodel, Snd, Actors, Nav, Bots, Items, Bomb, Match, SHOP, Tactics, BuyMenu, Radar, MAPS,
     setView(x, y, z, yawDeg, pitchDeg) {
       const p = Game.player; p.spawn([x, y, z], yawDeg * DEG); p.pitch = (pitchDeg || 0) * DEG;
       const w = Game.loadout.active; if (w.state === 'draw') { w.state = 'idle'; w.anim = 'idle'; }

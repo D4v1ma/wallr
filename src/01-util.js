@@ -1,7 +1,7 @@
 // Core helpers: math, deterministic noise, settings persistence.
 // All game modules share this IIFE scope; keep names stable.
 
-const GAME_VERSION = 'stage-4';
+const GAME_VERSION = 'stage-5';
 const DEG = Math.PI / 180;
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -87,7 +87,7 @@ const Settings = {
     sensitivity: 2.0, invertY: false, rawInput: true,
     fov: 90, aspect: 'wide', vmFov: 64, renderScale: 100, maxDpr: 1.5,
     xhStyle: 'dynamic', xhColor: '#4cff6a', xhSize: 6, xhGap: 3, xhThick: 2, xhDot: false, xhOutline: true, xhRecoil: false,
-    volume: 70, showFps: true, showSpeed: true, showHints: true, botSkill: 'normal', team: 1, ff: false, mode: 'defuse', matchLen: 'standard',
+    volume: 70, showFps: true, showSpeed: true, showHints: true, botSkill: 'normal', team: 1, ff: false, mode: 'defuse', matchLen: 'standard', map: 'depot',
   },
   v: null,
   listeners: [],

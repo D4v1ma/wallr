@@ -182,5 +182,25 @@ function buildTestRange() {
   for (const [x, y, z, n] of [[-500, 0, 0, 'hall'], [-700, 128, -580, 'catwalk'], [-820, 0, 470, 'jump boxes'], [-60, 0, 0, 'roller door'], [-60, 0, 448, 'hall door'],
     [500, 0, 100, 'yard'], [800, 104, 368, 'container roof'], [1120, 2, 160, 'shed'], [600, 0, -400, 'range'], [380, 0, 150, 'cover'], [-150, 0, -590, 'stairs'],
     [300, 0, 450, 'south yard'], [100, 0, 448, 'door yard'], [-380, 0, -300, 'hall north'], [1000, 0, -480, 'A site'], [780, 0, 520, 'B site']]) M.hotspot(x, y, z, n);
+  // bot tactics: Raiders gather beside each hall exit (roller door, hall door), out of sight
+  M.tactics = {
+    routes: {
+      roller: { stack: [-60, 0, -190], yaw: Math.atan2(-(16 + 60), -(0 + 190)), via: [40, 0, 0] },
+      door: { stack: [-60, 0, 345], yaw: Math.atan2(-(16 + 60), -(448 - 345)), via: [60, 0, 448] },
+    },
+    siteRoutes: { A: ['roller', 'door'], B: ['door', 'roller'] },
+    sites: {
+      A: { hold: [[1150, 0, -200, 95], [1110, 0, -600, 70], [960, 0, -570, 75], [900, 0, -330, 95], [1180, 0, -420, 90]], plant: [[980, 0, -470], [1110, 0, -330], [830, 0, -520]],
+        smoke: [[560, 0, -170], [760, 0, -260]] },
+      B: { hold: [[800, 104, 368, 95], [1000, 0, 560, 90], [620, 0, 470, 80], [940, 0, 610, 95], [990, 0, 450, 100]], plant: [[760, 0, 520], [920, 0, 480], [640, 0, 600]],
+        smoke: [[420, 0, 380], [600, 0, 300]] },
+    },
+  };
   return M;
 }
+
+// Map registry: the defuse map and the practice range.
+const MAPS = {
+  depot: { name: 'Saltpan Depot', build: buildDepot, blurb: 'Defuse map: Platform 2 (A) and Shed 4 (B)' },
+  range: { name: 'Hall B', build: buildTestRange, blurb: 'Practice range: plates, step and jump tests' },
+};

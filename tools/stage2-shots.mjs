@@ -13,7 +13,7 @@ page.on('pageerror', (e) => errs.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
 await page.route('https://cdnjs.cloudflare.com/**', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: readFileSync(threePath) }));
 await page.route('https://fonts.**', (r) => r.abort());
-await page.goto(new URL('../index.html', import.meta.url).href);
+await page.goto(new URL('../index.html', import.meta.url).href + '?map=range');
 await page.waitForFunction(() => window.__SF, null, { timeout: 90000 });
 await page.evaluate(() => { __SF.play(); __SF.Input.freeMouse = true; __SF.Settings.set('mode', 'skirmish'); __SF.Actors.removeBots(); });
 const ev = (f, a) => page.evaluate(f, a);

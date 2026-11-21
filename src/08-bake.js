@@ -121,7 +121,7 @@ async function bakeLighting(L, onProgress) {
   };
 
   // 3) indirect: sky + bounce + AO
-  const K = BAKE.rays, G = Math.round(Math.sqrt(K)), B = [0, 0, 0, 0, 0, 0], rad = [0, 0, 0];
+  const K = env.bakeRays || BAKE.rays, G = Math.round(Math.sqrt(K)), B = [0, 0, 0, 0, 0, 0], rad = [0, 0, 0];
   for (let k = 0; k < total; k++) {
     if ((k & 127) === 0) await step(0.3 + 0.55 * k / total);
     if (!valid[k]) continue;
@@ -189,7 +189,7 @@ async function bakeLighting(L, onProgress) {
   }
 
   // 6) light probes for dynamic objects (viewmodel, later players)
-  const PS = BAKE.probeStep, lo = L.bounds.lo, hi = L.bounds.hi;
+  const PS = (L.env && L.env.probeStep) || BAKE.probeStep, lo = L.bounds.lo, hi = L.bounds.hi;
   const pnx = Math.ceil((hi[0] - lo[0]) / PS) + 1, pny = Math.max(2, Math.ceil(Math.min(hi[1] - lo[1], 448) / PS) + 1), pnz = Math.ceil((hi[2] - lo[2]) / PS) + 1;
   const probes = { nx: pnx, ny: pny, nz: pnz, x0: lo[0], y0: Math.max(lo[1], 0) + 24, z0: lo[2], step: PS, data: new Float32Array(pnx * pny * pnz * 4), valid: new Uint8Array(pnx * pny * pnz) };
   const PR = BAKE.probeRays, dirs = [];

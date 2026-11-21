@@ -355,3 +355,41 @@ function texBurlap(seed) {
   });
   return P.toCanvas();
 }
+
+// ---------------------------------------------------------------------------
+// Stage 5 (Saltpan Depot) materials.
+
+// Strokes drawn on all 9 tile offsets so line art wraps seamlessly.
+function wrapDraw(ctx, W, fn) { for (const dx of [-W, 0, W]) for (const dy of [-W, 0, W]) { ctx.save(); ctx.translate(dx, dy); fn(ctx); ctx.restore(); } }
+
+function texAsphalt(seed) {
+  const W = 256, P = new Pix(W), o = [0, 0, 0];
+  P.map((x, y, c) => {
+    const u = x / W, v = y / W;
+    const blot = fbm(u * 4, v * 4, 4, 4, 4, seed) - 0.5;
+    worley(u * 40, v * 40, 40, seed + 1, o);
+    const stone = smoothstep(0.34, 0.1, o[0]) * (0.4 + o[2] * 0.9);
+    const oil = smoothstep(0.6, 0.74, fbm(u * 3, v * 3, 3, 3, 3, seed + 3));
+    let k = (0.9 + blot * 0.24 + stone * 0.24 + (hashi(x, y, seed + 2) - 0.5) * 0.1) * (1 - oil * 0.32);
+    c[0] = 0.25 * k; c[1] = 0.25 * k; c[2] = 0.26 * k;
+  });
+  const r = mulberry32(seed + 4), cracks = [];
+  for (let i = 0; i < 4; i++) { let x = r() * 256, y = r() * 256; const pts = [[x, y]]; for (let j = 0; j < 8; j++) { x += (r() - 0.5) * 36; y += (r() - 0.5) * 36; pts.push([x, y]); } cracks.push(pts); }
+  P.stamp((ctx) => wrapDraw(ctx, 256, (g) => { g.lineWidth = 1.3; for (const pts of cracks) { g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (const q of pts) g.lineTo(q[0], q[1]); g.stroke(); } }), [0.08, 0.08, 0.08], 0.65);
+  return P.toCanvas();
+}
+
+// Rail ballast: small angular stones in two sizes, dark gaps, a few warm ones, dusty patches.
+function texBallast(seed) {
+  const W = 256, P = new Pix(W), o = [0, 0, 0], o2 = [0, 0, 0];
+  P.map((x, y, c) => {
+    const u = x / W, v = y / W;
+    worley(u * 34, v * 34, 34, seed, o);
+    worley(u * 13, v * 13, 13, seed + 9, o2);
+    const gap = smoothstep(0.0, 0.14, o[1] - o[0]), big = smoothstep(0.0, 0.1, o2[1] - o2[0]);
+    const dust = fbm(u * 4, v * 4, 4, 4, 3, seed + 1), warm = o[2] > 0.72 ? 1 : 0;
+    const k = (0.3 + 0.7 * gap * (0.72 + 0.28 * big)) * (0.5 + o[2] * 0.55 + (1 - o[0]) * 0.25) * (0.9 + (hashi(x, y, seed + 2) - 0.5) * 0.18);
+    c[0] = (0.5 + dust * 0.12 + warm * 0.07) * k; c[1] = (0.48 + dust * 0.06 + warm * 0.02) * k; c[2] = (0.45 - dust * 0.04 - warm * 0.05) * k;
+  });
+  return P.toCanvas();
+}

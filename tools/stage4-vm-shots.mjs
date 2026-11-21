@@ -12,7 +12,7 @@ page.on('pageerror', (e) => errs.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
 await page.route('https://cdnjs.cloudflare.com/**', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: readFileSync(threePath) }));
 await page.route('https://fonts.**', (r) => r.abort());
-await page.goto(new URL('../index.html', import.meta.url).href);
+await page.goto(new URL('../index.html', import.meta.url).href + '?map=range');
 await page.waitForFunction(() => window.__SF, null, { timeout: 120000 });
 await page.evaluate(() => { __SF.play(); __SF.Input.freeMouse = true; __SF.Actors.removeBots(); __SF.Game.freeze = true; __SF.setView(300, 0, 100, -90, -4); });
 const shot = async (name, fn, arg) => {

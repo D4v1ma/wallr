@@ -5,7 +5,7 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 import { readFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 const [threePath, outDir = 'shots', ...only] = process.argv.slice(2);
-const page_url = new URL('../index.html', import.meta.url).href;
+const page_url = new URL('../index.html', import.meta.url).href + '?map=range';
 mkdirSync(outDir, { recursive: true });
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });

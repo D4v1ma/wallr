@@ -131,9 +131,9 @@ body.playing #sf-canvas { cursor: none; }
 #sf-touch .zone.look { right: 0; width: 58%; }
 #sf-touch .stick { position: absolute; width: 110px; height: 110px; margin: -55px 0 0 -55px; border-radius: 50%; border: 2px solid rgba(243, 236, 214, 0.35); display: none; }
 #sf-touch .stick i { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(243, 236, 214, 0.35); }
-#sf-touch .btns { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(110px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(3, 58px); gap: 10px; pointer-events: auto; }
+#sf-touch .btns { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(110px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(4, 58px); gap: 10px; pointer-events: auto; }
 #sf-touch .btns button { width: 58px; height: 58px; border-radius: 50%; border: 1px solid rgba(243, 236, 214, 0.4); background: rgba(10, 12, 11, 0.45); color: var(--hud); font: 600 11px var(--font-display); letter-spacing: 0.06em; touch-action: none; }
-#sf-touch .btns button.fire { background: rgba(229, 87, 63, 0.55); grid-row: span 2; height: 126px; border-radius: 29px; }
+#sf-touch .btns button.fire { background: rgba(229, 87, 63, 0.55); grid-column: 4; grid-row: 1 / span 2; height: 126px; border-radius: 29px; }
 #sf-touch .tmenu { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(16px + env(safe-area-inset-right, 0px)); pointer-events: auto; }
 
 /* ---------- Overlay / menu ---------- */
@@ -246,6 +246,17 @@ kbd { font-family: var(--font-display); font-size: 12px; font-weight: 600; color
 .hud-board .hist i { width: 16px; height: 16px; line-height: 16px; text-align: center; font-style: normal; background: rgba(243, 236, 214, 0.08); }
 .hud-board .hist i.t0 { background: rgba(235, 162, 100, 0.35); }
 .hud-board .hist i.t1 { background: rgba(134, 188, 239, 0.35); }
+
+/* Stage 5: radar, location, weapon icons, low health */
+.radar-wrap { width: 168px; }
+#hud-radar { display: block; width: 168px; height: 168px; }
+.place { text-align: center; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; margin-top: 3px; min-height: 15px; }
+.hud-feed img.wi { height: 13px; width: auto; vertical-align: -2px; opacity: 0.92; margin: 0 2px; }
+.wlist img.wi { height: 14px; width: auto; vertical-align: -2px; margin-left: 8px; opacity: 0.85; }
+.buy-menu img.wi { height: 15px; width: 46px; object-fit: contain; object-position: left center; vertical-align: -3px; margin-right: 8px; opacity: 0.9; }
+.buy-menu .wi-pad { display: inline-block; width: 46px; margin-right: 8px; }
+.stat .big.low { color: var(--danger); animation: sf-pulse 0.8s ease-in-out infinite; }
+@media (max-width: 640px), (max-height: 520px) { .radar-wrap, #hud-radar { width: 104px; height: 104px; } .radar-wrap { height: auto; } .place { font-size: 10px; } }
 </style>
 </head>
 <body>
@@ -258,7 +269,8 @@ kbd { font-family: var(--font-display); font-size: 12px; font-weight: 600; color
     <div id="xh" class="xh" aria-hidden="true"><i class="xh-t"></i><i class="xh-b"></i><i class="xh-l"></i><i class="xh-r"></i><i class="xh-d"></i></div>
     <div id="hitmark" class="hitmark" aria-hidden="true"></div>
     <div class="hud-corner hud-tl">
-      <div class="tag" id="hud-tag">Hall B · Defuse</div>
+      <div class="radar-wrap"><canvas id="hud-radar" width="168" height="168" aria-hidden="true"></canvas><div class="place" id="hud-place"></div></div>
+      <div class="tag" id="hud-tag">Saltpan Depot</div>
       <div class="hint" id="hud-hint"><kbd>WASD</kbd> move <kbd>Space</kbd> jump <kbd>C</kbd> crouch <kbd>Shift</kbd> walk<br><kbd>1</kbd>–<kbd>5</kbd> weapons <kbd>B</kbd> buy <kbd>G</kbd> drop <kbd>E</kbd> use / defuse<br><kbd>R</kbd> reload <kbd>Tab</kbd> scores <kbd>F1</kbd> debug <kbd>H</kbd> hide hints</div>
     </div>
     <div class="hud-top">
@@ -312,7 +324,7 @@ kbd { font-family: var(--font-display); font-size: 12px; font-weight: 600; color
     <section class="panel" aria-labelledby="sf-title">
       <header class="panel-head">
         <div class="brand" id="sf-title">Short<span>·</span>Fuse</div>
-        <div class="stagecode"><b>Stage 4</b>Rounds, money &amp; the charge</div>
+        <div class="stagecode"><b>Stage 5</b>Saltpan Depot</div>
       </header>
       <div class="panel-body">
         <div id="sf-loading">
@@ -361,6 +373,9 @@ kbd { font-family: var(--font-display); font-size: 12px; font-weight: 600; color
 
           <div id="pane-bots" role="tabpanel" aria-labelledby="tab-bots" hidden>
             <div class="sets">
+              <div class="set"><label for="set-map">Map</label>
+                <select id="set-map"><option value="depot">Saltpan Depot (A: Platform 2, B: Shed 4)</option><option value="range">Hall B (practice range)</option></select>
+              </div>
               <div class="set"><label for="set-mode">Mode</label>
                 <select id="set-mode"><option value="defuse">Defuse (rounds, money, the charge)</option><option value="skirmish">Skirmish (respawns, practice)</option></select>
               </div>
@@ -445,7 +460,7 @@ kbd { font-family: var(--font-display); font-size: 12px; font-weight: 600; color
 // Core helpers: math, deterministic noise, settings persistence.
 // All game modules share this IIFE scope; keep names stable.
 
-const GAME_VERSION = 'stage-4';
+const GAME_VERSION = 'stage-5';
 const DEG = Math.PI / 180;
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -531,7 +546,7 @@ const Settings = {
     sensitivity: 2.0, invertY: false, rawInput: true,
     fov: 90, aspect: 'wide', vmFov: 64, renderScale: 100, maxDpr: 1.5,
     xhStyle: 'dynamic', xhColor: '#4cff6a', xhSize: 6, xhGap: 3, xhThick: 2, xhDot: false, xhOutline: true, xhRecoil: false,
-    volume: 70, showFps: true, showSpeed: true, showHints: true, botSkill: 'normal', team: 1, ff: false, mode: 'defuse', matchLen: 'standard',
+    volume: 70, showFps: true, showSpeed: true, showHints: true, botSkill: 'normal', team: 1, ff: false, mode: 'defuse', matchLen: 'standard', map: 'depot',
   },
   v: null,
   listeners: [],
@@ -1008,6 +1023,44 @@ function texBurlap(seed) {
   return P.toCanvas();
 }
 
+// ---------------------------------------------------------------------------
+// Stage 5 (Saltpan Depot) materials.
+
+// Strokes drawn on all 9 tile offsets so line art wraps seamlessly.
+function wrapDraw(ctx, W, fn) { for (const dx of [-W, 0, W]) for (const dy of [-W, 0, W]) { ctx.save(); ctx.translate(dx, dy); fn(ctx); ctx.restore(); } }
+
+function texAsphalt(seed) {
+  const W = 256, P = new Pix(W), o = [0, 0, 0];
+  P.map((x, y, c) => {
+    const u = x / W, v = y / W;
+    const blot = fbm(u * 4, v * 4, 4, 4, 4, seed) - 0.5;
+    worley(u * 40, v * 40, 40, seed + 1, o);
+    const stone = smoothstep(0.34, 0.1, o[0]) * (0.4 + o[2] * 0.9);
+    const oil = smoothstep(0.6, 0.74, fbm(u * 3, v * 3, 3, 3, 3, seed + 3));
+    let k = (0.9 + blot * 0.24 + stone * 0.24 + (hashi(x, y, seed + 2) - 0.5) * 0.1) * (1 - oil * 0.32);
+    c[0] = 0.25 * k; c[1] = 0.25 * k; c[2] = 0.26 * k;
+  });
+  const r = mulberry32(seed + 4), cracks = [];
+  for (let i = 0; i < 4; i++) { let x = r() * 256, y = r() * 256; const pts = [[x, y]]; for (let j = 0; j < 8; j++) { x += (r() - 0.5) * 36; y += (r() - 0.5) * 36; pts.push([x, y]); } cracks.push(pts); }
+  P.stamp((ctx) => wrapDraw(ctx, 256, (g) => { g.lineWidth = 1.3; for (const pts of cracks) { g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (const q of pts) g.lineTo(q[0], q[1]); g.stroke(); } }), [0.08, 0.08, 0.08], 0.65);
+  return P.toCanvas();
+}
+
+// Rail ballast: small angular stones in two sizes, dark gaps, a few warm ones, dusty patches.
+function texBallast(seed) {
+  const W = 256, P = new Pix(W), o = [0, 0, 0], o2 = [0, 0, 0];
+  P.map((x, y, c) => {
+    const u = x / W, v = y / W;
+    worley(u * 34, v * 34, 34, seed, o);
+    worley(u * 13, v * 13, 13, seed + 9, o2);
+    const gap = smoothstep(0.0, 0.14, o[1] - o[0]), big = smoothstep(0.0, 0.1, o2[1] - o2[0]);
+    const dust = fbm(u * 4, v * 4, 4, 4, 3, seed + 1), warm = o[2] > 0.72 ? 1 : 0;
+    const k = (0.3 + 0.7 * gap * (0.72 + 0.28 * big)) * (0.5 + o[2] * 0.55 + (1 - o[0]) * 0.25) * (0.9 + (hashi(x, y, seed + 2) - 0.5) * 0.18);
+    c[0] = (0.5 + dust * 0.12 + warm * 0.07) * k; c[1] = (0.48 + dust * 0.06 + warm * 0.02) * k; c[2] = (0.45 - dust * 0.04 - warm * 0.05) * k;
+  });
+  return P.toCanvas();
+}
+
 // ==== 04-tex-props.js ====
 // Props, signage, decals, sprites and weapon skins + the texture registry.
 
@@ -1201,6 +1254,40 @@ function texSiteSign(letter, seed) {
     ctx.font = `12px ${STENCIL_FONT}`; ctx.fillText('CHARGE SITE', 64, 112);
   }, ink, 0.95, 0.35, seed + 2);
   stampRivets(P, [[10, 10], [118, 10], [10, 118], [118, 118]], 2.2, 0.5);
+  return P.toCanvas();
+}
+
+// Freight wagon side (fit): ribbed rusty body, sliding door, stencilled marks, hazard placard.
+function texWagon(seed, paint = [0.44, 0.21, 0.13]) {
+  const W = 256, H = 128, P = new Pix(W, H);
+  P.map((x, y, c) => {
+    const u = x / W, v = y / H, rib = x % 18;
+    let k = 0.88 + fbm(u * 6, v * 3, 6, 3, 3, seed) * 0.2 + (hashi(x, y, seed) - 0.5) * 0.05;
+    if (rib < 2) k *= 1.18; else if (rib < 4) k *= 0.72;
+    k *= 1 - smoothstep(0.55, 1, fbm(u * 24, v * 2, 24, 2, 3, seed + 1)) * 0.25 * v;   // rust runs
+    if (y < 6 || y > H - 8) k *= 0.6;
+    c[0] = paint[0] * k; c[1] = paint[1] * k; c[2] = paint[2] * k;
+  });
+  const ink = [0.9, 0.86, 0.76];
+  P.stamp((ctx) => { ctx.fillRect(98, 10, 60, 112); }, [paint[0] * 0.8, paint[1] * 0.8, paint[2] * 0.8], 0.9);
+  P.stamp((ctx) => { ctx.lineWidth = 3; ctx.strokeRect(98, 10, 60, 112); ctx.fillRect(150, 58, 4, 16); }, [0.12, 0.08, 0.06], 0.9);
+  P.stamp((ctx) => {
+    ctx.font = `15px ${STENCIL_FONT}`; ctx.fillText('SPX 40217', 14, 104);
+    ctx.font = `8px ${STENCIL_FONT}`; ctx.fillText('CAP 60T · TARE 22T', 14, 116); ctx.fillText('SALTPAN DEPOT', 176, 116);
+  }, ink, 0.92, 0.35, seed + 2);
+  P.stamp((ctx) => { ctx.beginPath(); ctx.moveTo(212, 30); ctx.lineTo(228, 46); ctx.lineTo(212, 62); ctx.lineTo(196, 46); ctx.closePath(); ctx.fill(); }, [0.92, 0.66, 0.1], 0.95, 0.2, seed + 3);
+  return P.toCanvas();
+}
+
+// Window (fit): steel frame, four dusty panes with a sky reflection.
+function texWindow(seed) {
+  const W = 128, P = new Pix(W);
+  P.map((x, y, c) => {
+    const u = x / W, v = y / W, frame = x < 7 || x > W - 8 || y < 7 || y > W - 8 || Math.abs(x - 64) < 3 || Math.abs(y - 64) < 3;
+    if (frame) { const k = 0.85 + (hashi(x, y, seed) - 0.5) * 0.08; c[0] = 0.5 * k; c[1] = 0.52 * k; c[2] = 0.5 * k; return; }
+    const refl = clamp(1 - Math.abs((u - v) * 1.6 - 0.1), 0, 1) * 0.35, dust = fbm(u * 5, v * 5, 5, 5, 3, seed + 1) * 0.12 + v * 0.1;
+    c[0] = 0.1 + refl * 0.5 + dust; c[1] = 0.13 + refl * 0.55 + dust; c[2] = 0.17 + refl * 0.6 + dust * 0.9;
+  });
   return P.toCanvas();
 }
 
@@ -1459,6 +1546,22 @@ const TEX_DEFS = {
   sign_step:      { gen: () => texSign(['STEP TEST', '16 · 18 · 20 UNITS'], [0.18, 0.18, 0.17], [0.92, 0.7, 0.14], 44), fit: true, surf: 'metal' },
   sign_out:       { gen: () => texSign(['RANGE  ►', 'YARD 2'], [0.13, 0.2, 0.32], [0.9, 0.88, 0.82], 45), fit: true, surf: 'metal' },
   site_a:         { gen: () => texSiteSign('A', 58), fit: true, surf: 'metal' },
+  // Saltpan Depot
+  asphalt:        { gen: () => texAsphalt(71), world: 192, surf: 'concrete' },
+  ballast:        { gen: () => texBallast(72), world: 64, surf: 'sand' },
+  timber:         { gen: () => texWoodPlanks(73, [0.3, 0.22, 0.15]), world: 96, surf: 'wood' },
+  shed:           { gen: () => texCorrugated(74, [0.46, 0.49, 0.46]), world: 128, surf: 'metal' },
+  shed_roof:      { gen: () => texCorrugated(75, [0.38, 0.4, 0.39], 8, false), world: 128, surf: 'metal' },
+  wagon:          { gen: () => texWagon(76), fit: true, surf: 'metal' },
+  wagon_blue:     { gen: () => texWagon(77, [0.16, 0.27, 0.38]), fit: true, surf: 'metal' },
+  window:         { gen: () => texWindow(78), fit: true, surf: 'metal' },
+  plaster_warm:   { gen: () => texPlaster(79, [0.78, 0.66, 0.52]), world: 128, surf: 'plaster' },
+  sign_depot:     { gen: () => texSign(['SALTPAN DEPOT', 'AUTHORISED VEHICLES ONLY'], [0.12, 0.22, 0.35], [0.9, 0.88, 0.82], 80), fit: true, surf: 'metal' },
+  sign_weigh:     { gen: () => texSign(['WEIGHBRIDGE', 'STOP · WEIGH · PROCEED'], [0.86, 0.66, 0.12], [0.08, 0.07, 0.06], 81), fit: true, surf: 'metal' },
+  sign_shed4:     { gen: () => texSign(['SHED 4', 'LOADING BAY · KEEP CLEAR'], [0.24, 0.33, 0.27], [0.9, 0.88, 0.8], 82), fit: true, surf: 'metal' },
+  sign_platform:  { gen: () => texSign(['PLATFORM 2', 'STAND BEHIND THE LINE'], [0.13, 0.2, 0.32], [0.9, 0.88, 0.82], 83), fit: true, surf: 'metal' },
+  sign_culvert:   { gen: () => texSign(['CULVERT', 'FLOOD RISK · KEEP OUT'], [0.8, 0.22, 0.14], [0.95, 0.92, 0.86], 84), fit: true, surf: 'metal' },
+  sign_salt:      { gen: () => texSign(['SALT STORE', 'NO NAKED FLAMES'], [0.5, 0.47, 0.42], [0.1, 0.09, 0.08], 85), fit: true, surf: 'metal' },
   site_b:         { gen: () => texSiteSign('B', 59), fit: true, surf: 'metal' },
   jump32:         { gen: () => texLabelBox('32', 50), fit: true, surf: 'concrete' },
   jump48:         { gen: () => texLabelBox('48', 51), fit: true, surf: 'concrete' },
@@ -1825,6 +1928,7 @@ class CollisionWorld {
 class MapBuilder {
   constructor() {
     this.brushes = []; this.lights = []; this.doors = []; this.targets = []; this.spawns = []; this.teamSpawns = []; this.hotspots = []; this.sites = [];
+    this.areas = []; this.tactics = null;
     this.env = null;
   }
 
@@ -1899,6 +2003,8 @@ class MapBuilder {
   spawn(x, y, z, yaw) { this.spawns.push({ pos: [x, y, z], yaw }); }
   teamSpawn(team, x, y, z, yaw) { (this.teamSpawns[team] || (this.teamSpawns[team] = [])).push({ pos: [x, y, z], yaw }); }
   hotspot(x, y, z, name) { this.hotspots.push({ pos: [x, y, z], name }); }
+  // Named place for the radar and callouts (first match wins).
+  area(name, x0, z0, x1, z1) { this.areas.push({ name, x0, z0, x1, z1 }); }
   // Plant site: the charge can be planted anywhere inside this box.
   site(name, x0, z0, x1, z1, y0 = -16, y1 = 140) {
     this.sites.push({ name, min: [x0, y0, z0], max: [x1, y1, z1], center: [(x0 + x1) / 2, 0, (z0 + z1) / 2], spots: [] });
@@ -1994,7 +2100,7 @@ function compileLevel(map, tex) {
     const td = tex[f.mat] && tex[f.mat].def;
     if (td && td.fullbright) continue;
     const ext = Math.max(maxR - minR, maxT - minT);
-    const s = f.mb.o.lm || (ext > 640 ? 16 : 8);
+    const env = map.env || {}, s = f.mb.o.lm || (ext > (env.lmBig || 640) ? 16 : (env.lmSmall || 8));
     const w = Math.max(2, Math.ceil((maxR - minR) / s) + 1), h = Math.max(2, Math.ceil((maxT - minT) / s) + 1);
     f.lm = { s, w, h, x: 0, y: 0, start: 0 };
     luxels += w * h;
@@ -2068,7 +2174,318 @@ function compileLevel(map, tex) {
   for (const b of cw.brushes) for (let i = 0; i < 3; i++) { lo[i] = Math.min(lo[i], b.min[i]); hi[i] = Math.max(hi[i], b.max[i]); }
 
   return { cw, faces, luxels, atlasW, atlasH, groups, entGroups, lights: map.lights, doors: map.doors, targets: map.targets, spawns: map.spawns,
-    teamSpawns: map.teamSpawns, hotspots: map.hotspots, sites: map.sites, env: map.env, bounds: { lo, hi }, tex };
+    teamSpawns: map.teamSpawns, hotspots: map.hotspots, sites: map.sites, areas: map.areas, tactics: map.tactics, env: map.env, bounds: { lo, hi }, tex };
+}
+
+// ==== 07-map-depot.js ====
+// "Saltpan Depot": the Stage 5 defuse map. An original salt-works rail depot.
+// Axes: +X east, +Y up, +Z south. Raiders spawn in the West Yard, Wardens east of the service road.
+//   A: Platform 2 (freight wagons, canopy, signal hut)  - via the sunken rail cut, the Scales gate, the service road
+//   B: Shed 4 (warehouse, containers, foreman's office)  - via the culvert, the back alley door, the loading bay
+//   Mid: the street, the plaza and the two-floor weighbridge office overlooking the Scales Yard.
+
+function buildDepot() {
+  const M = new MapBuilder();
+  const sd = [-0.52, 0.66, 0.38], sl = Math.hypot(...sd);
+  M.env = {
+    sunDir: sd.map((v) => v / sl), sunColor: [1.0, 0.9, 0.74], sunIntensity: 1.12,
+    skyZenith: [0.33, 0.5, 0.78], skyHorizon: [0.86, 0.8, 0.7], skyIntensity: 0.78,
+    fogColor: [0.78, 0.74, 0.66], fogDensity: 0.00008, ambient: 0.12,
+    lmBig: 256, lmSmall: 12, probeStep: 96, bakeRays: 9,
+  };
+  const ND = { nocollide: true, noshadow: true };
+  const H = 384;                                                         // outer wall height
+  const floor = (x0, z0, x1, z1, tex, y = 0, t = 16) => M.box(x0, y - t, z0, x1, y, z1, { top: tex });
+  // tall buildings nobody can enter: textured sides, no top (never seen from the ground)
+  const block = (x0, z0, x1, z1, h, side, y0 = 0) => M.box(x0, y0, z0, x1, h, z1, { sides: side, top: null, bottom: null });
+  const wall = (x0, z0, x1, z1, h, tex, y0 = 0, cap = 'concrete_plain') => M.box(x0, y0, z0, x1, h, z1, { sides: tex, top: cap, bottom: null });
+  const plate = (x0, y0, z0, x1, y1, z1, face, tex) => M.box(x0, y0, z0, x1, y1, z1, { [face]: tex, sides: 'steel', top: 'steel', bottom: 'steel' });
+  const win = (x0, y0, z0, x1, y1, z1, face) => M.box(x0, y0, z0, x1, y1, z1, { [face]: 'window', sides: 'steel', top: 'steel', bottom: 'steel' }, ND);
+  const crate = (x, z, s, tex, y = 0, yaw = 0) => M.box(x - s / 2, y, z - s / 2, x + s / 2, y + s, z + s / 2, tex, { yaw });
+  const barrel = (x, z, tex = 'barrel', y = 0) => M.prism(x, z, y, y + 44, 13, 12, { side: tex, top: 'barrel_top' }, { rot: x * 0.01 });
+  const lamp = (x, y, z, col = [1.0, 0.8, 0.56], k = 1.6, r = 560, hang = 0) => {
+    if (hang > 0) M.box(x - 0.6, y + 8, z - 0.6, x + 0.6, y + 8 + hang, z + 0.6, 'steel', ND);
+    M.prism(x, z, y + 4, y + 10, 9, 8, 'steel', { nocollide: true });
+    M.box(x - 4, y, z - 4, x + 4, y + 4, z + 4, 'lamp', ND);
+    M.light(x, y - 8, z, col, k, r);
+  };
+  const pole = (x, z, h = 220) => { M.prism(x, z, 0, h, 3, 8, 'steel'); M.box(x - 3, h - 4, z - 16, x + 3, h, z + 16, 'steel', ND); lamp(x, h - 10, z + 14, [1.0, 0.86, 0.62], 1.0, 460); };
+  const barrier = (x0, z0, x1, z1) => M.box(x0, 0, z0, x1, 40, z1, { sides: 'concrete_plain', top: 'concrete_plain', bottom: null });
+
+  // ---------------- outer walls ----------------
+  // only the inside faces are ever seen; coarse lightmap on these tall plain walls
+  M.box(-2000, -64, -1500, 2000, H, -1450, { s: 'concrete' }, { lm: 32 });
+  M.box(-2000, -64, 1450, 2000, H, 1500, { n: 'concrete' }, { lm: 32 });
+  M.box(-2000, -64, -1450, -1950, H, 1450, { e: 'concrete' }, { lm: 32 });
+  M.box(1950, -64, -1450, 2000, H, 1450, { w: 'concrete' }, { lm: 32 });
+  // pilasters along the inside of the perimeter (hidden ones are culled at compile time)
+  const PIL = { sides: 'concrete_plain', top: 'concrete_plain', bottom: null };
+  for (let x = -1760; x <= 1760; x += 320) { M.box(x - 14, 0, -1450, x + 14, H - 24, -1436, PIL, { lm: 16 }); M.box(x - 14, 0, 1436, x + 14, H - 24, 1450, PIL, { lm: 16 }); }
+  for (let z = -1280; z <= 1280; z += 320) { M.box(-1950, 0, z - 14, -1936, H - 24, z + 14, PIL, { lm: 16 }); M.box(1936, 0, z - 14, 1950, H - 24, z + 14, PIL, { lm: 16 }); }
+
+  // ---------------- West Yard (Raider spawn) + North Yard + Sluice Yard ----------------
+  floor(-1950, -500, -1350, 500, 'sand');
+  floor(-1950, -1450, -1250, -560, 'sand');
+  floor(-1250, -1250, -1050, -560, 'sand');
+  floor(-1950, 560, -1100, 1450, 'sand'); floor(-1100, 560, -900, 1170, 'sand'); floor(-1100, 1310, -900, 1450, 'sand');
+  // yard dividers with gates
+  wall(-1950, -560, -1750, -500, 256, 'brick'); wall(-1550, -560, -1350, -500, 256, 'brick');
+  wall(-1950, 500, -1750, 560, 256, 'brick'); wall(-1550, 500, -1350, 560, 256, 'brick');
+  floor(-1750, -560, -1550, -500, 'sand'); floor(-1750, 500, -1550, 560, 'sand');                // the gates' ground
+  block(-1350, -560, -1050, -140, 256, 'brick');                        // pump house
+  win(-1052, 110, -460, -1048, 170, -400, 'e'); win(-1352, 110, -300, -1348, 170, -240, 'w');
+  // West Yard props: a site office, a shed of drums, crates
+  block(-1950, -300, -1830, -120, 150, 'panel'); win(-1830, 60, -260, -1828, 110, -200, 'e');
+  crate(-1540, 220, 64, 'crate'); crate(-1540, 220, 48, 'crate_b', 64, 0.2); crate(-1480, 260, 48, 'crate_mil', 0, -0.3);
+  barrel(-1880, 380); barrel(-1850, 410, 'barrel_red'); barrel(-1890, 430);
+  crate(-1480, -330, 56, 'crate_mil', 0, 0.4);
+  // North Yard: water tower on four legs, sleeper stacks
+  for (const [x, z] of [[-1600, -1080], [-1440, -1080], [-1600, -920], [-1440, -920]]) M.prism(x, z, 0, 300, 7, 8, 'steel');
+  M.prism(-1520, -1000, 300, 420, 96, 14, { side: 'panel', top: 'roof', bottom: 'steel' });
+  M.box(-1620, 296, -1100, -1420, 304, -900, 'steel', ND);
+  crate(-1300, -800, 64, 'crate'); M.box(-1800, 0, -1300, -1640, 24, -1200, 'timber'); M.box(-1790, 24, -1290, -1650, 48, -1210, 'timber');
+  barrier(-1150, -700, -1050, -670);
+  // Sluice Yard: settling tanks and a pump shed
+  M.prism(-1600, 950, 0, 110, 90, 16, { side: 'concrete', top: 'concrete_plain' });
+  M.prism(-1300, 1260, 0, 110, 80, 16, { side: 'concrete', top: 'concrete_plain' });
+  block(-1300, 640, -1080, 800, 170, 'shed'); win(-1302, 90, 690, -1298, 140, 750, 'w');
+  crate(-1750, 1300, 64, 'crate_b', 0, 0.3); barrel(-1150, 960, 'barrel_red'); barrel(-1180, 990);
+  M.box(-1880, 0, 1060, -1640, 104, 1156, { sides: 'container_blue', top: 'steel', bottom: null });      // old container
+  barrier(-1500, 640, -1400, 670); barrier(-1100, 1380, -1000, 1410);
+  M.box(-1460, 0, 1380, -1400, 24, 1440, 'timber'); M.box(-1456, 24, 1384, -1404, 48, 1436, 'timber');
+  for (const z of [700, 900, 1060]) win(-902, 120, z, -900, 180, z + 80, 'w');
+  plate(-904, 8, 980, -900, 104, 1040, 'w', 'door_metal');
+  M.box(-910, 150, 600, -900, 162, 1150, 'steel', { lm: 16 }); M.box(-910, 128, 600, -900, 140, 1150, 'steel', { lm: 16 });   // pipes
+
+  // ---------------- Rail cut (sunken track from the North Yard to Platform 2) ----------------
+  floor(-1050, -1450, 1350, -1250, 'ballast', -48);
+  M.ramp(-1250, -1450, -1050, -1250, -48, 0, 'w', { top: 'ballast', sides: 'concrete' });
+  M.box(-1250, -48, -1250, -1050, 0, -1232, { sides: 'concrete', top: 'concrete_plain', bottom: null });     // ramp trench side
+  M.box(1350, -48, -1450, 1366, 0, -1250, { sides: 'concrete', top: null, bottom: null });                   // track bed end wall
+  // track: sleepers and rails all the way to the buffer stop
+  for (let x = -1030; x < 1320; x += 64) M.box(x, -48, -1406, x + 12, -44, -1294, 'timber', { lm: 16 });
+  M.box(-1050, -44, -1384, 1330, -38, -1378, 'steel', { lm: 16 }); M.box(-1050, -44, -1322, 1330, -38, -1316, 'steel', { lm: 16 });
+  // the Salt Store: brick building between the cut and the street, its east face walls Platform 2
+  M.box(-1050, -48, -1252, 500, 40, -1232, { sides: 'concrete', top: 'concrete_plain', bottom: null });
+  block(-1050, -1250, 500, -780, 320, 'brick', -48);
+  for (const z of [-1200, -1040, -900]) win(500, 150, z, 504, 210, z + 70, 'e');
+  for (const x of [-900, -600, -300, 0, 300]) win(x, 120, -1254, x + 80, 180, -1252, 'n');
+  plate(500, 230, -1110, 504, 290, -990, 'e', 'sign_salt');
+  // cover in the cut: a sleeper stack and a parked trolley
+  M.box(-460, -48, -1446, -330, -10, -1410, 'timber'); M.box(-450, -10, -1446, -340, 12, -1414, 'timber');
+  M.box(120, -48, -1300, 240, -10, -1258, { sides: 'panel', top: 'diamond', bottom: null });
+
+  // ---------------- A: Platform 2 ----------------
+  M.box(500, -48, -1250, 1350, 0, -780, { top: 'concrete_floor', sides: 'concrete', bottom: null });
+  M.box(500, 0, -1250, 1350, 0.5, -1238, 'hazard');
+  // steps up from the track (west end and between the wagons)
+  for (const [x0, x1] of [[520, 590], [930, 990]]) {
+    M.box(x0, -48, -1298, x1, -32, -1282, 'concrete_plain'); M.box(x0, -48, -1282, x1, -16, -1266, 'concrete_plain'); M.box(x0, -48, -1266, x1, 0, -1250, 'concrete_plain');
+  }
+  // freight wagons on the track (not climbable), buffer stop
+  const wagon = (x0, x1, tex) => {
+    M.box(x0, -22, -1405, x1, 102, -1295, { n: tex, s: tex, e: 'panel', w: 'panel', top: 'roof', bottom: 'steel' });
+    for (const x of [x0 + 30, x1 - 80]) M.box(x, -48, -1385, x + 50, -22, -1315, 'steel');
+  };
+  wagon(600, 920, 'wagon'); wagon(1000, 1300, 'wagon_blue');
+  M.box(1320, -48, -1400, 1350, 0, -1300, { sides: 'rail', top: 'rail', bottom: null });
+  // canopy over the middle of the platform
+  for (const x of [700, 900, 1100]) M.prism(x, -1030, 0, 176, 7, 8, 'steel');
+  M.box(640, 176, -1180, 1160, 184, -880, { bottom: 'roof', top: 'roof', sides: 'steel' });
+  lamp(800, 160, -1030, [1.0, 0.82, 0.6], 0.8, 380); lamp(1000, 160, -1030, [1.0, 0.82, 0.6], 0.8, 380);
+  // signal hut (enterable from the west)
+  const HUT = { sides: 'panel', top: 'steel', bottom: null };
+  M.box(1180, 0, -1230, 1188, 120, -1176, HUT); M.box(1180, 0, -1112, 1188, 120, -1080, HUT); M.box(1180, 96, -1176, 1188, 120, -1112, HUT);
+  M.box(1180, 0, -1230, 1330, 120, -1222, HUT); M.box(1322, 0, -1230, 1330, 120, -1080, HUT);
+  M.box(1180, 0, -1088, 1330, 50, -1080, HUT); M.box(1180, 100, -1088, 1330, 120, -1080, HUT);
+  M.box(1180, 50, -1088, 1230, 100, -1080, HUT); M.box(1290, 50, -1088, 1330, 100, -1080, HUT);   // window gap x 1230..1290
+  M.box(1170, 120, -1240, 1340, 128, -1070, { bottom: 'steel', top: 'roof', sides: 'steel' });
+  M.box(1260, 0, -1215, 1315, 36, -1180, 'plywood');
+  lamp(1255, 108, -1150, [1.0, 0.85, 0.65], 0.9, 260);
+  // cover on the platform
+  crate(700, -860, 64, 'crate'); crate(704, -860, 48, 'crate_b', 64, 0.3);
+  crate(1030, -1200, 48, 'crate_b', 0, 0.15); crate(860, -830, 56, 'crate_mil', 0, 0.5);
+  M.box(560, 0, -980, 660, 40, -950, { sides: 'concrete_plain', top: 'concrete_plain', bottom: null });
+  barrel(1240, -1050); barrel(1275, -1040, 'barrel_red');
+  // signs: platform name, site plates
+  plate(500, 140, -1000, 504, 190, -900, 'e', 'sign_platform');
+  plate(500, 110, -880, 504, 190, -800, 'e', 'site_a'); plate(1176, 30, -1228, 1180, 90, -1180, 'w', 'site_a');
+  // south wall with the Scales gate (x 720..840)
+  wall(500, -780, 720, -760, 200, 'plaster_warm'); wall(840, -780, 1350, -760, 200, 'plaster_warm');
+  floor(720, -780, 840, -760, 'concrete_floor');
+
+  // ---------------- Scales Yard ----------------
+  floor(500, -760, 1350, -300, 'asphalt');
+  M.box(760, 0, -600, 1100, 2, -460, { top: 'diamond', sides: 'steel', bottom: null });
+  barrier(600, -420, 700, -390); barrier(1000, -690, 1100, -660);
+  // parked truck: box trailer + cab
+  M.box(1190, 0, -620, 1290, 24, -380, 'steel'); M.box(1180, 24, -630, 1300, 140, -370, { sides: 'container_blue', top: 'roof', bottom: 'steel' });
+  M.box(1195, 10, -370, 1285, 110, -310, { sides: 'panel', top: 'steel', bottom: 'steel' }); win(1196, 70, -310, 1284, 100, -308, 's');
+  plate(840, 150, -762, 920, 196, -760, 'n', 'sign_weigh');
+
+  // ---------------- Weighbridge office (two floors) ----------------
+  const OW = { sides: 'plaster_warm', top: 'concrete_plain', bottom: null }, OI = 'plaster';
+  floor(-200, -760, 500, -300, 'tiles');
+  // outer walls (16 thick, 320 high). Doors: south x 100..200 (plaza), east z -560..-480 (Scales Yard).
+  // Upper-floor shooting gaps 50 high (too low to climb through): east z -700..-620, south x -100..0 and 260..360.
+  M.box(-200, 0, -780, 500, 320, -760, OW);
+  M.box(-200, 0, -760, -184, 320, -300, OW);
+  const eastPiece = (z0, z1, gaps) => { let y = 0; for (const [g0, g1] of gaps) { M.box(484, y, z0, 500, g0, z1, OW); y = g1; } M.box(484, y, z0, 500, 320, z1, OW); };
+  eastPiece(-760, -700, []); eastPiece(-700, -620, [[200, 250]]); eastPiece(-620, -560, []); eastPiece(-560, -480, [[0, 112]]); eastPiece(-480, -300, []);
+  const southPiece = (x0, x1, gaps) => { let y = 0; for (const [g0, g1] of gaps) { if (g0 > y) M.box(x0, y, -316, x1, g0, -300, OW); y = g1; } M.box(x0, y, -316, x1, 320, -300, OW); };
+  southPiece(-184, -100, []); southPiece(-100, 0, [[200, 250]]); southPiece(0, 100, []); southPiece(100, 200, [[0, 112]]);
+  southPiece(200, 260, []); southPiece(260, 360, [[200, 250]]); southPiece(360, 484, []);
+  // first floor slab (top at 160) with the stairwell open over the stairs
+  const SLAB = { top: 'wood_floor', bottom: 'plaster', sides: 'plaster' };
+  M.box(-184, 144, -684, 484, 160, -316, SLAB); M.box(90, 144, -760, 484, 160, -684, SLAB); M.box(-184, 144, -760, -150, 160, -684, SLAB);
+  // stairs along the north wall, rising east: 10 steps of 16
+  for (let k = 0; k < 10; k++) M.box(-150 + 24 * k, 0, -760, -126 + 24 * k, 16 * (k + 1), -700, { top: 'concrete_plain', sides: 'concrete_plain', bottom: null });
+  M.box(-184, 304, -760, 484, 320, -316, { bottom: 'plaster', top: null, sides: null });       // ceiling
+  // furniture
+  M.box(260, 0, -440, 420, 44, -400, { sides: 'plywood', top: 'wood_floor', bottom: null });   // counter
+  M.box(-170, 0, -380, -130, 72, -320, 'panel'); M.box(-170, 0, -440, -130, 72, -390, 'panel');  // cabinets
+  M.box(150, 160, -620, 260, 200, -560, { sides: 'plywood', top: 'wood_floor', bottom: null });  // desk upstairs
+  M.box(-100, 160, -460, 20, 200, -410, { sides: 'plywood', top: 'wood_floor', bottom: null });
+  M.box(400, 160, -440, 470, 232, -400, 'panel');
+  lamp(60, 128, -560, [1.0, 0.86, 0.66], 1.2, 420, 4); lamp(320, 128, -400, [1.0, 0.86, 0.66], 1.1, 380, 4);
+  lamp(60, 288, -500, [1.0, 0.88, 0.7], 1.1, 420, 4); lamp(330, 288, -620, [1.0, 0.88, 0.7], 1.0, 380, 4);
+  plate(500, 150, -470, 504, 196, -380, 'e', 'sign_weigh');
+  for (const z of [-720, -420]) win(498, 40, z, 502, 96, z + 60, 'e');
+
+  // ---------------- Street, row houses, plaza ----------------
+  floor(-1350, -140, -200, 140, 'asphalt');
+  M.box(-1350, 0, -140, -200, 8, -96, { top: 'concrete_plain', sides: 'concrete_plain', bottom: null });
+  M.box(-1350, 0, 96, -200, 8, 140, { top: 'concrete_plain', sides: 'concrete_plain', bottom: null });
+  block(-1050, -780, -200, -140, 280, 'plaster');                                                 // row houses (north side)
+  block(-1350, 140, -200, 560, 280, 'plaster_warm');                                              // south side
+  for (const x of [-1000, -820, -640, -460, -300]) { win(x, 130, -142, x + 70, 190, -140, 's'); win(x, 130, 140, x + 70, 190, 142, 'n'); }
+  for (const x of [-930, -560]) { plate(x, 8, -142, x + 56, 104, -140, 's', 'door_metal'); }
+  plate(-760, 8, 140, -700, 104, 142, 'n', 'door');
+  pole(-1000, 118); pole(-560, -118);
+  // a broken-down van in the street, pallets
+  M.box(-820, 12, -70, -660, 110, 20, { sides: 'panel', top: 'steel', bottom: 'steel' }); M.box(-830, 0, -60, -650, 12, 10, 'steel');
+  M.box(-420, 0, 60, -360, 24, 120, 'timber'); M.box(-420, 24, 64, -364, 40, 116, 'timber');
+  crate(-1040, 100, 64, 'crate_mil', 0, 0.1); crate(-1040, 100, 48, 'crate', 64, -0.2);
+  M.box(-1180, 0, -138, -1100, 52, -88, { sides: 'container_blue', top: 'steel', bottom: null });
+  // the plaza
+  floor(-200, -300, 500, 300, 'concrete_floor');
+  M.box(100, 0, 0, 190, 96, 90, { sides: 'panel', top: 'steel', bottom: null });                 // kiosk
+  M.box(90, 96, -10, 200, 104, 100, 'steel');
+  barrel(-60, 200, 'barrel_red'); barrel(-30, 225); crate(380, 200, 56, 'crate', 0, 0.25); crate(-120, -200, 48, 'crate_b', 0, -0.2);
+  barrier(240, -160, 340, -130);
+  pole(-120, 240, 200);
+
+  // ---------------- Warehouse 3 (solid) and the corridor niche ----------------
+  floor(500, -300, 620, -180, 'asphalt');
+  block(500, -180, 1350, 700, 320, 'shed'); block(620, -300, 1350, -180, 320, 'shed');
+  for (const x of [700, 900, 1100]) win(x, 150, -302, x + 90, 210, -300, 's');
+  plate(1352, 20, -100, 1356, 140, 20, 'e', 'door_metal');
+
+  // ---------------- Back alley (plaza to Shed 4) ----------------
+  floor(200, 300, 500, 1000, 'concrete');
+  block(-200, 300, 200, 1150, 300, 'brick'); block(-900, 560, 200, 1150, 300, 'concrete');        // brine tank hall
+  block(200, 1000, 500, 1150, 300, 'brick');
+  M.box(220, 0, 600, 300, 48, 664, { sides: 'container_blue', top: 'steel', bottom: null });       // skip bin
+  crate(450, 420, 48, 'crate_mil', 0, 0.3); barrel(240, 860); barrel(262, 885, 'barrel_red');
+  lamp(350, 230, 980, [1.0, 0.84, 0.6], 0.9, 400, 0);
+
+  // ---------------- B: Shed 4 ----------------
+  floor(500, 700, 1300, 1450, 'concrete_floor');
+  const SW = { sides: 'shed', top: 'concrete_plain', bottom: null };
+  // west wall: door from the alley (z 860..960) and the culvert door (z 1190..1290)
+  M.box(500, 0, 700, 516, 320, 860, SW); M.box(500, 0, 960, 516, 320, 1190, SW); M.box(500, 0, 1290, 516, 320, 1450, SW);
+  M.box(500, 112, 860, 516, 320, 960, SW); M.box(500, 112, 1190, 516, 320, 1290, SW);
+  // east wall with the loading bay (z 850..1050, 192 high)
+  M.box(1284, 0, 700, 1300, 320, 850, SW); M.box(1284, 0, 1050, 1300, 320, 1450, SW); M.box(1284, 192, 850, 1300, 320, 1050, SW);
+  // roof with two skylights
+  const RF = { bottom: 'shed_roof', top: null, sides: 'steel' };
+  M.box(500, 320, 700, 1300, 336, 950, RF); M.box(500, 320, 1070, 1300, 336, 1150, RF); M.box(500, 320, 1270, 1300, 336, 1450, RF);
+  M.box(500, 320, 950, 700, 336, 1070, RF); M.box(820, 320, 950, 1300, 336, 1070, RF);
+  M.box(500, 320, 1150, 980, 336, 1270, RF); M.box(1100, 320, 1150, 1300, 336, 1270, RF);
+  for (const x of [640, 900, 1160]) M.box(x - 6, 296, 700, x + 6, 320, 1450, 'steel', ND);        // roof trusses
+  // containers and crates
+  M.box(680, 0, 1000, 1000, 104, 1096, { sides: 'container', top: 'steel', bottom: null });
+  M.box(1040, 0, 1180, 1136, 104, 1400, { sides: 'container_blue', top: 'steel', bottom: null });
+  crate(600, 780, 64, 'crate'); crate(604, 780, 48, 'crate_b', 64, 0.2);
+  crate(760, 1350, 64, 'crate_mil', 0, 0.35); crate(1220, 1200, 48, 'crate_b'); crate(1222, 1200, 48, 'crate', 48, -0.3);
+  crate(900, 820, 56, 'crate', 0, 0.6); barrel(1240, 1400); barrel(1210, 1415, 'barrel_red');
+  for (const [x, z] of [[640, 1180], [900, 1250]]) M.prism(x, z, 0, 296, 9, 8, 'steel');
+  // foreman's office in the north-east corner (window west, door south)
+  const FO = { sides: 'panel', top: 'steel', bottom: null };
+  M.box(1120, 0, 716, 1128, 112, 760, FO); M.box(1120, 0, 820, 1128, 112, 852, FO); M.box(1120, 0, 760, 1128, 56, 820, FO); M.box(1120, 96, 760, 1128, 112, 820, FO);
+  M.box(1120, 0, 852, 1172, 112, 860, FO); M.box(1236, 0, 852, 1284, 112, 860, FO); M.box(1172, 96, 852, 1236, 112, 860, FO);
+  M.box(1112, 112, 708, 1284, 120, 868, { bottom: 'steel', top: 'roof', sides: 'steel' });
+  M.box(1200, 0, 740, 1270, 40, 790, { sides: 'plywood', top: 'wood_floor', bottom: null });
+  // lights
+  for (const [x, z] of [[700, 870], [1000, 870], [820, 1240], [1180, 1320]]) lamp(x, 282, z, [1.0, 0.86, 0.64], 1.5, 640, 6);
+  lamp(1200, 104, 790, [1.0, 0.86, 0.66], 0.8, 220);
+  // signs
+  plate(516, 120, 1060, 520, 200, 1140, 'e', 'site_b'); plate(940, 150, 700, 1020, 230, 704, 's', 'site_b');
+  plate(1300, 210, 900, 1304, 260, 1000, 'e', 'sign_shed4'); plate(496, 130, 860, 500, 180, 960, 'w', 'sign_shed4');
+
+  // ---------------- Culvert (Sluice Yard to Shed 4) ----------------
+  floor(-900, 1170, 420, 1310, 'concrete_floor', -48);
+  M.ramp(-1100, 1170, -900, 1310, -48, 0, 'w', { top: 'concrete_floor', sides: 'concrete' });
+  M.box(420, -48, 1170, 446, -32, 1310, 'concrete_plain'); M.box(446, -48, 1170, 473, -16, 1310, 'concrete_plain'); M.box(473, -48, 1170, 500, 0, 1310, 'concrete_plain');
+  M.box(-900, -48, 1150, 500, 120, 1170, { sides: 'concrete', top: null, bottom: null });
+  M.box(-900, -48, 1310, 500, 120, 1330, { sides: 'concrete', top: null, bottom: null });
+  M.box(-900, 104, 1170, 500, 120, 1310, { bottom: 'concrete', top: null, sides: 'concrete' });
+  M.box(-1100, -48, 1150, -900, 0, 1170, { sides: 'concrete', top: 'concrete_plain', bottom: null });       // culvert ramp trench
+  M.box(-1100, -48, 1310, -900, 0, 1330, { sides: 'concrete', top: 'concrete_plain', bottom: null });
+  block(-900, 1150, 500, 1450, 300, 'concrete', 120);                                              // embankment above
+  M.box(-900, -48, 1330, 500, 120, 1450, { sides: 'concrete', top: null, bottom: null });
+  M.box(-880, 52, 1172, 400, 64, 1182, 'steel', { lm: 16 }); M.box(-880, 18, 1298, 400, 28, 1308, 'steel', { lm: 16 });
+  for (const x of [-650, -250, 150]) lamp(x, 86, 1240, [0.78, 0.9, 1.0], 1.1, 400);
+  lamp(470, 86, 1240, [0.78, 0.9, 1.0], 0.8, 260);
+  plate(-904, 128, 1180, -900, 184, 1300, 'w', 'sign_culvert');
+
+  // ---------------- Service road + Warden spawn ----------------
+  floor(1350, -1450, 1650, 1450, 'asphalt'); floor(1300, 700, 1350, 1450, 'asphalt');
+  for (let z = -1400; z < 1400; z += 140) M.box(1496, 0, z, 1504, 0.5, z + 70, 'concrete_plain', { nocollide: true, lm: 16 });
+  block(1650, -1450, 1950, -500, 320, 'brick'); block(1650, 500, 1950, 1450, 320, 'shed');
+  for (const z of [-1300, -1000, -700]) win(1648, 140, z, 1650, 200, z + 90, 'w');
+  floor(1650, -500, 1950, 500, 'concrete_floor');
+  block(1820, -130, 1950, 130, 170, 'plaster_warm'); plate(1816, 100, -60, 1820, 150, 60, 'w', 'sign_depot');
+  barrier(1560, -620, 1600, -520); barrier(1400, 620, 1440, 720);
+  M.box(1420, 0, -100, 1480, 40, 40, { sides: 'diamond', top: 'diamond', bottom: null });             // pallet stack
+  crate(1590, 300, 48, 'crate_mil', 0, 0.2); crate(1900, -440, 56, 'crate', 0, -0.3); barrel(1900, 420); barrel(1880, 450, 'barrel_red');
+  pole(1520, -800); pole(1520, 300);
+
+  // ---------------- spawns ----------------
+  // Raider spawns sit north and south of the street's line of sight
+  for (const [x, z] of [[-1800, -420], [-1800, -300], [-1660, -420], [-1660, -300], [-1800, 300], [-1800, 420], [-1660, 300], [-1660, 420]]) M.teamSpawn(0, x, 0, z, -Math.PI / 2);
+  for (const [x, z] of [[1720, -360], [1720, -220], [1720, 220], [1720, 360], [1780, -280], [1780, 280], [1700, -60], [1700, 120]]) M.teamSpawn(1, x, 0, z, Math.PI / 2);
+  M.spawn(-1700, 0, -360, -Math.PI / 2);
+
+  // ---------------- plant sites, places, names ----------------
+  M.site('A', 500, -1450, 1350, -780, -64, 140);
+  M.site('B', 516, 716, 1284, 1434, -16, 160);
+  for (const [x, y, z, n] of [[900, 0, -1000, 'Platform 2'], [960, -48, -1350, 'track'], [1255, 0, -1150, 'signal hut'], [900, 0, -520, 'Scales Yard'],
+    [150, 0, -550, 'weighbridge office'], [300, 160, -500, 'office upstairs'], [150, 0, 120, 'plaza'], [-700, 0, 0, 'street'], [350, 0, 700, 'back alley'],
+    [900, 0, 1250, 'Shed 4'], [1200, 0, 780, 'foreman’s office'], [-300, -48, 1240, 'culvert'], [-1400, 0, 1000, 'Sluice Yard'], [-1500, 0, -800, 'North Yard'],
+    [-300, -48, -1350, 'rail cut'], [1500, 0, -1100, 'service road north'], [1500, 0, 950, 'service road south'], [1750, 0, 0, 'Warden yard'], [-1650, 0, 0, 'West Yard']]) M.hotspot(x, y, z, n);
+  for (const [n, x0, z0, x1, z1] of [['West Yard', -1950, -500, -1350, 500], ['North Yard', -1950, -1450, -1050, -500], ['Rail Cut', -1250, -1450, 500, -1250],
+    ['Platform 2', 500, -1450, 1350, -780], ['Scales Yard', 500, -760, 1350, -180], ['Weighbridge', -200, -760, 500, -300], ['Street', -1350, -140, -200, 140],
+    ['Plaza', -200, -300, 500, 300], ['Back Alley', 200, 300, 500, 1000], ['Shed 4', 500, 700, 1300, 1450], ['Culvert', -1100, 1150, 500, 1330],
+    ['Sluice Yard', -1950, 500, -900, 1450], ['Service Road', 1300, -1450, 1650, 1450], ['Warden Yard', 1650, -500, 1950, 500]]) M.area(n, x0, z0, x1, z1);
+
+  // ---------------- bot tactics ----------------
+  M.tactics = {
+    routes: {
+      cut: { stack: [-1330, 0, -1100], yaw: -Math.PI / 2, via: [-600, -48, -1350] },
+      office: { stack: [-1420, 0, -250], yaw: -Math.PI / 2, via: [560, 0, -240] },
+      alley: { stack: [-1420, 0, 250], yaw: -Math.PI / 2, via: [350, 0, 650] },
+      culvert: { stack: [-1150, 0, 880], yaw: Math.PI, via: [200, -48, 1240] },
+    },
+    siteRoutes: { A: ['cut', 'office'], B: ['culvert', 'alley'] },
+    sites: {
+      A: { hold: [[700, 0, -1060, 100], [1250, 0, -1160, 90], [960, 0, -860, 160], [1310, -48, -1270, 90], [1100, 0, -1210, 95]],
+        plant: [[820, 0, -1000], [1080, 0, -940], [960, -48, -1350]], smoke: [[780, 0, -790], [540, -48, -1350]] },
+      B: { hold: [[1200, 0, 960, 90], [640, 0, 820, 135], [1210, 0, 780, 70], [700, 0, 1380, 45], [1000, 0, 1300, 80]],
+        plant: [[820, 0, 1180], [1000, 0, 900], [700, 0, 1300]], smoke: [[570, 0, 910], [560, 0, 1240]] },
+    },
+  };
+  return M;
 }
 
 // ==== 07-map.js ====
@@ -2256,8 +2673,28 @@ function buildTestRange() {
   for (const [x, y, z, n] of [[-500, 0, 0, 'hall'], [-700, 128, -580, 'catwalk'], [-820, 0, 470, 'jump boxes'], [-60, 0, 0, 'roller door'], [-60, 0, 448, 'hall door'],
     [500, 0, 100, 'yard'], [800, 104, 368, 'container roof'], [1120, 2, 160, 'shed'], [600, 0, -400, 'range'], [380, 0, 150, 'cover'], [-150, 0, -590, 'stairs'],
     [300, 0, 450, 'south yard'], [100, 0, 448, 'door yard'], [-380, 0, -300, 'hall north'], [1000, 0, -480, 'A site'], [780, 0, 520, 'B site']]) M.hotspot(x, y, z, n);
+  // bot tactics: Raiders gather beside each hall exit (roller door, hall door), out of sight
+  M.tactics = {
+    routes: {
+      roller: { stack: [-60, 0, -190], yaw: Math.atan2(-(16 + 60), -(0 + 190)), via: [40, 0, 0] },
+      door: { stack: [-60, 0, 345], yaw: Math.atan2(-(16 + 60), -(448 - 345)), via: [60, 0, 448] },
+    },
+    siteRoutes: { A: ['roller', 'door'], B: ['door', 'roller'] },
+    sites: {
+      A: { hold: [[1150, 0, -200, 95], [1110, 0, -600, 70], [960, 0, -570, 75], [900, 0, -330, 95], [1180, 0, -420, 90]], plant: [[980, 0, -470], [1110, 0, -330], [830, 0, -520]],
+        smoke: [[560, 0, -170], [760, 0, -260]] },
+      B: { hold: [[800, 104, 368, 95], [1000, 0, 560, 90], [620, 0, 470, 80], [940, 0, 610, 95], [990, 0, 450, 100]], plant: [[760, 0, 520], [920, 0, 480], [640, 0, 600]],
+        smoke: [[420, 0, 380], [600, 0, 300]] },
+    },
+  };
   return M;
 }
+
+// Map registry: the defuse map and the practice range.
+const MAPS = {
+  depot: { name: 'Saltpan Depot', build: buildDepot, blurb: 'Defuse map: Platform 2 (A) and Shed 4 (B)' },
+  range: { name: 'Hall B', build: buildTestRange, blurb: 'Practice range: plates, step and jump tests' },
+};
 
 // ==== 08-bake.js ====
 // Lightmap + light-probe baker (runs once at load, chunked so the UI keeps painting).
@@ -2383,7 +2820,7 @@ async function bakeLighting(L, onProgress) {
   };
 
   // 3) indirect: sky + bounce + AO
-  const K = BAKE.rays, G = Math.round(Math.sqrt(K)), B = [0, 0, 0, 0, 0, 0], rad = [0, 0, 0];
+  const K = env.bakeRays || BAKE.rays, G = Math.round(Math.sqrt(K)), B = [0, 0, 0, 0, 0, 0], rad = [0, 0, 0];
   for (let k = 0; k < total; k++) {
     if ((k & 127) === 0) await step(0.3 + 0.55 * k / total);
     if (!valid[k]) continue;
@@ -2451,7 +2888,7 @@ async function bakeLighting(L, onProgress) {
   }
 
   // 6) light probes for dynamic objects (viewmodel, later players)
-  const PS = BAKE.probeStep, lo = L.bounds.lo, hi = L.bounds.hi;
+  const PS = (L.env && L.env.probeStep) || BAKE.probeStep, lo = L.bounds.lo, hi = L.bounds.hi;
   const pnx = Math.ceil((hi[0] - lo[0]) / PS) + 1, pny = Math.max(2, Math.ceil(Math.min(hi[1] - lo[1], 448) / PS) + 1), pnz = Math.ceil((hi[2] - lo[2]) / PS) + 1;
   const probes = { nx: pnx, ny: pny, nz: pnz, x0: lo[0], y0: Math.max(lo[1], 0) + 24, z0: lo[2], step: PS, data: new Float32Array(pnx * pny * pnz * 4), valid: new Uint8Array(pnx * pny * pnz) };
   const PR = BAKE.probeRays, dirs = [];
@@ -6349,7 +6786,7 @@ class Actor {
       if (attacker.team !== this.team) { attacker.kills++; Actors.score[attacker.team]++; } else attacker.kills--;
     }
     Actors.feed.push({ killer: attacker ? attacker.name : '', kTeam: attacker ? attacker.team : this.team, victim: this.name, vTeam: this.team,
-      weapon: def ? def.name : '', hs: headshot, age: 0, me: !!(attacker && attacker.isMe) || this.isMe });
+      weapon: def ? def.name : '', wid: def ? def.id : '', hs: headshot, age: 0, me: !!(attacker && attacker.isMe) || this.isMe });
     if (Actors.feed.length > 6) Actors.feed.shift();
     this.model.deathDir = headshot ? 1 : (Math.random() < 0.5 ? 1 : -1);
     if (typeof Snd !== 'undefined' && Snd.death) Snd.death(this.player.pos.slice());
@@ -7303,18 +7740,9 @@ const Match = {
 // route, the carrier plants while the rest escort), Wardens split between the sites, then
 // retake and defuse after a plant. Orders are re-evaluated twice a second.
 
-// Positions per site: Warden holds (facing the Raider approach) and Raider plant spots. [x, y, z, yawDeg]
-const SITE_SPOTS = {
-  A: { hold: [[1150, 0, -200, 95], [1110, 0, -600, 70], [960, 0, -570, 75], [900, 0, -330, 95], [1180, 0, -420, 90]], plant: [[980, 0, -470], [1110, 0, -330], [830, 0, -520]],
-    smoke: [[560, 0, -170], [760, 0, -260]] },
-  B: { hold: [[800, 104, 368, 95], [1000, 0, 560, 90], [620, 0, 470, 80], [940, 0, 610, 95], [990, 0, 450, 100]], plant: [[760, 0, 520], [920, 0, 480], [640, 0, 600]],
-    smoke: [[420, 0, 380], [600, 0, 300]] },
-};
-// Ways out of the hall: the roller door (center) and the hall door (south); Raiders gather just inside.
-const ROUTES = { roller: [40, 0, 0], door: [60, 0, 448] };
-// (beside each exit against the wall, so nobody waiting there has a sightline across the yard)
-const STACKS = { roller: [-60, 0, -190], door: [-60, 0, 345] };
-const STACK_YAW = { roller: Math.atan2(-(16 + 60), -(0 + 190)), door: Math.atan2(-(16 + 60), -(448 - 345)) };
+// Per-map data (L.tactics): routes { name: { stack, yaw, via } } where Raiders gather out of sight
+// and then pass through `via`; siteRoutes { A: [main, flank] }; sites { A: { hold, plant, smoke } }
+// with hold spots as [x, y, z, yawDeg] facing the Raider approach.
 const PUSH_BY = 22;          // seconds into the round when the Raiders go even if not everyone has gathered
 
 const Tactics = {
@@ -7323,7 +7751,8 @@ const Tactics = {
   onRoundStart() {
     const sites = Bomb.sites();
     const site = sites.length ? sites[Math.floor(this.rnd() * sites.length)] : null;
-    this.plan = { site, route: site && site.name === 'B' ? 'door' : 'roller', go: false };
+    const T = Game.L.tactics, routes = (T && site && T.siteRoutes[site.name]) || [];
+    this.plan = { site, route: routes[0], flank: routes[1] || routes[0], go: false };
     let i = 0;
     for (const a of Actors.list) {
       if (!a.brain) continue;
@@ -7372,7 +7801,9 @@ const Tactics = {
 
   assign() {
     const plan = this.plan;
-    if (!plan || !plan.site) return;
+    const T = Game.L.tactics;
+    if (!plan || !plan.site || !T) return;
+    const SPOTS = T.sites, R = T.routes;
     const st = Bomb.state, bpos = Bomb.where();
     const raiders = Actors.list.filter((a) => a.alive && a.team === TEAM.RAIDERS && a.brain);
     const wardens = Actors.list.filter((a) => a.alive && a.team === TEAM.WARDENS && a.brain);
@@ -7383,29 +7814,29 @@ const Tactics = {
       for (const a of raiders) { const d = Math.hypot(a.player.pos[0] - bpos[0], a.player.pos[2] - bpos[2]); if (d < best) { best = d; fetcher = a; } }
     }
     // gather inside the hall, then go together (with smoke cover when someone carries one)
-    const routeOf = (i) => (i % 3 === 2 ? (plan.route === 'roller' ? 'door' : 'roller') : plan.route);   // one in three flanks
+    const routeOf = (i) => (i % 3 === 2 ? plan.flank : plan.route);   // one in three flanks
     if (!plan.go && st !== 'planted') {
-      const gathered = raiders.filter((a, i) => Math.hypot(a.player.pos[0] - STACKS[routeOf(i)][0], a.player.pos[2] - STACKS[routeOf(i)][2]) < 260).length;
+      const gathered = raiders.filter((a, i) => Math.hypot(a.player.pos[0] - R[routeOf(i)].stack[0], a.player.pos[2] - R[routeOf(i)].stack[2]) < 260).length;
       if (gathered >= Math.ceil(raiders.length * 0.6) || Match.liveT > PUSH_BY || st === 'dropped') {
         plan.go = true;
         let k = 0;
-        for (const a of raiders) if (a.loadout.byId('smoke')) a.brain.smokeAt = SITE_SPOTS[plan.site.name].smoke[k++ % 2].slice();
+        for (const a of raiders) if (a.loadout.byId('smoke')) a.brain.smokeAt = SPOTS[plan.site.name].smoke[k++ % 2].slice();
       }
     }
     raiders.forEach((a, i) => {
-      const b = a.brain, spots = SITE_SPOTS[plan.site.name];
+      const b = a.brain, spots = SPOTS[plan.site.name];
       if (!plan.go && st !== 'planted') {
-        const sp = STACKS[routeOf(i)];
-        b.setOrder({ kind: 'stack', pos: sp.slice(), yaw: STACK_YAW[routeOf(i)], spread: 28 });
+        const rt = R[routeOf(i)];
+        b.setOrder({ kind: 'stack', pos: rt.stack.slice(), yaw: rt.yaw, spread: 28 });
       } else if (st === 'planted') {
         const ang = (i / Math.max(1, raiders.length)) * TAU + 0.7, r = 220 + (i % 2) * 120;
         b.setOrder({ kind: 'guard', pos: [Bomb.pos[0] + Math.cos(ang) * r, Bomb.pos[1], Bomb.pos[2] + Math.sin(ang) * r], face: Bomb.pos });
       } else if (Bomb.carrier === a) {
-        b.setOrder({ kind: 'plant', pos: this.spot(spots.plant, i).pos, via: ROUTES[routeOf(i)], site: plan.site });
+        b.setOrder({ kind: 'plant', pos: this.spot(spots.plant, i).pos, via: R[routeOf(i)].via, site: plan.site });
       } else if (a === fetcher) {
         b.setOrder({ kind: 'pickup', pos: bpos.slice() });
       } else {
-        b.setOrder({ kind: 'goto', pos: this.spot(spots.plant, i + 1).pos, via: ROUTES[routeOf(i)], spread: 90 });
+        b.setOrder({ kind: 'goto', pos: this.spot(spots.plant, i + 1).pos, via: R[routeOf(i)].via, spread: 90 });
       }
     });
     if (st === 'planted') {
@@ -7417,14 +7848,177 @@ const Tactics = {
       });
     } else {
       wardens.forEach((a, i) => {
-        const site = Bomb.sites()[a.brain.post % Bomb.sites().length], s = this.spot(SITE_SPOTS[site.name].hold, i);
+        const site = Bomb.sites()[a.brain.post % Bomb.sites().length], s = this.spot(SPOTS[site.name].hold, i);
         a.brain.setOrder({ kind: 'hold', pos: s.pos, yaw: s.yaw });
       });
     }
   },
 };
 
-// ==== 28-hud.js ====
+// ==== 28-radar.js ====
+// Radar and weapon icons.
+// The radar overview is rasterised once at load from brush footprints (coloured by height; roofs and
+// anything floating above head height are skipped so interiors show), then each frame a rotating
+// circular window around you shows teammates, enemies your team can currently see, and the charge.
+// Weapon icons are side-view silhouettes rasterised from the world models.
+
+const Radar = {
+  img: null, s: 0.125, zoom: 0.8, lo: [0, 0], spotted: new Map(), spotT: 0, tr: null, ctx: null, el: null, px: 168, dpr: 1, place: '',
+
+  build(L) {
+    const s = this.s, lo = L.bounds.lo, hi = L.bounds.hi;
+    const W = Math.max(8, Math.ceil((hi[0] - lo[0]) * s)), H = Math.max(8, Math.ceil((hi[2] - lo[2]) * s));
+    const cv = makeCanvas(W, H), g = cv.getContext('2d');
+    this.lo = [lo[0], lo[2]];
+    const items = [];
+    for (const b of L.cw.brushes) {
+      if (!(b.contents & CONTENTS.SOLID)) continue;
+      const o = (b.mb && b.mb.o) || {}, bottom = b.min[1], top = b.max[1];
+      if (bottom >= 100 || o.radar === false) continue;
+      let ti = -1, best = 0.3;
+      for (let i = 0; i < b.faceCount; i++) if (b.polys[i] && b.P[i * 4 + 1] > best) { best = b.P[i * 4 + 1]; ti = i; }
+      if (ti < 0) continue;
+      const kind = o.radar === 'floor' ? 'raised' : top - bottom >= 120 && top >= 150 ? 'wall' : top <= -30 ? 'low' : top <= 20 ? 'ground' : 'raised';
+      items.push({ poly: b.polys[ti], top, kind });
+    }
+    const order = { low: 0, ground: 1, raised: 2, wall: 3 }, fill = { low: '#4a4842', ground: '#6c685e', raised: '#918c7e', wall: '#1a1c1d' };
+    items.sort((a, b) => order[a.kind] - order[b.kind] || a.top - b.top);
+    for (const it of items) {
+      g.beginPath();
+      it.poly.forEach((v, i) => { const x = (v[0] - lo[0]) * s, y = (v[2] - lo[2]) * s; if (i) g.lineTo(x, y); else g.moveTo(x, y); });
+      g.closePath(); g.fillStyle = fill[it.kind]; g.fill();
+      if (it.kind === 'raised') { g.strokeStyle = 'rgba(16, 16, 16, 0.55)'; g.lineWidth = 1; g.stroke(); }
+    }
+    for (const st of L.sites || []) {
+      g.fillStyle = 'rgba(240, 165, 58, 0.16)';
+      g.fillRect((st.min[0] - lo[0]) * s, (st.min[2] - lo[2]) * s, (st.max[0] - st.min[0]) * s, (st.max[2] - st.min[2]) * s);
+    }
+    this.img = cv; this.tr = makeTrace(); this.spotted.clear();
+  },
+
+  attach(canvas) {
+    this.el = canvas; this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = canvas.height = Math.round(this.px * this.dpr);
+    this.ctx = canvas.getContext('2d');
+  },
+
+  areaAt(x, z) {
+    for (const a of Game.L.areas || []) if (x >= a.x0 && x <= a.x1 && z >= a.z0 && z <= a.z1) return a.name;
+    return '';
+  },
+
+  // Enemies count as spotted while you (in your view cone) or a teammate's bot can see them.
+  updateSpotted(me, dt) {
+    for (const [a, t] of this.spotted) { if (!a.alive || t - dt <= 0) this.spotted.delete(a); else this.spotted.set(a, t - dt); }
+    if ((this.spotT -= dt) > 0) return;
+    this.spotT = 0.15;
+    const eye = tickEye(me.player), f = viewDir(me.player);
+    for (const e of Actors.list) {
+      if (!e.alive || e.team === me.team) continue;
+      let seen = Actors.list.some((t) => t.alive && t.team === me.team && t.brain && t.brain.target === e && t.brain.visible);
+      if (!seen && me.alive) {
+        const p = e.player.pos, c = [p[0], p[1] + 46, p[2]], dx = c[0] - eye[0], dy = c[1] - eye[1], dz = c[2] - eye[2], d = Math.hypot(dx, dy, dz) || 1;
+        if ((dx * f[0] + dy * f[1] + dz * f[2]) / d > 0.62) {
+          Game.L.cw.trace(this.tr, eye[0], eye[1], eye[2], c[0], c[1], c[2], 0, 0, 0, MASK_SHOT);
+          seen = this.tr.fraction >= 1 && !Grenades.blocks(eye, c);
+        }
+      }
+      if (seen) this.spotted.set(e, 1.0);
+    }
+  },
+
+  draw(me, view, yaw, dt) {
+    const c = this.ctx;
+    if (!c || !this.img) return;
+    this.updateSpotted(me, dt);
+    const S = this.el.width, R = S / 2, k = this.zoom * this.dpr, s = this.s, cs = Math.cos(yaw), sn = Math.sin(yaw);
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, S, S);
+    c.save();
+    c.beginPath(); c.arc(R, R, R - 1, 0, TAU); c.clip();
+    c.fillStyle = 'rgba(10, 12, 11, 0.78)'; c.fillRect(0, 0, S, S);
+    c.translate(R, R); c.rotate(yaw); c.scale(k, k);
+    c.globalAlpha = 0.92; c.drawImage(this.img, -(view[0] - this.lo[0]) * s, -(view[2] - this.lo[1]) * s); c.globalAlpha = 1;
+    c.setTransform(1, 0, 0, 1, R, R);
+    // map position -> radar screen (rotated so you face up), clamped to the rim when far away
+    const at = (x, z, clampIt) => {
+      const dx = (x - view[0]) * s * k, dz = (z - view[2]) * s * k;
+      let X = dx * cs - dz * sn, Y = dx * sn + dz * cs;
+      const d = Math.hypot(X, Y), lim = R - 7 * this.dpr;
+      if (clampIt && d > lim) { X *= lim / d; Y *= lim / d; }
+      return [X, Y, d <= lim];
+    };
+    const u = this.dpr;
+    c.font = `600 ${Math.round(14 * u)}px ${getComputedStyle(document.body).fontFamily}`; c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (const st of Game.L.sites || []) {
+      const [X, Y] = at(st.center[0], st.center[2], true);
+      c.fillStyle = 'rgba(240, 165, 58, 0.92)'; c.fillText(st.name, X, Y);
+    }
+    // the charge
+    const bomb = Bomb.where();
+    if (bomb && Match.active) {
+      const vis = Bomb.state === 'planted' || (me.team === TEAM.RAIDERS && Bomb.state === 'dropped');
+      if (vis && (Bomb.state !== 'planted' || Math.floor(Game.time * 3) % 2 === 0)) {
+        const [X, Y] = at(bomb[0], bomb[2], true);
+        c.fillStyle = Bomb.state === 'planted' ? '#ff4a32' : '#f0a53a'; c.strokeStyle = 'rgba(0,0,0,0.8)'; c.lineWidth = u;
+        c.fillRect(X - 4 * u, Y - 3 * u, 8 * u, 6 * u); c.strokeRect(X - 4 * u, Y - 3 * u, 8 * u, 6 * u);
+      }
+    }
+    // players
+    for (const a of Actors.list) {
+      if (a === me || !a.alive) continue;
+      const mate = a.team === me.team;
+      if (!mate && !this.spotted.has(a)) continue;
+      const p = a.player.pos, [X, Y] = at(p[0], p[2], mate);
+      if (!mate && Math.hypot(X, Y) > R - 7 * u) continue;
+      const col = mate ? (a.team === TEAM.RAIDERS ? '#eba264' : '#86bcef') : '#ff3b2f';
+      if (mate) {
+        const h = a.player.yaw - yaw, hx = -Math.sin(h), hy = -Math.cos(h);
+        c.strokeStyle = col; c.lineWidth = 1.6 * u; c.beginPath(); c.moveTo(X, Y); c.lineTo(X + hx * 7 * u, Y + hy * 7 * u); c.stroke();
+      }
+      c.beginPath(); c.arc(X, Y, 3.6 * u, 0, TAU); c.fillStyle = col; c.fill();
+      c.lineWidth = u; c.strokeStyle = 'rgba(0, 0, 0, 0.85)'; c.stroke();
+      if (mate && Bomb.carrier === a) { c.beginPath(); c.arc(X, Y, 6.2 * u, 0, TAU); c.strokeStyle = '#f0a53a'; c.lineWidth = 1.4 * u; c.stroke(); }
+    }
+    // you: an arrow pointing up
+    if (me.alive) {
+      c.beginPath(); c.moveTo(0, -7 * u); c.lineTo(5 * u, 5 * u); c.lineTo(0, 2.5 * u); c.lineTo(-5 * u, 5 * u); c.closePath();
+      c.fillStyle = '#f3ecd6'; c.fill(); c.strokeStyle = 'rgba(0, 0, 0, 0.9)'; c.lineWidth = u; c.stroke();
+    }
+    c.restore();
+    c.beginPath(); c.arc(R, R, R - 1, 0, TAU); c.strokeStyle = 'rgba(243, 236, 214, 0.35)'; c.lineWidth = 1.5 * u; c.stroke();
+  },
+};
+
+// Side-view silhouettes of the world models (muzzle to the right), as data URLs.
+const WeaponIcons = {
+  url: {},
+  build() {
+    for (const id of Object.keys(WEAPONS)) this.url[id] = this.draw(id);
+    this.url.blast = this.url.charge;
+  },
+  draw(id) {
+    const geo = (PlayerModel.wgeo && PlayerModel.wgeo[id]) ? PlayerModel.wgeo[id].geo : chWeaponGeo(id).geo;
+    const P = geo.attributes.position.array, W = 96, H = 32, pad = 2;
+    let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+    for (let i = 0; i < P.length; i += 3) { const u = -P[i + 2], v = P[i + 1]; u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); }
+    const k = Math.min((W - pad * 2) / (u1 - u0 || 1), (H - pad * 2) / (v1 - v0 || 1));
+    const ox = (W - (u1 - u0) * k) / 2, oy = (H - (v1 - v0) * k) / 2;
+    const cv = makeCanvas(W, H), g = cv.getContext('2d');
+    g.fillStyle = '#fff'; g.strokeStyle = '#fff'; g.lineWidth = 0.6; g.lineJoin = 'round';
+    for (let i = 0; i < P.length; i += 9) {
+      g.beginPath();
+      for (let j = 0; j < 3; j++) {
+        const x = ox + (-P[i + j * 3 + 2] - u0) * k, y = H - oy - (P[i + j * 3 + 1] - v0) * k;
+        if (j) g.lineTo(x, y); else g.moveTo(x, y);
+      }
+      g.closePath(); g.fill(); g.stroke();
+    }
+    return cv.toDataURL();
+  },
+  img(id, cls = 'wi') { const u = this.url[id]; return u ? `<img class="${cls}" src="${u}" alt="">` : ''; },
+};
+
+// ==== 29-hud.js ====
 // HUD + menu. DOM writes are skipped when values don't change.
 
 const $ = (id) => document.getElementById(id);
@@ -7434,10 +8028,12 @@ const HUD = {
   init() {
     for (const id of ['sf-hud', 'xh', 'hitmark', 'hud-hint', 'hud-fps', 'hud-hp', 'hud-ar', 'hud-prompt', 'hud-speed', 'hud-wname', 'hud-reload', 'hud-ammo', 'hud-mag', 'hud-res',
       'hud-debug', 'hud-note', 'r-hits', 'r-shots', 'r-acc', 'hud-wlist', 'sf-smoke', 'hud-feed', 'hud-score', 'hud-dmg', 'hud-hurt', 'hud-dead', 'hud-board', 'hud-target', 'hud-scope', 'hud-tag', 'hud-alive', 'hud-range', 'hud-money', 'hud-cash', 'hud-cashd',
-      'hud-buyzone', 'hud-carry', 'hud-banner', 'hud-progress', 'hud-progress-label', 'hud-progress-bar', 'buy-menu'])
+      'hud-buyzone', 'hud-carry', 'hud-banner', 'hud-progress', 'hud-progress-label', 'hud-progress-bar', 'buy-menu', 'hud-place'])
       this.el[id] = $(id);
     this.applyCrosshairStyle();
     this.applyToggles();
+    Radar.attach($('hud-radar'));
+    this.hintAge = 0; this.hintPinned = false;
   },
   set(id, v, prop = 'textContent') { if (this.last[id + prop] !== v) { this.last[id + prop] = v; this.el[id][prop] = v; } },
   show(on) { this.el['sf-hud'].hidden = !on; },
@@ -7463,7 +8059,16 @@ const HUD = {
   // Defuse-mode HUD: clock, alive pips, money, the charge, progress bars, round banners.
   updateRound(dt) {
     const el = this.el, me = Actors.me, M = Match, on = M.active;
-    this.set('hud-tag', on ? `Hall B · Defuse · Round ${M.round}` : 'Hall B · Skirmish');
+    // the radar follows whoever the camera follows
+    const spec = !me.alive && Game.specTarget && Game.specTarget.alive ? Game.specTarget : null, who = spec || me;
+    Radar.draw(me, who.player.pos, who.player.yaw, dt);
+    this.set('hud-place', Radar.areaAt(who.player.pos[0], who.player.pos[2]));
+    const low = me.alive && me.health <= 25;
+    if (this.last.low !== low) { this.last.low = low; el['hud-hp'].classList.toggle('low', low); }
+    if (Game.state === 'playing') this.hintAge += dt;
+    const hints = Settings.v.showHints && !Input.touch.enabled && (this.hintAge < 30 || this.hintPinned);
+    if (this.last.hints !== hints) { this.last.hints = hints; el['hud-hint'].hidden = !hints; }
+    this.set('hud-tag', on ? `${Game.L.name} · Round ${M.round}` : `${Game.L.name} · Skirmish`);
     if (this.last.defuse !== on) { this.last.defuse = on; el['hud-range'].hidden = on; el['hud-money'].hidden = !on; el['hud-alive'].hidden = !on; }
     let clock = '<i>:</i>';
     if (on) {
@@ -7532,7 +8137,7 @@ const HUD = {
     const sig = Actors.feed.map((f) => f.victim + f.age.toFixed(0)).join('|') + Actors.feed.length;
     if (this.last.feed !== sig) {
       this.last.feed = sig;
-      el['hud-feed'].innerHTML = Actors.feed.map((f) => `<div class="${f.me ? 'mine' : ''}" style="opacity:${f.age > 5.5 ? (7 - f.age) / 1.5 : 1}"><b class="t${f.kTeam}">${this.esc(f.killer)}</b><span>${this.esc(f.weapon)}${f.hs ? ' <i class="hs">◉</i>' : ''}</span><b class="t${f.vTeam}">${this.esc(f.victim)}</b></div>`).join('');
+      el['hud-feed'].innerHTML = Actors.feed.map((f) => `<div class="${f.me ? 'mine' : ''}" style="opacity:${f.age > 5.5 ? (7 - f.age) / 1.5 : 1}"><b class="t${f.kTeam}">${this.esc(f.killer)}</b><span title="${this.esc(f.weapon)}">${WeaponIcons.img(f.wid) || this.esc(f.weapon)}${f.hs ? ' <i class="hs">◉</i>' : ''}</span><b class="t${f.vTeam}">${this.esc(f.victim)}</b></div>`).join('');
     }
     const by = me.killer && me.killer !== me ? `Killed by <b class="t${me.killer.team}">${this.esc(me.killer.name)}</b> · ${this.esc(me.killInfo.weapon)}${me.killInfo.headshot ? ' · headshot' : ''}`
       : me.killInfo && me.killInfo.weapon === BLAST.name ? 'Caught in the blast' : 'You died';
@@ -7605,7 +8210,7 @@ const HUD = {
       const sig = lo.list.map((x) => x.def.id + (x === w ? '*' : '') + (lo.usable(x) ? '' : '-')).join(',');
       if (this.last.wlsig !== sig) {
         this.last.wlsig = sig;
-        this.el['hud-wlist'].innerHTML = lo.list.map((x) => `<div class="${x === w ? 'on' : ''}${lo.usable(x) ? '' : ' off'}"><b>${x.def.slot}</b><span>${x.def.name}</span></div>`).join('');
+        this.el['hud-wlist'].innerHTML = lo.list.map((x) => `<div class="${x === w ? 'on' : ''}${lo.usable(x) ? '' : ' off'}"><b>${x.def.slot}</b><span>${x.def.name}</span>${WeaponIcons.img(x.def.id)}</div>`).join('');
       }
     }
     if (s.showSpeed) this.set('hud-speed', `<b>${Math.round(pl.speed())}</b> u/s${pl.noclip ? ' · noclip' : ''}`, 'innerHTML');
@@ -7690,7 +8295,7 @@ const Menu = {
     range('set-vol', 'volume', (v) => `${Math.round(v)}%`);
     check('set-fps', 'showFps'); check('set-speed', 'showSpeed');
     select('set-botskill', 'botSkill'); select('set-team', 'team', true); check('set-ff', 'ff');
-    select('set-mode', 'mode'); select('set-matchlen', 'matchLen');
+    select('set-mode', 'mode'); select('set-matchlen', 'matchLen'); select('set-map', 'map');
     const roster = (fn) => () => { fn(); if (Match.active) Match.startMatch(); this.updateBots(); };
     $('bot-add-0').addEventListener('click', roster(() => { if (Actors.list.length < 12) Actors.addBot(0); }));
     $('bot-add-1').addEventListener('click', roster(() => { if (Actors.list.length < 12) Actors.addBot(1); }));
@@ -7704,6 +8309,7 @@ const Menu = {
       if (k === 'team') { Actors.setTeam(Settings.v.team); this.updateBots(); }
       if (k === 'ff') Actors.ff = !!Settings.v.ff;
       if (k === 'mode') { Match.setMode(Settings.v.mode); this.updateBots(); }
+      if (k === 'map') { $('menu-note').textContent = `Loading ${(MAPS[Settings.v.map] || MAPS.depot).name}…`; setTimeout(() => location.reload(), 60); }
       if (k === 'matchLen' && Match.active) { Match.startMatch(); this.updateBots(); }
     });
   },
@@ -7742,7 +8348,7 @@ const BuyMenu = {
     for (const { e, q, off } of items) {
       if (e.group !== group) { group = e.group; html += `<h3>${group}</h3>`; }
       const note = q.no ? q.no : q.note === 'helmet' ? 'helmet only' : '';
-      html += `<button type="button" data-id="${e.id}"${off ? ' disabled' : ''}><kbd>${e.key}</kbd><span>${e.name}${note ? `<small>${note}</small>` : ''}</span><span class="price">$${(q.price ?? e.price).toLocaleString('en-US')}</span></button>`;
+      html += `<button type="button" data-id="${e.id}"${off ? ' disabled' : ''}><kbd>${e.key}</kbd><span>${e.kind === 'weapon' ? WeaponIcons.img(e.id) : '<i class="wi-pad"></i>'}${e.name}${note ? `<small>${note}</small>` : ''}</span><span class="price">$${(q.price ?? e.price).toLocaleString('en-US')}</span></button>`;
     }
     html += `<footer><span class="msg">${this.msg ? HUD.esc(this.msg) : ''}</span><span>1–9 to buy · B to close</span></footer>`;
     HUD.el['buy-menu'].innerHTML = html;
@@ -7755,7 +8361,7 @@ const BuyMenu = {
   },
 };
 
-// ==== 29-main.js ====
+// ==== 30-main.js ====
 // Boot sequence, fixed-tick simulation (64 Hz) with interpolated rendering, game state.
 
 const TICK = 1 / 64;
@@ -7900,7 +8506,7 @@ function handleHotkeys() {
   const pl = Game.player;
   if (Input.pressed('KeyV')) { pl.noclip = !pl.noclip; if (!pl.noclip) pl.vel = [0, 0, 0]; HUD.note(pl.noclip ? 'Noclip on · Space up, C down' : 'Noclip off'); }
   if (Input.pressed('F1') || Input.pressed('Backquote')) { HUD.debug = !HUD.debug; $('hud-debug').hidden = !HUD.debug; }
-  if (Input.pressed('KeyH')) Settings.set('showHints', !Settings.v.showHints);
+  if (Input.pressed('KeyH')) { const shown = !HUD.el['hud-hint'].hidden; HUD.hintPinned = !shown; Settings.set('showHints', !shown); }
   if (Input.pressed('KeyB') || Input.touch.buyEdge) { Input.touch.buyEdge = false; BuyMenu.toggle(); }
   if (BuyMenu.open) {
     for (let n = 1; n <= 9; n++) if (Input.pressed('Digit' + n)) BuyMenu.press(n);
@@ -8059,16 +8665,22 @@ async function boot(hot) {
   await yieldUI();
   const tex = await generateTextures((f) => Menu.loading('Generating textures', f * 0.26));
   R.makeTextures(tex);
-  Menu.loading('Building the range', 0.28); await yieldUI();
-  const L = compileLevel(buildTestRange(), tex);
+  // ?map=range (or depot) in the page address overrides the saved choice
+  let qmap = null;
+  try { qmap = new URLSearchParams(location.search).get('map'); } catch (e) { qmap = null; }
+  const mapKey = MAPS[qmap] ? qmap : MAPS[Settings.v.map] ? Settings.v.map : 'depot', mapDef = MAPS[mapKey];
+  Menu.loading(`Building ${mapDef.name}`, 0.28); await yieldUI();
+  const L = compileLevel(mapDef.build(), tex);
+  L.name = mapDef.name; L.key = mapKey;
   Game.L = L;
   const bake = await bakeLighting(L, (f) => Menu.loading('Compiling lighting', 0.29 + f * 0.62));
   L.probes = bake.probes; L.bakeStats = bake.stats;
   Menu.loading('Mapping bot routes', 0.93); await yieldUI();
   Nav.build(L);
+  Radar.build(L);
   Menu.loading('Uploading to the GPU', 0.97); await yieldUI();
   R.buildWorld(L, bake);
-  FX.init(L); Ents.init(L); Grenades.init(L); Items.init(); Viewmodel.build();
+  FX.init(L); Ents.init(L); Grenades.init(L); Items.init(); Viewmodel.build(); WeaponIcons.build();
   Game.player = new Player(L.cw);
   Game.loadout = new Loadout();
   Actors.init();
@@ -8102,7 +8714,7 @@ async function boot(hot) {
 
   // Test/debug hooks (harmless in normal play).
   window.__SF = {
-    Game, R, Ents, FX, Input, Ballistics, Grenades, Settings, Viewmodel, Snd, Actors, Nav, Bots, Items, Bomb, Match, SHOP, Tactics, BuyMenu,
+    Game, R, Ents, FX, Input, Ballistics, Grenades, Settings, Viewmodel, Snd, Actors, Nav, Bots, Items, Bomb, Match, SHOP, Tactics, BuyMenu, Radar, MAPS,
     setView(x, y, z, yawDeg, pitchDeg) {
       const p = Game.player; p.spawn([x, y, z], yawDeg * DEG); p.pitch = (pitchDeg || 0) * DEG;
       const w = Game.loadout.active; if (w.state === 'draw') { w.state = 'idle'; w.anim = 'idle'; }

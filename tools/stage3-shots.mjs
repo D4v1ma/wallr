@@ -12,7 +12,7 @@ page.on('pageerror', (e) => errs.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
 await page.route('https://cdnjs.cloudflare.com/**', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: readFileSync(threePath) }));
 await page.route('https://fonts.**', (r) => r.abort());
-await page.goto(new URL('../index.html', import.meta.url).href);
+await page.goto(new URL('../index.html', import.meta.url).href + '?map=range');
 await page.waitForFunction(() => window.__SF, null, { timeout: 120000 });
 await page.mouse.move(640, 360);
 const info0 = await page.evaluate(() => { __SF.play(); __SF.Input.freeMouse = true; __SF.Settings.set('mode', 'skirmish'); __SF.Actors.removeBots(); for (let i = 0; i < 3; i++) __SF.Actors.addBot(0); for (let i = 0; i < 2; i++) __SF.Actors.addBot(1); return { nav: __SF.Nav.nodes.length, navMs: __SF.Nav.ms, actors: __SF.Actors.list.map((a) => `${a.name}:${a.team}`) }; });

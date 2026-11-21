@@ -126,9 +126,9 @@ body.playing #sf-canvas { cursor: none; }
 #sf-touch .zone.look { right: 0; width: 58%; }
 #sf-touch .stick { position: absolute; width: 110px; height: 110px; margin: -55px 0 0 -55px; border-radius: 50%; border: 2px solid rgba(243, 236, 214, 0.35); display: none; }
 #sf-touch .stick i { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(243, 236, 214, 0.35); }
-#sf-touch .btns { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(110px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(3, 58px); gap: 10px; pointer-events: auto; }
+#sf-touch .btns { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(110px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(4, 58px); gap: 10px; pointer-events: auto; }
 #sf-touch .btns button { width: 58px; height: 58px; border-radius: 50%; border: 1px solid rgba(243, 236, 214, 0.4); background: rgba(10, 12, 11, 0.45); color: var(--hud); font: 600 11px var(--font-display); letter-spacing: 0.06em; touch-action: none; }
-#sf-touch .btns button.fire { background: rgba(229, 87, 63, 0.55); grid-row: span 2; height: 126px; border-radius: 29px; }
+#sf-touch .btns button.fire { background: rgba(229, 87, 63, 0.55); grid-column: 4; grid-row: 1 / span 2; height: 126px; border-radius: 29px; }
 #sf-touch .tmenu { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(16px + env(safe-area-inset-right, 0px)); pointer-events: auto; }
 
 /* ---------- Overlay / menu ---------- */
@@ -241,4 +241,15 @@ kbd { font-family: var(--font-display); font-size: 12px; font-weight: 600; color
 .hud-board .hist i { width: 16px; height: 16px; line-height: 16px; text-align: center; font-style: normal; background: rgba(243, 236, 214, 0.08); }
 .hud-board .hist i.t0 { background: rgba(235, 162, 100, 0.35); }
 .hud-board .hist i.t1 { background: rgba(134, 188, 239, 0.35); }
+
+/* Stage 5: radar, location, weapon icons, low health */
+.radar-wrap { width: 168px; }
+#hud-radar { display: block; width: 168px; height: 168px; }
+.place { text-align: center; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; margin-top: 3px; min-height: 15px; }
+.hud-feed img.wi { height: 13px; width: auto; vertical-align: -2px; opacity: 0.92; margin: 0 2px; }
+.wlist img.wi { height: 14px; width: auto; vertical-align: -2px; margin-left: 8px; opacity: 0.85; }
+.buy-menu img.wi { height: 15px; width: 46px; object-fit: contain; object-position: left center; vertical-align: -3px; margin-right: 8px; opacity: 0.9; }
+.buy-menu .wi-pad { display: inline-block; width: 46px; margin-right: 8px; }
+.stat .big.low { color: var(--danger); animation: sf-pulse 0.8s ease-in-out infinite; }
+@media (max-width: 640px), (max-height: 520px) { .radar-wrap, #hud-radar { width: 104px; height: 104px; } .radar-wrap { height: auto; } .place { font-size: 10px; } }
 </style>

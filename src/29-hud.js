@@ -7,10 +7,12 @@ const HUD = {
   init() {
     for (const id of ['sf-hud', 'xh', 'hitmark', 'hud-hint', 'hud-fps', 'hud-hp', 'hud-ar', 'hud-prompt', 'hud-speed', 'hud-wname', 'hud-reload', 'hud-ammo', 'hud-mag', 'hud-res',
       'hud-debug', 'hud-note', 'r-hits', 'r-shots', 'r-acc', 'hud-wlist', 'sf-smoke', 'hud-feed', 'hud-score', 'hud-dmg', 'hud-hurt', 'hud-dead', 'hud-board', 'hud-target', 'hud-scope', 'hud-tag', 'hud-alive', 'hud-range', 'hud-money', 'hud-cash', 'hud-cashd',
-      'hud-buyzone', 'hud-carry', 'hud-banner', 'hud-progress', 'hud-progress-label', 'hud-progress-bar', 'buy-menu'])
+      'hud-buyzone', 'hud-carry', 'hud-banner', 'hud-progress', 'hud-progress-label', 'hud-progress-bar', 'buy-menu', 'hud-place'])
       this.el[id] = $(id);
     this.applyCrosshairStyle();
     this.applyToggles();
+    Radar.attach($('hud-radar'));
+    this.hintAge = 0; this.hintPinned = false;
   },
   set(id, v, prop = 'textContent') { if (this.last[id + prop] !== v) { this.last[id + prop] = v; this.el[id][prop] = v; } },
   show(on) { this.el['sf-hud'].hidden = !on; },
@@ -36,7 +38,16 @@ const HUD = {
   // Defuse-mode HUD: clock, alive pips, money, the charge, progress bars, round banners.
   updateRound(dt) {
     const el = this.el, me = Actors.me, M = Match, on = M.active;
-    this.set('hud-tag', on ? `Hall B · Defuse · Round ${M.round}` : 'Hall B · Skirmish');
+    // the radar follows whoever the camera follows
+    const spec = !me.alive && Game.specTarget && Game.specTarget.alive ? Game.specTarget : null, who = spec || me;
+    Radar.draw(me, who.player.pos, who.player.yaw, dt);
+    this.set('hud-place', Radar.areaAt(who.player.pos[0], who.player.pos[2]));
+    const low = me.alive && me.health <= 25;
+    if (this.last.low !== low) { this.last.low = low; el['hud-hp'].classList.toggle('low', low); }
+    if (Game.state === 'playing') this.hintAge += dt;
+    const hints = Settings.v.showHints && !Input.touch.enabled && (this.hintAge < 30 || this.hintPinned);
+    if (this.last.hints !== hints) { this.last.hints = hints; el['hud-hint'].hidden = !hints; }
+    this.set('hud-tag', on ? `${Game.L.name} · Round ${M.round}` : `${Game.L.name} · Skirmish`);
     if (this.last.defuse !== on) { this.last.defuse = on; el['hud-range'].hidden = on; el['hud-money'].hidden = !on; el['hud-alive'].hidden = !on; }
     let clock = '<i>:</i>';
     if (on) {
@@ -105,7 +116,7 @@ const HUD = {
     const sig = Actors.feed.map((f) => f.victim + f.age.toFixed(0)).join('|') + Actors.feed.length;
     if (this.last.feed !== sig) {
       this.last.feed = sig;
-      el['hud-feed'].innerHTML = Actors.feed.map((f) => `<div class="${f.me ? 'mine' : ''}" style="opacity:${f.age > 5.5 ? (7 - f.age) / 1.5 : 1}"><b class="t${f.kTeam}">${this.esc(f.killer)}</b><span>${this.esc(f.weapon)}${f.hs ? ' <i class="hs">◉</i>' : ''}</span><b class="t${f.vTeam}">${this.esc(f.victim)}</b></div>`).join('');
+      el['hud-feed'].innerHTML = Actors.feed.map((f) => `<div class="${f.me ? 'mine' : ''}" style="opacity:${f.age > 5.5 ? (7 - f.age) / 1.5 : 1}"><b class="t${f.kTeam}">${this.esc(f.killer)}</b><span title="${this.esc(f.weapon)}">${WeaponIcons.img(f.wid) || this.esc(f.weapon)}${f.hs ? ' <i class="hs">◉</i>' : ''}</span><b class="t${f.vTeam}">${this.esc(f.victim)}</b></div>`).join('');
     }
     const by = me.killer && me.killer !== me ? `Killed by <b class="t${me.killer.team}">${this.esc(me.killer.name)}</b> · ${this.esc(me.killInfo.weapon)}${me.killInfo.headshot ? ' · headshot' : ''}`
       : me.killInfo && me.killInfo.weapon === BLAST.name ? 'Caught in the blast' : 'You died';
@@ -178,7 +189,7 @@ const HUD = {
       const sig = lo.list.map((x) => x.def.id + (x === w ? '*' : '') + (lo.usable(x) ? '' : '-')).join(',');
       if (this.last.wlsig !== sig) {
         this.last.wlsig = sig;
-        this.el['hud-wlist'].innerHTML = lo.list.map((x) => `<div class="${x === w ? 'on' : ''}${lo.usable(x) ? '' : ' off'}"><b>${x.def.slot}</b><span>${x.def.name}</span></div>`).join('');
+        this.el['hud-wlist'].innerHTML = lo.list.map((x) => `<div class="${x === w ? 'on' : ''}${lo.usable(x) ? '' : ' off'}"><b>${x.def.slot}</b><span>${x.def.name}</span>${WeaponIcons.img(x.def.id)}</div>`).join('');
       }
     }
     if (s.showSpeed) this.set('hud-speed', `<b>${Math.round(pl.speed())}</b> u/s${pl.noclip ? ' · noclip' : ''}`, 'innerHTML');
@@ -263,7 +274,7 @@ const Menu = {
     range('set-vol', 'volume', (v) => `${Math.round(v)}%`);
     check('set-fps', 'showFps'); check('set-speed', 'showSpeed');
     select('set-botskill', 'botSkill'); select('set-team', 'team', true); check('set-ff', 'ff');
-    select('set-mode', 'mode'); select('set-matchlen', 'matchLen');
+    select('set-mode', 'mode'); select('set-matchlen', 'matchLen'); select('set-map', 'map');
     const roster = (fn) => () => { fn(); if (Match.active) Match.startMatch(); this.updateBots(); };
     $('bot-add-0').addEventListener('click', roster(() => { if (Actors.list.length < 12) Actors.addBot(0); }));
     $('bot-add-1').addEventListener('click', roster(() => { if (Actors.list.length < 12) Actors.addBot(1); }));
@@ -277,6 +288,7 @@ const Menu = {
       if (k === 'team') { Actors.setTeam(Settings.v.team); this.updateBots(); }
       if (k === 'ff') Actors.ff = !!Settings.v.ff;
       if (k === 'mode') { Match.setMode(Settings.v.mode); this.updateBots(); }
+      if (k === 'map') { $('menu-note').textContent = `Loading ${(MAPS[Settings.v.map] || MAPS.depot).name}…`; setTimeout(() => location.reload(), 60); }
       if (k === 'matchLen' && Match.active) { Match.startMatch(); this.updateBots(); }
     });
   },
@@ -315,7 +327,7 @@ const BuyMenu = {
     for (const { e, q, off } of items) {
       if (e.group !== group) { group = e.group; html += `<h3>${group}</h3>`; }
       const note = q.no ? q.no : q.note === 'helmet' ? 'helmet only' : '';
-      html += `<button type="button" data-id="${e.id}"${off ? ' disabled' : ''}><kbd>${e.key}</kbd><span>${e.name}${note ? `<small>${note}</small>` : ''}</span><span class="price">$${(q.price ?? e.price).toLocaleString('en-US')}</span></button>`;
+      html += `<button type="button" data-id="${e.id}"${off ? ' disabled' : ''}><kbd>${e.key}</kbd><span>${e.kind === 'weapon' ? WeaponIcons.img(e.id) : '<i class="wi-pad"></i>'}${e.name}${note ? `<small>${note}</small>` : ''}</span><span class="price">$${(q.price ?? e.price).toLocaleString('en-US')}</span></button>`;
     }
     html += `<footer><span class="msg">${this.msg ? HUD.esc(this.msg) : ''}</span><span>1–9 to buy · B to close</span></footer>`;
     HUD.el['buy-menu'].innerHTML = html;

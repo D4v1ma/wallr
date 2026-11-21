@@ -3,6 +3,7 @@
 class MapBuilder {
   constructor() {
     this.brushes = []; this.lights = []; this.doors = []; this.targets = []; this.spawns = []; this.teamSpawns = []; this.hotspots = []; this.sites = [];
+    this.areas = []; this.tactics = null;
     this.env = null;
   }
 
@@ -77,6 +78,8 @@ class MapBuilder {
   spawn(x, y, z, yaw) { this.spawns.push({ pos: [x, y, z], yaw }); }
   teamSpawn(team, x, y, z, yaw) { (this.teamSpawns[team] || (this.teamSpawns[team] = [])).push({ pos: [x, y, z], yaw }); }
   hotspot(x, y, z, name) { this.hotspots.push({ pos: [x, y, z], name }); }
+  // Named place for the radar and callouts (first match wins).
+  area(name, x0, z0, x1, z1) { this.areas.push({ name, x0, z0, x1, z1 }); }
   // Plant site: the charge can be planted anywhere inside this box.
   site(name, x0, z0, x1, z1, y0 = -16, y1 = 140) {
     this.sites.push({ name, min: [x0, y0, z0], max: [x1, y1, z1], center: [(x0 + x1) / 2, 0, (z0 + z1) / 2], spots: [] });
@@ -172,7 +175,7 @@ function compileLevel(map, tex) {
     const td = tex[f.mat] && tex[f.mat].def;
     if (td && td.fullbright) continue;
     const ext = Math.max(maxR - minR, maxT - minT);
-    const s = f.mb.o.lm || (ext > 640 ? 16 : 8);
+    const env = map.env || {}, s = f.mb.o.lm || (ext > (env.lmBig || 640) ? 16 : (env.lmSmall || 8));
     const w = Math.max(2, Math.ceil((maxR - minR) / s) + 1), h = Math.max(2, Math.ceil((maxT - minT) / s) + 1);
     f.lm = { s, w, h, x: 0, y: 0, start: 0 };
     luxels += w * h;
@@ -246,5 +249,5 @@ function compileLevel(map, tex) {
   for (const b of cw.brushes) for (let i = 0; i < 3; i++) { lo[i] = Math.min(lo[i], b.min[i]); hi[i] = Math.max(hi[i], b.max[i]); }
 
   return { cw, faces, luxels, atlasW, atlasH, groups, entGroups, lights: map.lights, doors: map.doors, targets: map.targets, spawns: map.spawns,
-    teamSpawns: map.teamSpawns, hotspots: map.hotspots, sites: map.sites, env: map.env, bounds: { lo, hi }, tex };
+    teamSpawns: map.teamSpawns, hotspots: map.hotspots, sites: map.sites, areas: map.areas, tactics: map.tactics, env: map.env, bounds: { lo, hi }, tex };
 }
