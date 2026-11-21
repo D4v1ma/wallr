@@ -1,7 +1,6 @@
 // Career profile: XP and levels (each level pays shop points), owned attachments and camos, the
 // per-gun kit, Elo rating and rank, lifetime stats and recent matches.
-// Saved on this device (localStorage) and, when the page runs as a claude.ai artifact with the
-// `db` capability, in a private per-user document so progress follows the account.
+// One profile per account on this device (see 26-accounts.js); a guest's profile isn't saved.
 
 const DIFFS = {
   easy: { name: 'Easy', elo: 750, xp: 0.8, blurb: 'Slow to react, loose aim' },
@@ -42,15 +41,14 @@ const LEVELS = {
 const WELCOME_POINTS = 600;
 
 const Profile = {
-  key: 'shortfuse.profile.v1', v: null, listeners: [],
-  cloud: null, cloudState: 'local', writing: false, again: false, saveT: null, retryT: null,
+  v: null, listeners: [],
 
   blank() {
     const kit = {};
     for (const g of ARMORY_GUNS) kit[g] = { muzzle: null, optic: null, mag: null, grip: null, camo: null };
     return {
       ver: 1, created: Date.now(), updated: 0, xp: 0, points: WELCOME_POINTS, owned: { att: [], camo: [] }, kit,
-      elo: 1000, peak: 1000, placed: 0, lastCfg: null,
+      elo: 1000, peak: 1000, placed: 0, lastCfg: null, lastMatchId: '',
       stats: { matches: 0, wins: 0, losses: 0, draws: 0, left: 0, ranked: 0, kills: 0, deaths: 0, hs: 0, damage: 0, rounds: 0, plants: 0, defuses: 0 },
       history: [],
     };
@@ -78,70 +76,24 @@ const Profile = {
     if (o.stats && typeof o.stats === 'object') for (const k of Object.keys(b.stats)) b.stats[k] = num(o.stats[k], 0);
     if (Array.isArray(o.history)) b.history = o.history.filter((h) => h && typeof h === 'object').slice(0, 15);
     if (o.lastCfg && typeof o.lastCfg === 'object') b.lastCfg = o.lastCfg;
+    if (typeof o.lastMatchId === 'string') b.lastMatchId = o.lastMatchId.slice(0, 40);
     return b;
   },
 
-  load() {
-    let saved = null;
-    try { if (typeof localStorage !== 'undefined') saved = JSON.parse(localStorage.getItem(this.key) || 'null'); } catch (e) { saved = null; }
-    this.v = this.sanitize(saved);
-  },
   on(f) { this.listeners.push(f); },
   emit() { for (const f of this.listeners) { try { f(this.v); } catch (e) { /* UI listener */ } } },
 
-  // Every real change goes through here: device copy now, account copy one write at a time.
-  save(soon) {
+  // Every real change goes through here: the signed-in account's profile is written to this device.
+  save() {
     this.v.updated = Date.now();
-    try { if (typeof localStorage !== 'undefined') localStorage.setItem(this.key, JSON.stringify(this.v)); } catch (e) { /* storage blocked */ }
-    if (this.cloud) {
-      clearTimeout(this.saveT);
-      if (soon) this.saveT = setTimeout(() => this.push(), 1500); else this.push();
-    }
+    if (typeof Accounts !== 'undefined') Accounts.saveProfile();
     this.emit();
   },
-  async push() {
-    if (!this.cloud || this.cloudState === 'readonly') return;
-    if (this.writing) { this.again = true; return; }
-    this.writing = true;
-    try {
-      await this.cloud.set(JSON.parse(JSON.stringify(this.v)));
-      this.cloudState = 'synced';
-    } catch (e) {
-      const code = e && e.code;
-      if (code === 'invalid_argument' || code === 'revoked' || code === 'not_granted') this.cloudState = 'readonly';
-      else { this.cloudState = 'offline'; clearTimeout(this.retryT); this.retryT = setTimeout(() => this.push(), 20000); }
-    }
-    this.writing = false;
-    this.emit();
-    if (this.again) { this.again = false; this.push(); }
-  },
-
-  // Optional: the account copy. Never blocks the game; the device copy is used until it answers.
-  async connect() {
-    const c = typeof window !== 'undefined' ? window.claude : null;
-    if (!c || typeof c.use !== 'function') return;
-    this.cloudState = 'connecting'; this.emit();
-    const limit = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(() => r(null), ms))]);
-    try {
-      const [db, user] = await limit(Promise.all([c.use('db'), c.use('user')]), 10000) || [null, null];
-      const id = db && user ? await limit(user.id(), 10000) : null;
-      if (!db || !id) { this.cloudState = 'local'; this.emit(); return; }
-      const ref = db.doc(`data/users/${id}/profile`);
-      const snap = await limit(ref.get(), 10000);
-      if (!snap) { this.cloudState = 'local'; this.emit(); return; }
-      this.cloud = ref; this.cloudState = 'synced';
-      const remote = snap.exists ? this.sanitize(snap.data()) : null;
-      if (remote && remote.updated > this.v.updated) {
-        this.v = remote;
-        try { localStorage.setItem(this.key, JSON.stringify(this.v)); } catch (e) { /* storage blocked */ }
-        Arsenal.cache.clear();
-        this.emit();
-      } else if (this.v.updated > (remote ? remote.updated : 0)) this.push();
-      else this.emit();
-    } catch (e) { this.cloudState = 'local'; this.emit(); }
-  },
-  syncLabel() {
-    return { synced: 'Saved to your account', connecting: 'Connecting…', offline: 'Account save pending', readonly: 'Saved on this device (no write access)' }[this.cloudState] || 'Saved on this device';
+  saveLabel() {
+    if (typeof Accounts === 'undefined' || Accounts.guest) return 'Guest · progress isn’t saved';
+    if (!Accounts.storageOK) return 'This browser is blocking storage: not saved';
+    const t = Accounts.lastSaved;
+    return t ? `Saved on this device · ${new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Saved on this device';
   },
 
   level() { return LEVELS.of(this.v.xp); },
@@ -169,12 +121,12 @@ const Profile = {
       k[slot] = id || null;
     }
     Arsenal.cache.clear();
-    this.save(true);
+    this.save();
     return true;
   },
 
   // Fold a finished (or abandoned) match into the career; returns everything the results screen shows.
-  applyMatch(cfg, st, outcome) {
+  applyMatch(cfg, st, outcome, matchId) {
     const v = this.v, lv0 = this.level(), rank0 = this.rank(), elo0 = v.elo, placed0 = v.placed;
     const xp = Rewards.xp(cfg, st, outcome);
     const elo = cfg.mode === 'defuse' && outcome !== 'none' ? Rewards.elo(cfg, st, outcome, v.elo, v.placed) : null;
@@ -196,6 +148,8 @@ const Profile = {
     const rec = { t: Date.now(), map: cfg.map, mode: cfg.mode, ranked: !!cfg.ranked, diff: cfg.diff, outcome, score: st.score || null,
       k: st.kills, d: st.deaths, adr: st.rounds ? Math.round(st.dmg / st.rounds) : 0, xp: xp.total, elo: elo ? elo.delta : null };
     if (cfg.mode === 'defuse' && outcome !== 'none') { v.history.unshift(rec); v.history.length = Math.min(v.history.length, 15); }
+    if (matchId) v.lastMatchId = matchId;
+    if (typeof Accounts !== 'undefined') Accounts.touch();
     this.save();
     return { outcome, cfg, st, xp, ups, lv0, lv1, elo, elo0, elo1: v.elo, rank0, rank1: this.rank(), placed0, placed1: v.placed, pointsNow: v.points };
   },
@@ -268,4 +222,4 @@ const Rewards = {
   },
 };
 
-Profile.load();
+Profile.v = Profile.blank();

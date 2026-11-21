@@ -330,6 +330,7 @@ async function loadMap(key, from = 0, to = 1) {
     Game.loadout = new Loadout(undefined, (id) => Arsenal.def(id));
   } else Game.player.cw = L.cw;
   Actors.init();
+  Actors.me.name = Accounts.name();
   Game.player.maxSpeed = Game.loadout.active.def.maxSpeed;
   MenuCam.reset(L);
   HUD.el['hud-tag'].textContent = L.name;
@@ -338,7 +339,7 @@ async function loadMap(key, from = 0, to = 1) {
 
 // One match as the player set it up in Create Game: roster, side, rules; rewards at the end.
 const Session = {
-  active: false, cfg: null, done: false, results: null, resultsT: 0,
+  active: false, cfg: null, done: false, results: null, resultsT: 0, matchId: '',
   stats(me) {
     const M = Match;
     return { kills: me.kills, deaths: me.deaths, hs: me.hs, dmg: me.dmg, plants: me.plants, defuses: me.defuses,
@@ -361,12 +362,34 @@ const Session = {
     Game.spectate = null; Game.freeze = false; Game.botsFrozen = false;
     Match.setMode(cfg.mode);
     if (cfg.mode !== 'defuse') { Actors.feed = []; Actors.score = [0, 0]; }
-    this.active = true; this.cfg = cfg; this.done = false; this.results = null;
+    me.name = Accounts.name();
+    this.active = true; this.cfg = cfg; this.done = false; this.results = null; this.matchId = randomId(6) + Date.now().toString(36);
   },
+  // What leaving now would record: practice XP in skirmish; in defuse a loss once the match has
+  // started (nothing if you leave during the first buy time without a kill).
+  exitOutcome(st) {
+    if (this.cfg.mode !== 'defuse') return 'practice';
+    return Match.round > 1 || Match.phase !== 'freeze' || st.kills ? 'left' : 'none';
+  },
+  // Fold the match into the profile (saved to the signed-in account on this device) exactly once.
+  record(outcome) {
+    this.done = true;
+    this.results = Profile.applyMatch(this.cfg, this.stats(Actors.me), outcome, this.matchId);
+    Accounts.clearCheckpoint();
+    return this.results;
+  },
+  // Kept up to date every round and when the tab is hidden, so an exit still counts if the page dies.
+  checkpoint() {
+    if (!this.active || this.done || Accounts.guest) return;
+    const st = this.stats(Actors.me);
+    Accounts.checkpoint({ matchId: this.matchId, cfg: this.cfg, st, outcome: this.exitOutcome(st), at: Date.now() });
+  },
+  // The page is closing or reloading mid-match: that is an exit, save it now.
+  exitNow() { if (this.active && !this.done) this.record(this.exitOutcome(this.stats(Actors.me))); },
   matchOver(outcome) {
     if (!this.active || this.done) return;
-    this.done = true; Match.hold = true;
-    this.results = Profile.applyMatch(this.cfg, this.stats(Actors.me), outcome);
+    Match.hold = true;
+    this.record(outcome);
     clearTimeout(this.resultsT);
     this.resultsT = setTimeout(() => this.showResults(), 5500);
   },
@@ -381,11 +404,8 @@ const Session = {
   // Leaving from the pause menu: a ranked match that has started counts as a loss.
   leave() {
     if (this.active && !this.done) {
-      const c = this.cfg, me = Actors.me, st = this.stats(me);
-      let outcome = 'practice';
-      if (c.mode === 'defuse') outcome = Match.round > 1 || Match.phase !== 'freeze' || st.kills ? 'left' : 'none';
-      this.done = true;
-      this.results = Profile.applyMatch(c, st, outcome);
+      const outcome = this.exitOutcome(this.stats(Actors.me));
+      this.record(outcome);
       if (outcome !== 'none' || this.results.xp.total > 0) { this.showResults(); return; }
     }
     this.active = false;
@@ -441,6 +461,9 @@ async function boot(hot) {
   const tex = await generateTextures((f) => Menu.loading('Generating textures', f * 0.26));
   R.makeTextures(tex);
   Game.tex = tex;
+  // accounts on this device: the one that signed in last comes straight back unless it has a PIN
+  Accounts.init();
+  if (Accounts.remembered && !Accounts.remembered.pin) Accounts.signIn(Accounts.remembered);
   // ?map=key in the page address overrides the last map played
   let qmap = null;
   try { qmap = new URLSearchParams(location.search).get('map'); } catch (e) { qmap = null; }
@@ -461,17 +484,17 @@ async function boot(hot) {
   $('buy-menu').addEventListener('click', (e) => { const b = e.target.closest('button[data-id]'); if (b && !b.disabled) BuyMenu.buy(b.dataset.id); });
   window.addEventListener('resize', () => R.resize());
   window.addEventListener('beforeunload', (e) => { if (Game.state === 'playing') { e.preventDefault(); e.returnValue = ''; } });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { Session.checkpoint(); pause(); } });
+  window.addEventListener('pagehide', () => Session.exitNow());
   R.resize();
   Game.state = 'menu';
-  Menu.home();
+  Menu.firstScreen();
   requestAnimationFrame(frame);
-  Profile.connect();
 
   // Test/debug hooks (harmless in normal play).
   window.__SF = {
     Game, R, Ents, FX, Input, Ballistics, Grenades, Settings, Viewmodel, Snd, Actors, Nav, Bots, Items, Bomb, Match, SHOP, Tactics, BuyMenu, Radar, MAPS,
-    Profile, Arsenal, Session, Menu, Rewards, ArmoryView, launch, loadMap,
+    Profile, Arsenal, Session, Menu, Rewards, ArmoryView, Accounts, launch, loadMap,
     setView(x, y, z, yawDeg, pitchDeg) {
       const p = Game.player; p.spawn([x, y, z], yawDeg * DEG); p.pitch = (pitchDeg || 0) * DEG;
       const w = Game.loadout.active; if (w.state === 'draw') { w.state = 'idle'; w.anim = 'idle'; }

@@ -43,6 +43,8 @@ const Input = {
   releaseAll() { this.keys.clear(); this.edges.clear(); this.mouse.fill(false); const t = this.touch; t.fire = false; t.mx = t.mz = 0; },
 
   onKey(e, down) {
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
     const c = e.code;
     if (down) { if (!this.keys.has(c)) this.edges.add(c); this.keys.add(c); } else this.keys.delete(c);
     if (this.active && GAME_KEYS.has(c)) e.preventDefault();

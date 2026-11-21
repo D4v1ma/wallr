@@ -84,11 +84,16 @@
           <button type="button" class="hn" data-go="career"><b>Career</b><small>Rank, level, stats, match history</small></button>
           <div class="hn-row"><button type="button" class="hn small" data-go="settings"><b>Settings</b></button><button type="button" class="hn small" data-go="controls"><b>Controls</b></button><button type="button" class="hn small" data-act="fullscreen" id="btn-full"><b>Fullscreen</b></button></div>
         </nav>
-        <p class="home-foot">An original browser shooter. No accounts, no ads. <span class="stagecode-inline">Stage 6</span></p>
+        <p class="home-foot">An original browser shooter. Progress is saved on this device. <span class="stagecode-inline">Stage 6</span></p>
       </div>
       <aside class="home-card" id="home-card" aria-label="Your profile"></aside>
+      <div class="home-notice" id="home-notice" hidden role="status"></div>
       <div class="home-map"><small>Now showing</small><b id="home-map"></b></div>
     </section>
+
+    <section id="scr-account" class="scr scr-center" hidden aria-label="Accounts"></section>
+    <section id="scr-newacct" class="scr scr-center" hidden aria-label="Create account"></section>
+    <section id="scr-acctset" class="scr scr-center" hidden aria-label="Account settings"></section>
 
     <section id="scr-create" class="scr" hidden aria-label="Create game"></section>
 
@@ -203,6 +208,7 @@
             <button type="button" class="btn danger" data-act="leave" id="btn-leave">Leave match</button>
           </div>
           <p class="note warn" id="pause-warn" hidden>Leaving a ranked match that has started counts as a loss.</p>
+          <p class="note" id="pause-save"></p>
           <p class="note">Click Resume to capture the mouse again. <b>Esc</b> brings you back here.</p>
         </div>
       </div>

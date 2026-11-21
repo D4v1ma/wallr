@@ -20,10 +20,24 @@ await page.waitForFunction(() => window.__SF && __SF.Game.state === 'menu', null
 const ev = (f, a) => page.evaluate(f, a);
 const vis = (sel) => page.isVisible(sel);
 
+// 0) first run on this device: create an account (callsign + PIN)
+check('first launch asks you to create an account (or play as a guest)', await vis('#scr-newacct') && await vis('#scr-newacct [data-act="acct-guest"]'));
+await page.screenshot({ path: `${out}/g6-newacct.png` });
+await page.fill('#acct-name', 'T');
+await page.click('[data-act="acct-create"]');
+check('a one-letter callsign is refused with a message', /2 to 16/.test(await page.textContent('#acct-err')));
+await page.fill('#acct-name', 'Tester');
+await page.fill('#acct-pin', '2580'); await page.fill('#acct-pin2', '2580');
+await page.press('#acct-pin2', 'Enter');
+await page.waitForFunction(() => __SF.Menu.cur === 'home', null, { timeout: 10000 });
+const acct = await ev(() => ({ name: __SF.Accounts.cur && __SF.Accounts.cur.name, me: __SF.Actors.me.name, keys: Object.keys(localStorage).filter((k) => k.startsWith('shortfuse.')), edges: [...__SF.Input.edges] }));
+check('creating the account signs you in; you play under your callsign', acct.name === 'Tester' && acct.me === 'Tester' && acct.keys.some((k) => k.startsWith('shortfuse.profile.v1.')), JSON.stringify(acct));
+check('typing in the form doesn’t leak keys into the game', acct.edges.length === 0, JSON.stringify(acct.edges));
+
 // 1) main menu
 check('boots into the main menu over the map', await vis('#scr-home') && await ev(() => __SF.Game.state === 'menu' && !!__SF.Game.L));
 const card = await page.textContent('#home-card');
-check('profile card: rank, level, XP and points', /UNRANKED|Unranked/.test(card) && /Level 1/.test(card) && /600/.test(card), card.replace(/\s+/g, ' ').slice(0, 120));
+check('profile card: account, rank, level, XP, points, saved on this device', /Tester/.test(card) && /UNRANKED|Unranked/.test(card) && /Level 1/.test(card) && /600/.test(card) && /Saved on this device/.test(card), card.replace(/\s+/g, ' ').slice(0, 160));
 
 // 2) Create Game: map, ranked, hard bots
 await page.click('#btn-play');
@@ -78,6 +92,8 @@ await page.waitForFunction(() => __SF.Game.state === 'results', null, { timeout:
 await page.waitForTimeout(1600);
 const res = await ev(() => { const v = __SF.Profile.v; return { xp: v.xp, points: v.points, elo: v.elo, placed: v.placed, hist: v.history.length, title: document.querySelector('#scr-results h2').textContent }; });
 check('results: victory, XP, level-up points, a placement match with Elo gained', res.title === 'Victory' && res.xp > 4000 && res.points > 150 && res.elo > 1000 && res.placed === 1 && res.hist === 1, JSON.stringify(res));
+const stored = await ev(() => { const id = __SF.Accounts.cur.id; const p = JSON.parse(localStorage.getItem('shortfuse.profile.v1.' + id)); return { xp: p.xp, hist: p.history.length, line: document.querySelector('#scr-results .saved').textContent }; });
+check('finishing the match saved it to the account on this device', stored.xp === res.xp && stored.hist === 1 && /Saved on this device/.test(stored.line), JSON.stringify(stored));
 await page.screenshot({ path: `${out}/g6-results.png` });
 await page.click('#scr-results [data-act="home"]');
 await page.click('#scr-home [data-go="career"]');
@@ -85,10 +101,33 @@ check('career lists the match', (await page.$$('table.hist tbody tr')).length ==
 await page.screenshot({ path: `${out}/g6-career.png` });
 await page.click('#scr-career [data-back]');
 check('back returns to the main menu', await vis('#scr-home'));
+
+// 7) exiting mid-match by closing/reloading the page still saves the match
+page.on('dialog', (d) => d.accept().catch(() => {}));
+await ev(() => { __SF.Session.begin(Object.assign({}, __SF.Session.cfg, { map: 'kiln' })); __SF.play(); __SF.Input.freeMouse = true; __SF.Game.botsFrozen = true; __SF.Match.phase = 'live'; __SF.Actors.me.kills = 3; __SF.Actors.me.dmg = 420; });
+const xpBeforeExit = await ev(() => __SF.Profile.v.xp);
+await page.reload();
+await page.waitForFunction(() => window.__SF && __SF.Game.state === 'menu', null, { timeout: 240000 });
+check('reopening with a PIN account shows Who’s playing? with the PIN field', await vis('#scr-account') && await vis('#acct-pinin'));
+await page.screenshot({ path: `${out}/g6-account.png` });
+await page.fill('#acct-pinin', '1111'); await page.press('#acct-pinin', 'Enter');
+await page.waitForTimeout(300);
+check('a wrong PIN is refused', /Wrong PIN/.test(await page.textContent('#scr-account')) && await ev(() => __SF.Accounts.guest));
+await page.fill('#acct-pinin', '2580'); await page.press('#acct-pinin', 'Enter');
+await page.waitForFunction(() => __SF.Menu.cur === 'home', null, { timeout: 10000 });
+const after = await ev(() => { const v = __SF.Profile.v; return { xp: v.xp, hist: v.history.map((h) => h.outcome), kills: v.stats.kills, map: __SF.Game.L.key }; });
+check('the match left by closing the page was saved (as left, with its XP)', after.xp > xpBeforeExit && after.hist[0] === 'left' && after.hist.length === 2 && after.map === 'kiln', JSON.stringify(after));
+
+// 8) switching account, guests
+await page.click('#home-card [data-act="acct-switch"]');
+check('Switch goes back to Who’s playing?', await vis('#scr-account') && (await page.$$('.acard-main')).length === 1);
+await page.click('[data-act="acct-guest"]');
+const guest = await ev(() => ({ guest: __SF.Accounts.guest, me: __SF.Actors.me.name, card: document.querySelector('#home-card').textContent }));
+check('playing as a guest: nothing is saved, and the card offers an account', guest.guest && guest.me === 'You' && /Guest/.test(guest.card) && /Create account/i.test(guest.card), guest.card.replace(/\s+/g, ' ').slice(0, 80));
 check('no page errors', errs.length === 0, errs.join(' | '));
 await page.close();
 
-// 7) phone layout: menus fit without sideways scrolling
+// 9) phone layout: menus fit without sideways scrolling
 const ctx = await browser.newContext({ ...devices['iPhone 13 landscape'] });
 const ph = await ctx.newPage();
 await route(ph);

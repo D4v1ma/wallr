@@ -12,8 +12,10 @@ geometry, models and code. three.js r128 is the only dependency, loaded from cdn
 
 Open `index.html` in a desktop browser. It needs internet access for three.js (cdnjs) and the
 two UI fonts (Google Fonts, optional). Loading takes a few seconds: textures are generated, the
-lighting is baked and bot routes are mapped. You land in the **main menu**, over a slow
-fly-through of the last map you played. **Play** → Create Game → loadout → **Start match**.
+lighting is baked and bot routes are mapped. The first time, you create an **account** (a
+callsign and an optional PIN) or play as a guest; after that the game opens on your account, or
+asks who's playing if there are several. Then the **main menu**, over a slow fly-through of the
+last map you played: **Play** → Create Game → loadout → **Start match**.
 **Esc** pauses a match. `index.html?map=kiln` (or `frost`, `depot`, `range`) picks the map shown
 first.
 
@@ -98,9 +100,36 @@ Ranks: Spark I–III (from 0, 700, 800), Flint I–III (900–1100), Fuse I–II
 Charge I–III (1500–1700), Blast I–III (1800–2000), Shockwave (2200) and Short Fuse (2400). A new
 profile starts at 1000.
 
-**Saving:** the profile is kept on this device (localStorage). When the page runs as a
-claude.ai artifact it is also saved to your account in a private per-user document (only you
-can read it), so progress follows you between devices; the card says which applies.
+## Accounts and saving
+
+Accounts live on the device, in this browser's storage; there is no server and nothing leaves
+the device.
+
+- **Create an account:** a callsign (2–16 characters, unique on this device) and an optional
+  PIN of 4–8 digits. You play under your callsign in the scoreboard and kill feed.
+- **Who's playing?** With several accounts the game opens on a picker (level, rank, points,
+  last played). An account without a PIN signs straight back in next time; one with a PIN asks
+  for it. **Switch** on the home card returns to the picker.
+- **Account settings:** rename, add, change or remove the PIN (the current PIN is needed),
+  sign out, or delete the account and its progress (type the callsign, and the PIN if set).
+- **Guests** can play everything but nothing is saved; the home card and the results screen
+  offer to turn the session into an account, keeping what it earned.
+- **When progress saves:** when a match **finishes** (before the results screen) and when you
+  **exit** it: Leave match in the pause menu, or closing or reloading the page mid-match (saved
+  as you leave, with what you had earned; a ranked match that had started counts as a loss, as
+  with Leave match). Each round also leaves a small checkpoint on the device, so if the page is
+  killed before it can save (a phone closing the tab), the match is recorded the next time that
+  account signs in, and a note on the home screen says so. A match is never counted twice.
+  Purchases and loadout changes save immediately. The home card, career and results screens
+  show when the account was last saved.
+- **What's stored:** `shortfuse.accounts.v1` (the accounts and who played last; PINs only as
+  salted SHA-256 hashes), and per account `shortfuse.profile.v1.<id>` (XP, points, purchases,
+  loadout, Elo, stats, recent matches) and, during a match, `shortfuse.pending.v1.<id>`.
+  Progress from before accounts existed moves into the first account created on the device.
+- **Limits:** the PIN stops other people using this browser from playing as you; it is not
+  encryption (anyone with the browser's developer tools can read the data). Clearing the site's
+  data deletes the accounts, and a private window or blocked site storage means everything is
+  played as a guest (the home screen says so).
 
 ## The maps
 
@@ -250,12 +279,13 @@ src/22-actors.js      players and bots: spawn, damage (and damage dealt), death,
 src/23-bots.js        bot perception, aiming, combat, navigation, orders; four skill levels
 src/24-items.js       weapons on the ground: drops, physics, pickups and swaps
 src/25-bomb.js        the charge: sites, carrier, planting, fuse, defusing, the blast
+src/26-accounts.js    accounts on this device: callsigns, PINs, per-account saves, exit checkpoints
 src/26-match.js       defuse rounds, economy, buying, halftime, match end
-src/26-profile.js     career profile: XP, levels, points, shop, kit, Elo and ranks, saving
+src/26-profile.js     career profile: XP, levels, points, shop, kit, Elo and ranks
 src/27-tactics.js     bot team play from the map's tactical data
 src/28-radar.js       radar overview + rotating radar, map thumbnails, weapon silhouette icons
 src/29-hud.js         HUD and the buy menu
-src/29-menus.js       main menu, Create Game, loadout/shop with 3D preview, career, pause, results
+src/29-menus.js       accounts, main menu, Create Game, loadout/shop with 3D preview, career, pause, results
 src/30-main.js        boot, in-place map loading, match sessions, menu camera, 64 Hz tick
 docs/ENGINE_AND_NETCODE.md   the path to Godot/Unity and to multiplayer
 tools/                headless checks and screenshot harnesses (see below)
@@ -271,6 +301,10 @@ Headless checks (Node only; those taking a path need the three.js UMD build for 
 
 ```bash
 node tools/node-profile-check.mjs path/to/three.js
+```
+
+```bash
+node tools/node-account-check.mjs path/to/three.js
 ```
 
 ```bash
@@ -307,6 +341,12 @@ node tools/gameplay6-check.mjs path/to/three.min.js shots
 node tools/gameplay5-check.mjs path/to/three.min.js shots
 ```
 
+- `node-account-check`: creating accounts and signing in, callsign and PIN rules, PINs
+  stored as salted hashes, each account's progress kept apart, saving when a match is recorded
+  and when something is bought, reopening the game, recovering a match whose page closed
+  mid-game (and never counting it twice), guests and turning a guest into an account, renaming,
+  changing and removing PINs, deleting, moving older progress into the first account, damaged
+  saves and blocked storage.
 - `node-profile-check`: levels and points, shop rules (per-gun attachments, camos for every
   gun), attachments changing weapon stats (and bots staying stock), XP lines and multipliers,
   Elo (ranked vs casual, difficulty, performance, placements, leaving early), a whole ranked
@@ -315,7 +355,10 @@ node tools/gameplay5-check.mjs path/to/three.min.js shots
   spawns; plant spots inside their sites; route timings; no spawn-to-spawn or mid-to-spawn
   sightlines; a bot walks every route, every Warden post and the rotation; bots play full rounds
   with plants.
-- `gameplay6-check`: main menu and profile card, Create Game (ranked locks 5v5), buying and
+- `gameplay6-check`: first launch creates an account (bad callsigns refused, typing doesn't
+  reach the game), the results are saved to it, reloading the page mid-match saves that match,
+  the PIN prompt on reopening (wrong PIN refused), switching accounts and guests; then the main
+  menu and profile card, Create Game (ranked locks 5v5), buying and
   equipping in the pre-match loadout, the 3D preview, Kilnworks built in place without a reload,
   the bought rifle carrying its suppressor, the pause menu, results with XP, points and Elo,
   career history, and the phone layout.

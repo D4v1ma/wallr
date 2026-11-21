@@ -229,6 +229,7 @@ const Match = {
       this.banner.sub += ' · Halftime: sides swap';
       this.banner.t = MATCH.halftime;
     }
+    if (typeof Session !== 'undefined') Session.checkpoint();
   },
 
   nextRound() {

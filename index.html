@@ -509,6 +509,53 @@ ul.lines li.tot b { font-size: 17px; color: var(--accent); }
   .home-card .emblem { width: 46px; height: 46px; }
   .sheet-head { padding-top: 10px; padding-bottom: 8px; }
 }
+
+/* ---------- accounts on this device ---------- */
+#sf-overlay[data-scr="account"], #sf-overlay[data-scr="newacct"], #sf-overlay[data-scr="acctset"] { background: radial-gradient(ellipse at 50% 40%, rgba(11, 13, 12, 0.5), rgba(11, 13, 12, 0.9)); }
+.acct-sheet { max-width: 820px; }
+.acct-title { margin: 0; font-family: var(--font-display); font-size: 24px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+.acct-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+.acard { display: flex; flex-direction: column; background: var(--field); border: 1px solid var(--panel-edge); min-width: 0; }
+.acard.open { border-color: var(--accent); }
+.acard-main { appearance: none; display: flex; align-items: center; gap: 12px; padding: 10px 12px; text-align: left; font: inherit; color: var(--text); cursor: pointer; background: none; border: 0; }
+.acard-main:hover, .acard-main:focus-visible { background: rgba(243, 236, 214, 0.05); outline: none; }
+.acard-t { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.acard-t b { font-family: var(--font-display); font-size: 18px; letter-spacing: 0.06em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acard-t small { font-size: 12px; color: var(--muted); }
+.acard .lock { font-style: normal; font-family: var(--font-display); font-size: 10px; letter-spacing: 0.14em; padding: 2px 5px; color: var(--muted); border: 1px solid var(--panel-edge); align-self: flex-start; }
+.acard.new { appearance: none; justify-content: center; align-items: flex-start; gap: 2px; padding: 14px 14px; font: inherit; color: var(--text); cursor: pointer; border-style: dashed; text-align: left; min-height: 72px; }
+.acard.new b { font-family: var(--font-display); font-size: 16px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+.acard.new small { font-size: 12px; color: var(--muted); }
+.acard.new:hover, .acard.new:focus-visible { border-color: var(--accent); outline: none; }
+.pin-form { display: flex; gap: 6px; padding: 0 12px 10px; }
+.pin-form .field-in { flex: 1; min-width: 0; }
+.acard .err { margin: -4px 12px 10px; }
+.acct-form { display: flex; flex-direction: column; gap: 12px; }
+.acct-form.inline { flex-direction: row; align-items: flex-end; flex-wrap: wrap; }
+.acct-form.inline .field { flex: 1 1 220px; }
+.acct-set { gap: 16px; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field > span { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.field > span small { letter-spacing: 0.02em; text-transform: none; }
+.field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.field-in { box-sizing: border-box; width: 100%; padding: 9px 10px; font: 500 16px var(--font-body); color: var(--text); background: #101311; border: 1px solid var(--panel-edge); -webkit-user-select: text; user-select: text; }
+.field-in:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+#sf-overlay .err { margin: 0; min-height: 0; color: #ff9f8c; font-size: 13px; }
+#sf-overlay .err:empty { display: none; }
+#sf-overlay .msg { margin: 0; color: var(--accent); font-size: 14px; }
+.note.good { color: #bfe6a5; }
+.btn.small { padding: 5px 10px; font-size: 12px; margin-left: 6px; }
+.hc-acct { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--panel-edge); }
+.hc-name { font-family: var(--font-display); font-size: 15px; letter-spacing: 0.08em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hc-acct.guest .hc-name { color: var(--muted); }
+.hc-acts { display: flex; gap: 10px; flex: none; }
+button.link { appearance: none; padding: 0; background: none; border: 0; font: 600 12px var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); cursor: pointer; }
+button.link:hover, button.link:focus-visible { color: #ffc565; text-decoration: underline; outline: none; }
+.home-notice { position: absolute; left: 50%; bottom: max(20px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; align-items: center; gap: 12px; max-width: min(640px, calc(100% - 32px)); padding: 8px 12px 8px 14px; background: rgba(13, 16, 15, 0.92); border: 1px solid rgba(240, 165, 58, 0.55); font-size: 14px; }
+.home-notice p { margin: 0; line-height: 1.4; }
+.car-acct { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 12px; background: var(--field); border: 1px solid var(--panel-edge); font-size: 14px; }
+.saved { color: var(--ok); }
+@media (max-width: 700px) { .home-notice { position: static; transform: none; max-width: none; } }
 </style>
 </head>
 <body>
@@ -598,11 +645,16 @@ ul.lines li.tot b { font-size: 17px; color: var(--accent); }
           <button type="button" class="hn" data-go="career"><b>Career</b><small>Rank, level, stats, match history</small></button>
           <div class="hn-row"><button type="button" class="hn small" data-go="settings"><b>Settings</b></button><button type="button" class="hn small" data-go="controls"><b>Controls</b></button><button type="button" class="hn small" data-act="fullscreen" id="btn-full"><b>Fullscreen</b></button></div>
         </nav>
-        <p class="home-foot">An original browser shooter. No accounts, no ads. <span class="stagecode-inline">Stage 6</span></p>
+        <p class="home-foot">An original browser shooter. Progress is saved on this device. <span class="stagecode-inline">Stage 6</span></p>
       </div>
       <aside class="home-card" id="home-card" aria-label="Your profile"></aside>
+      <div class="home-notice" id="home-notice" hidden role="status"></div>
       <div class="home-map"><small>Now showing</small><b id="home-map"></b></div>
     </section>
+
+    <section id="scr-account" class="scr scr-center" hidden aria-label="Accounts"></section>
+    <section id="scr-newacct" class="scr scr-center" hidden aria-label="Create account"></section>
+    <section id="scr-acctset" class="scr scr-center" hidden aria-label="Account settings"></section>
 
     <section id="scr-create" class="scr" hidden aria-label="Create game"></section>
 
@@ -717,6 +769,7 @@ ul.lines li.tot b { font-size: 17px; color: var(--accent); }
             <button type="button" class="btn danger" data-act="leave" id="btn-leave">Leave match</button>
           </div>
           <p class="note warn" id="pause-warn" hidden>Leaving a ranked match that has started counts as a loss.</p>
+          <p class="note" id="pause-save"></p>
           <p class="note">Click Resume to capture the mouse again. <b>Esc</b> brings you back here.</p>
         </div>
       </div>
@@ -5079,6 +5132,8 @@ const Input = {
   releaseAll() { this.keys.clear(); this.edges.clear(); this.mouse.fill(false); const t = this.touch; t.fire = false; t.mx = t.mz = 0; },
 
   onKey(e, down) {
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
     const c = e.code;
     if (down) { if (!this.keys.has(c)) this.edges.add(c); this.keys.add(c); } else this.keys.delete(c);
     if (this.active && GAME_KEYS.has(c)) e.preventDefault();
@@ -8837,6 +8892,195 @@ const Bomb = {
   },
 };
 
+// ==== 26-accounts.js ====
+// Accounts on this device. Each account has a callsign, an optional PIN and its own career profile
+// (XP, points, purchases, loadout, Elo, history). Everything lives in this browser's storage:
+//   shortfuse.accounts.v1          the account list and who signed in last
+//   shortfuse.profile.v1.<id>      one account's profile
+//   shortfuse.pending.v1.<id>      what leaving the current match would record (used if the page dies)
+// Progress is committed when a match ends or you exit it (leave, close or reload the page), and
+// when you buy or equip something in the menus. A guest plays without saving.
+// The PIN only stops other people on this device from playing as you: it is hashed, not encryption.
+
+const ACCOUNTS_KEY = 'shortfuse.accounts.v1', PROFILE_PREFIX = 'shortfuse.profile.v1.', PENDING_PREFIX = 'shortfuse.pending.v1.';
+const LEGACY_PROFILE_KEY = 'shortfuse.profile.v1';      // Stage 6's single profile, moved into the first account
+
+// 53-bit string hash (fallback when WebCrypto is unavailable).
+function cyrb53(str, seed = 0) {
+  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0; i < str.length; i++) { const ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+}
+function randomId(n = 8) {
+  const b = new Uint8Array(n);
+  try { crypto.getRandomValues(b); } catch (e) { for (let i = 0; i < n; i++) b[i] = Math.floor(Math.random() * 256); }
+  return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+}
+async function pinHash(salt, pin, kind) {
+  const text = `shortfuse:${salt}:${pin}`;
+  if (kind !== 'c53') {
+    try {
+      if (globalThis.crypto && crypto.subtle && typeof TextEncoder !== 'undefined') {
+        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+        return 's256:' + Array.from(new Uint8Array(buf), (x) => x.toString(16).padStart(2, '0')).join('');
+      }
+    } catch (e) { /* fall back */ }
+    if (kind === 's256') return null;
+  }
+  let h = text;
+  for (let i = 0; i < 4000; i++) h = cyrb53(h, i).toString(36);
+  return 'c53:' + h;
+}
+
+const Accounts = {
+  list: [], cur: null, lastSaved: 0, storageOK: true, remembered: null, notice: null, listeners: [],
+
+  store: {
+    get(k) { try { return typeof localStorage === 'undefined' ? null : localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { if (typeof localStorage === 'undefined') return false; localStorage.setItem(k, v); return true; } catch (e) { return false; } },
+    del(k) { try { if (typeof localStorage !== 'undefined') localStorage.removeItem(k); } catch (e) { /* storage blocked */ } },
+  },
+  readJSON(k) { try { return JSON.parse(this.store.get(k) || 'null'); } catch (e) { return null; } },
+
+  get guest() { return !this.cur; },
+  name() { return this.cur ? this.cur.name : 'You'; },
+  on(f) { this.listeners.push(f); },
+  emit() { for (const f of this.listeners) { try { f(); } catch (e) { /* UI listener */ } } },
+
+  init() {
+    this.storageOK = this.store.set('shortfuse.probe', '1');
+    this.store.del('shortfuse.probe');
+    const idx = this.readJSON(ACCOUNTS_KEY);
+    this.list = Array.isArray(idx && idx.accounts) ? idx.accounts.filter((a) => a && typeof a.id === 'string' && /^[0-9a-f]{8,32}$/.test(a.id) && typeof a.name === 'string') : [];
+    for (const a of this.list) { a.name = this.cleanName(a.name) || 'Player'; a.created = +a.created || 0; a.lastPlayed = +a.lastPlayed || 0; if (!a.pin || typeof a.pin.hash !== 'string') a.pin = null; }
+    this.remembered = idx && this.list.find((a) => a.id === idx.current) || null;
+    this.cur = null;
+    Profile.v = Profile.blank();
+  },
+  saveIndex() { return this.store.set(ACCOUNTS_KEY, JSON.stringify({ ver: 1, current: this.cur ? this.cur.id : null, accounts: this.list })); },
+
+  cleanName(s) { return String(s || '').replace(/[^\p{L}\p{N} _.\-']/gu, '').replace(/\s+/g, ' ').trim().slice(0, 16); },
+  checkName(name, except) {
+    const n = this.cleanName(name);
+    if (n.length < 2) return { ok: false, msg: 'Use 2 to 16 letters, digits, spaces, _ . - or \'' };
+    if (this.list.some((a) => a !== except && a.name.toLowerCase() === n.toLowerCase())) return { ok: false, msg: `“${n}” is already an account on this device` };
+    return { ok: true, name: n };
+  },
+  checkPin(pin, pin2) {
+    if (!pin && !pin2) return { ok: true, pin: '' };
+    if (!/^\d{4,8}$/.test(pin)) return { ok: false, msg: 'A PIN is 4 to 8 digits' };
+    if (pin !== pin2) return { ok: false, msg: 'The two PINs don’t match' };
+    return { ok: true, pin };
+  },
+  // Progress from Stage 6 (before accounts) waiting to be moved into the first account.
+  legacy() {
+    const o = this.readJSON(LEGACY_PROFILE_KEY);
+    if (!o) return null;
+    const p = Profile.sanitize(o);
+    return this.hasProgress(p) ? p : null;
+  },
+  hasProgress(p) { return p.xp > 0 || p.history.length > 0 || p.owned.att.length > 0 || p.owned.camo.length > 0 || p.points !== WELCOME_POINTS; },
+  profileOf(a) { return Profile.sanitize(this.readJSON(PROFILE_PREFIX + a.id)); },
+
+  async create(name, pin, opts = {}) {
+    if (!this.storageOK) return { ok: false, msg: 'This browser isn’t letting the game store anything here, so accounts can’t be saved' };
+    const n = this.checkName(name);
+    if (!n.ok) return n;
+    const a = { id: randomId(8), name: n.name, created: Date.now(), lastPlayed: 0, pin: null };
+    if (pin) { const salt = randomId(8), hash = await pinHash(salt, pin); a.pin = { salt, hash }; }
+    let profile = Profile.blank(), from = 'new';
+    if (opts.fromGuest && this.hasProgress(Profile.v)) { profile = Profile.sanitize(JSON.parse(JSON.stringify(Profile.v))); from = 'guest'; }
+    else if (!this.list.length) { const old = this.legacy(); if (old) { profile = old; from = 'legacy'; } }
+    if (!this.store.set(PROFILE_PREFIX + a.id, JSON.stringify(profile))) return { ok: false, msg: 'Couldn’t save on this device (storage full or blocked)' };
+    if (from === 'legacy') this.store.del(LEGACY_PROFILE_KEY);
+    this.list.push(a);
+    this.signIn(a);
+    return { ok: true, account: a, from };
+  },
+  async verify(a, pin) {
+    if (!a.pin) return true;
+    const kind = a.pin.hash.startsWith('s256:') ? 's256' : 'c53', h = await pinHash(a.pin.salt, pin, kind);
+    return !!h && h === a.pin.hash;
+  },
+  signIn(a) {
+    a = this.list.find((x) => x.id === a.id) || a;
+    this.cur = a; this.remembered = a;
+    Profile.v = this.profileOf(a);
+    if (typeof Arsenal !== 'undefined') Arsenal.cache.clear();
+    this.saveIndex();
+    this.applyPending();
+    if (typeof Actors !== 'undefined' && Actors.me) Actors.me.name = a.name;
+    this.emit(); Profile.emit();
+  },
+  signOut() {
+    if (this.cur) this.saveProfile();
+    this.cur = null;
+    this.saveIndex();
+    Profile.v = Profile.blank();
+    if (typeof Arsenal !== 'undefined') Arsenal.cache.clear();
+    if (typeof Actors !== 'undefined' && Actors.me) Actors.me.name = 'You';
+    this.emit(); Profile.emit();
+  },
+  playAsGuest() { if (this.cur) this.signOut(); else { Profile.v = Profile.blank(); this.emit(); Profile.emit(); } },
+
+  // Write the signed-in account's profile to this device. Guests have nothing to write.
+  saveProfile() {
+    if (!this.cur) return false;
+    const ok = this.store.set(PROFILE_PREFIX + this.cur.id, JSON.stringify(Profile.v));
+    if (ok) this.lastSaved = Date.now(); else this.saveFailed = Date.now();
+    return ok;
+  },
+  touch() { if (this.cur) { this.cur.lastPlayed = Date.now(); this.saveIndex(); } },
+
+  rename(name) {
+    if (!this.cur) return { ok: false, msg: 'Sign in first' };
+    const n = this.checkName(name, this.cur);
+    if (!n.ok) return n;
+    this.cur.name = n.name; this.saveIndex();
+    if (typeof Actors !== 'undefined' && Actors.me) Actors.me.name = n.name;
+    this.emit();
+    return { ok: true, msg: `Callsign changed to ${n.name}` };
+  },
+  async setPin(oldPin, pin, pin2) {
+    if (!this.cur) return { ok: false, msg: 'Sign in first' };
+    if (this.cur.pin && !(await this.verify(this.cur, oldPin))) return { ok: false, msg: 'The current PIN is wrong' };
+    const p = this.checkPin(pin, pin2);
+    if (!p.ok) return p;
+    if (!p.pin) { this.cur.pin = null; this.saveIndex(); this.emit(); return { ok: true, msg: 'PIN removed: anyone on this device can sign in to this account' }; }
+    const salt = randomId(8);
+    this.cur.pin = { salt, hash: await pinHash(salt, p.pin) };
+    this.saveIndex(); this.emit();
+    return { ok: true, msg: 'PIN saved' };
+  },
+  async remove(a, pin) {
+    a = this.list.find((x) => x.id === a.id) || a;
+    if (a.pin && !(await this.verify(a, pin))) return { ok: false, msg: 'The PIN is wrong' };
+    this.store.del(PROFILE_PREFIX + a.id); this.store.del(PENDING_PREFIX + a.id);
+    this.list = this.list.filter((x) => x !== a);
+    if (this.remembered === a) this.remembered = null;
+    if (this.cur === a) { this.cur = null; Profile.v = Profile.blank(); if (typeof Actors !== 'undefined' && Actors.me) Actors.me.name = 'You'; }
+    this.saveIndex(); this.emit(); Profile.emit();
+    return { ok: true, msg: `${a.name} was deleted from this device` };
+  },
+
+  // ---- saving on exit ----
+  // What leaving the match right now would record; refreshed every round and when the tab is hidden,
+  // so the match still counts if the page is closed or killed before it can save.
+  checkpoint(rec) { if (this.cur && rec) this.store.set(PENDING_PREFIX + this.cur.id, JSON.stringify(rec)); },
+  clearCheckpoint() { if (this.cur) this.store.del(PENDING_PREFIX + this.cur.id); },
+  applyPending() {
+    if (!this.cur) return null;
+    const rec = this.readJSON(PENDING_PREFIX + this.cur.id);
+    this.store.del(PENDING_PREFIX + this.cur.id);
+    if (!rec || !rec.cfg || !rec.st || typeof rec.matchId !== 'string' || rec.matchId === Profile.v.lastMatchId) return null;
+    const res = Profile.applyMatch(rec.cfg, rec.st, rec.outcome || 'left', rec.matchId);
+    this.notice = { res, at: rec.at || Date.now() };
+    return res;
+  },
+};
+
 // ==== 26-match.js ====
 // Defuse mode: rounds, money and buying. Raiders attack with the charge, Wardens defend A and B.
 // Squads keep their score when everyone swaps sides at halftime. Skirmish mode = Stage 3 respawns.
@@ -9069,6 +9313,7 @@ const Match = {
       this.banner.sub += ' · Halftime: sides swap';
       this.banner.t = MATCH.halftime;
     }
+    if (typeof Session !== 'undefined') Session.checkpoint();
   },
 
   nextRound() {
@@ -9087,8 +9332,7 @@ const Match = {
 // ==== 26-profile.js ====
 // Career profile: XP and levels (each level pays shop points), owned attachments and camos, the
 // per-gun kit, Elo rating and rank, lifetime stats and recent matches.
-// Saved on this device (localStorage) and, when the page runs as a claude.ai artifact with the
-// `db` capability, in a private per-user document so progress follows the account.
+// One profile per account on this device (see 26-accounts.js); a guest's profile isn't saved.
 
 const DIFFS = {
   easy: { name: 'Easy', elo: 750, xp: 0.8, blurb: 'Slow to react, loose aim' },
@@ -9129,15 +9373,14 @@ const LEVELS = {
 const WELCOME_POINTS = 600;
 
 const Profile = {
-  key: 'shortfuse.profile.v1', v: null, listeners: [],
-  cloud: null, cloudState: 'local', writing: false, again: false, saveT: null, retryT: null,
+  v: null, listeners: [],
 
   blank() {
     const kit = {};
     for (const g of ARMORY_GUNS) kit[g] = { muzzle: null, optic: null, mag: null, grip: null, camo: null };
     return {
       ver: 1, created: Date.now(), updated: 0, xp: 0, points: WELCOME_POINTS, owned: { att: [], camo: [] }, kit,
-      elo: 1000, peak: 1000, placed: 0, lastCfg: null,
+      elo: 1000, peak: 1000, placed: 0, lastCfg: null, lastMatchId: '',
       stats: { matches: 0, wins: 0, losses: 0, draws: 0, left: 0, ranked: 0, kills: 0, deaths: 0, hs: 0, damage: 0, rounds: 0, plants: 0, defuses: 0 },
       history: [],
     };
@@ -9165,70 +9408,24 @@ const Profile = {
     if (o.stats && typeof o.stats === 'object') for (const k of Object.keys(b.stats)) b.stats[k] = num(o.stats[k], 0);
     if (Array.isArray(o.history)) b.history = o.history.filter((h) => h && typeof h === 'object').slice(0, 15);
     if (o.lastCfg && typeof o.lastCfg === 'object') b.lastCfg = o.lastCfg;
+    if (typeof o.lastMatchId === 'string') b.lastMatchId = o.lastMatchId.slice(0, 40);
     return b;
   },
 
-  load() {
-    let saved = null;
-    try { if (typeof localStorage !== 'undefined') saved = JSON.parse(localStorage.getItem(this.key) || 'null'); } catch (e) { saved = null; }
-    this.v = this.sanitize(saved);
-  },
   on(f) { this.listeners.push(f); },
   emit() { for (const f of this.listeners) { try { f(this.v); } catch (e) { /* UI listener */ } } },
 
-  // Every real change goes through here: device copy now, account copy one write at a time.
-  save(soon) {
+  // Every real change goes through here: the signed-in account's profile is written to this device.
+  save() {
     this.v.updated = Date.now();
-    try { if (typeof localStorage !== 'undefined') localStorage.setItem(this.key, JSON.stringify(this.v)); } catch (e) { /* storage blocked */ }
-    if (this.cloud) {
-      clearTimeout(this.saveT);
-      if (soon) this.saveT = setTimeout(() => this.push(), 1500); else this.push();
-    }
+    if (typeof Accounts !== 'undefined') Accounts.saveProfile();
     this.emit();
   },
-  async push() {
-    if (!this.cloud || this.cloudState === 'readonly') return;
-    if (this.writing) { this.again = true; return; }
-    this.writing = true;
-    try {
-      await this.cloud.set(JSON.parse(JSON.stringify(this.v)));
-      this.cloudState = 'synced';
-    } catch (e) {
-      const code = e && e.code;
-      if (code === 'invalid_argument' || code === 'revoked' || code === 'not_granted') this.cloudState = 'readonly';
-      else { this.cloudState = 'offline'; clearTimeout(this.retryT); this.retryT = setTimeout(() => this.push(), 20000); }
-    }
-    this.writing = false;
-    this.emit();
-    if (this.again) { this.again = false; this.push(); }
-  },
-
-  // Optional: the account copy. Never blocks the game; the device copy is used until it answers.
-  async connect() {
-    const c = typeof window !== 'undefined' ? window.claude : null;
-    if (!c || typeof c.use !== 'function') return;
-    this.cloudState = 'connecting'; this.emit();
-    const limit = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(() => r(null), ms))]);
-    try {
-      const [db, user] = await limit(Promise.all([c.use('db'), c.use('user')]), 10000) || [null, null];
-      const id = db && user ? await limit(user.id(), 10000) : null;
-      if (!db || !id) { this.cloudState = 'local'; this.emit(); return; }
-      const ref = db.doc(`data/users/${id}/profile`);
-      const snap = await limit(ref.get(), 10000);
-      if (!snap) { this.cloudState = 'local'; this.emit(); return; }
-      this.cloud = ref; this.cloudState = 'synced';
-      const remote = snap.exists ? this.sanitize(snap.data()) : null;
-      if (remote && remote.updated > this.v.updated) {
-        this.v = remote;
-        try { localStorage.setItem(this.key, JSON.stringify(this.v)); } catch (e) { /* storage blocked */ }
-        Arsenal.cache.clear();
-        this.emit();
-      } else if (this.v.updated > (remote ? remote.updated : 0)) this.push();
-      else this.emit();
-    } catch (e) { this.cloudState = 'local'; this.emit(); }
-  },
-  syncLabel() {
-    return { synced: 'Saved to your account', connecting: 'Connecting…', offline: 'Account save pending', readonly: 'Saved on this device (no write access)' }[this.cloudState] || 'Saved on this device';
+  saveLabel() {
+    if (typeof Accounts === 'undefined' || Accounts.guest) return 'Guest · progress isn’t saved';
+    if (!Accounts.storageOK) return 'This browser is blocking storage: not saved';
+    const t = Accounts.lastSaved;
+    return t ? `Saved on this device · ${new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Saved on this device';
   },
 
   level() { return LEVELS.of(this.v.xp); },
@@ -9256,12 +9453,12 @@ const Profile = {
       k[slot] = id || null;
     }
     Arsenal.cache.clear();
-    this.save(true);
+    this.save();
     return true;
   },
 
   // Fold a finished (or abandoned) match into the career; returns everything the results screen shows.
-  applyMatch(cfg, st, outcome) {
+  applyMatch(cfg, st, outcome, matchId) {
     const v = this.v, lv0 = this.level(), rank0 = this.rank(), elo0 = v.elo, placed0 = v.placed;
     const xp = Rewards.xp(cfg, st, outcome);
     const elo = cfg.mode === 'defuse' && outcome !== 'none' ? Rewards.elo(cfg, st, outcome, v.elo, v.placed) : null;
@@ -9283,6 +9480,8 @@ const Profile = {
     const rec = { t: Date.now(), map: cfg.map, mode: cfg.mode, ranked: !!cfg.ranked, diff: cfg.diff, outcome, score: st.score || null,
       k: st.kills, d: st.deaths, adr: st.rounds ? Math.round(st.dmg / st.rounds) : 0, xp: xp.total, elo: elo ? elo.delta : null };
     if (cfg.mode === 'defuse' && outcome !== 'none') { v.history.unshift(rec); v.history.length = Math.min(v.history.length, 15); }
+    if (matchId) v.lastMatchId = matchId;
+    if (typeof Accounts !== 'undefined') Accounts.touch();
     this.save();
     return { outcome, cfg, st, xp, ups, lv0, lv1, elo, elo0, elo1: v.elo, rank0, rank1: this.rank(), placed0, placed1: v.placed, pointsNow: v.points };
   },
@@ -9355,7 +9554,7 @@ const Rewards = {
   },
 };
 
-Profile.load();
+Profile.v = Profile.blank();
 
 // ==== 27-tactics.js ====
 // Team play for bots in defuse mode: buying by economy, a Raider plan per round (target site,
@@ -9946,7 +10145,16 @@ const BuyMenu = {
 // Settings and Controls, the in-match pause menu, a "ready" card after a map load, and results.
 
 const MAP_LIST = ['depot', 'kiln', 'frost', 'range'];
-const SCREENS = ['loading', 'home', 'create', 'armory', 'career', 'settings', 'controls', 'pause', 'ready', 'results'];
+const SCREENS = ['loading', 'account', 'newacct', 'acctset', 'home', 'create', 'armory', 'career', 'settings', 'controls', 'pause', 'ready', 'results'];
+// "5 minutes ago" style times for the account cards
+function ago(t) {
+  const s = (Date.now() - t) / 1000;
+  if (s < 90) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)} minutes ago`;
+  if (s < 86400 * 1.5) return `${Math.round(s / 3600)} hour${Math.round(s / 3600) === 1 ? '' : 's'} ago`;
+  if (s < 86400 * 30) return `${Math.round(s / 86400)} days ago`;
+  return new Date(t).toLocaleDateString();
+}
 const escHTML = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const fmtN = (n) => Math.round(n).toLocaleString('en-US');
 const signed = (n, d = 0) => (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(n).toFixed(d);
@@ -10060,15 +10268,17 @@ const Menu = {
   init() {
     $('sf-overlay').addEventListener('click', (e) => this.onClick(e));
     $('sf-overlay').addEventListener('change', (e) => { if (e.target.id === 'cfg-ff') { this.cfg.ff = e.target.checked; this.renderCreate(); } });
+    $('sf-overlay').addEventListener('submit', (e) => { const f = e.target.closest('form[data-form]'); if (!f) return; e.preventDefault(); Snd.init(); this.act('form-' + f.dataset.form, f.dataset, f); });
     this.bindSettings();
-    Profile.on(() => {
+    const rerender = () => {
       if (this.cur === 'home') this.renderHome();
       else if (this.cur === 'armory') this.renderArmory();
       else if (this.cur === 'career') this.renderCareer();
-    });
+    };
+    Profile.on(rerender); Accounts.on(rerender);
     document.addEventListener('keydown', (e) => {
       if (e.code !== 'Escape' || Game.state === 'playing' || !this.cur) return;
-      if (['create', 'armory', 'career', 'settings', 'controls'].includes(this.cur)) { e.preventDefault(); this.back(); }
+      if (['create', 'armory', 'career', 'settings', 'controls', 'acctset'].includes(this.cur) || (this.cur === 'newacct' && Accounts.list.length)) { e.preventDefault(); this.back(); }
     });
   },
   loading(label, frac) {
@@ -10088,7 +10298,7 @@ const Menu = {
     $('sf-overlay').hidden = false;
     $('sf-overlay').dataset.scr = name;
     for (const s of SCREENS) { const el = $('scr-' + s); if (el) el.hidden = s !== name; }
-    const r = { home: 'renderHome', create: 'renderCreate', armory: 'renderArmory', career: 'renderCareer', pause: 'renderPause', results: 'renderResults', ready: 'renderReady' }[name];
+    const r = { home: 'renderHome', create: 'renderCreate', armory: 'renderArmory', career: 'renderCareer', pause: 'renderPause', results: 'renderResults', ready: 'renderReady', account: 'renderAccount', newacct: 'renderNewAcct', acctset: 'renderAcctSet' }[name];
     if (r) this[r]();
     if (name !== 'armory') ArmoryView.stop();
     const focus = $('scr-' + name) && $('scr-' + name).querySelector('[data-autofocus]');
@@ -10146,7 +10356,152 @@ const Menu = {
       case 'home': Snd.ui(); Game.state = 'menu'; this.home(); break;
       case 'career-tab': this.careerTab = d.v; Snd.ui(); this.renderCareer(); break;
       case 'fullscreen': toggleFullscreen(); break;
+      // ---- accounts ----
+      case 'acct-pick': {
+        const a = Accounts.list.find((x) => x.id === d.id);
+        if (!a) break;
+        Snd.ui();
+        if (!a.pin) { Accounts.signIn(a); this.afterSignIn(); }
+        else { this.acctSel = a.id; this.acctErr = ''; this.renderAccount(); }
+        break;
+      }
+      case 'form-signin': {
+        const a = Accounts.list.find((x) => x.id === d.id), inp = $('acct-pinin');
+        if (!a || this.busy) break;
+        this.busy = true;
+        Accounts.verify(a, inp ? inp.value : '').then((ok) => {
+          this.busy = false;
+          if (ok) { Snd.ui(); Accounts.signIn(a); this.afterSignIn(); } else { Snd.dry(); this.acctErr = 'Wrong PIN'; this.renderAccount(); }
+        });
+        break;
+      }
+      case 'acct-new': Snd.ui(); this.acctConvert = !!d.convert; this.acctReturn = d.convert ? this.cur : null; this.acctErr = ''; this.acctDraft = ''; this.show('newacct'); break;
+      case 'acct-create': case 'form-create': {
+        if (this.busy) break;
+        const name = $('acct-name').value, pin = $('acct-pin').value, pin2 = $('acct-pin2').value;
+        const pc = Accounts.checkPin(pin, pin2), nc = Accounts.checkName(name);
+        this.acctDraft = name;
+        if (!nc.ok || !pc.ok) { Snd.dry(); this.acctErr = (!nc.ok ? nc : pc).msg; this.renderNewAcct(); break; }
+        this.busy = true;
+        Accounts.create(name, pc.pin, { fromGuest: this.acctConvert }).then((r) => {
+          this.busy = false;
+          if (!r.ok) { Snd.dry(); this.acctErr = r.msg; this.renderNewAcct(); return; }
+          Snd.buy();
+          this.welcome = r.from === 'guest' ? 'Account created: this session’s progress is saved to it.' : r.from === 'legacy' ? 'Account created: the progress already on this device moved into it.' : `Welcome, ${r.account.name}. Your progress saves on this device.`;
+          const back = this.acctReturn; this.acctConvert = false; this.acctReturn = null;
+          if (back === 'results') { this.stack = []; this.show('results', false); } else this.afterSignIn();
+        });
+        break;
+      }
+      case 'acct-guest': Snd.ui(); Accounts.playAsGuest(); this.afterSignIn(); break;
+      case 'acct-switch': case 'acct-signout': Snd.ui(); this.acctConvert = false; this.acctReturn = null; Accounts.signOut(); this.acctSel = Accounts.remembered ? Accounts.remembered.id : null; this.acctErr = ''; this.stack = []; this.show(Accounts.list.length ? 'account' : 'newacct', false); break;
+      case 'acct-settings': Snd.ui(); this.acctMsg = ''; this.acctDel = false; this.show('acctset'); break;
+      case 'form-rename': { const r = Accounts.rename($('set-name').value); this.acctMsg = r.msg; if (r.ok) Snd.ui(); else Snd.dry(); this.renderAcctSet(); break; }
+      case 'form-pin': {
+        if (this.busy) break;
+        this.busy = true;
+        const old = $('set-pin0') ? $('set-pin0').value : '';
+        Accounts.setPin(old, $('set-pin1').value, $('set-pin2').value).then((r) => { this.busy = false; this.acctMsg = r.msg; if (r.ok) Snd.ui(); else Snd.dry(); this.renderAcctSet(); });
+        break;
+      }
+      case 'acct-delete': Snd.ui(); this.acctDel = true; this.acctMsg = ''; this.renderAcctSet(); break;
+      case 'form-delete': {
+        const a = Accounts.cur;
+        if (!a || this.busy) break;
+        if (Accounts.cleanName($('del-name').value).toLowerCase() !== a.name.toLowerCase()) { Snd.dry(); this.acctMsg = 'Type the callsign exactly to confirm'; this.renderAcctSet(); break; }
+        this.busy = true;
+        Accounts.remove(a, $('del-pin') ? $('del-pin').value : '').then((r) => {
+          this.busy = false;
+          if (!r.ok) { Snd.dry(); this.acctMsg = r.msg; this.renderAcctSet(); return; }
+          this.acctSel = null; this.stack = []; this.welcome = r.msg; this.show(Accounts.list.length ? 'account' : 'newacct', false);
+        });
+        break;
+      }
+      case 'notice-close': Accounts.notice = null; this.welcome = ''; this.renderHome(); break;
     }
+  },
+
+  // ---------------- accounts ----------------
+  // Which screen opens after loading: straight in for the account that signed in last (if it has
+  // no PIN), the account picker, or the create-account form on a device with no accounts yet.
+  firstScreen() {
+    if (!Accounts.storageOK) { this.welcome = 'This browser is blocking storage for this page (a private window or blocked site data), so you are playing as a guest and progress can’t be saved.'; this.home(); }
+    else if (Accounts.cur) this.home();
+    else if (Accounts.list.length) { this.acctSel = Accounts.remembered ? Accounts.remembered.id : null; this.show('account', false); }
+    else this.show('newacct', false);
+  },
+  afterSignIn() { if (Actors.me) Actors.me.name = Accounts.name(); this.acctSel = null; this.acctErr = ''; this.home(); },
+  renderAccount() {
+    const el = $('scr-account'), sel = this.acctSel ? Accounts.list.find((a) => a.id === this.acctSel) : null;
+    const cards = Accounts.list.slice().sort((a, b) => (b.lastPlayed || b.created) - (a.lastPlayed || a.created)).map((a) => {
+      const p = Accounts.profileOf(a), lv = LEVELS.of(p.xp), rk = p.placed >= PLACEMENTS ? rankFor(p.elo) : -1, open = sel === a && a.pin;
+      const when = a.lastPlayed ? `Last played ${ago(a.lastPlayed)}` : `Created ${ago(a.created)}`;
+      const pinForm = open ? `<form class="pin-form" data-form="signin" data-id="${a.id}" autocomplete="off"><input id="acct-pinin" class="field-in" type="password" inputmode="numeric" maxlength="8" placeholder="PIN" aria-label="PIN for ${escHTML(a.name)}"><button type="submit" class="btn primary">Sign in</button></form>${this.acctErr ? `<p class="err">${escHTML(this.acctErr)}</p>` : ''}` : '';
+      return `<div class="acard${open ? ' open' : ''}"><button type="button" class="acard-main" data-act="acct-pick" data-id="${a.id}">${emblemSVG(rk, 48)}<span class="acard-t"><b>${escHTML(a.name)}</b><small>Level ${lv.level} · ${escHTML(rk < 0 ? 'Unranked' : RANKS[rk].name)} · ${fmtN(p.points)} pts</small><small>${when}</small></span>${a.pin ? '<i class="lock" title="Protected by a PIN">PIN</i>' : ''}</button>${pinForm}</div>`;
+    }).join('');
+    el.innerHTML = `<div class="sheet acct-sheet">
+      <header class="sheet-head brandhead"><div class="brand">Short<span>·</span>Fuse</div><div class="stagecode"><b>Accounts</b>on this device</div></header>
+      <div class="sheet-body">
+        <h2 class="acct-title">Who’s playing?</h2>
+        ${this.welcome ? `<p class="msg">${escHTML(this.welcome)}</p>` : ''}
+        <div class="acct-grid">${cards}<button type="button" class="acard new" data-act="acct-new"><b>+ New account</b><small>Your own callsign and progress</small></button></div>
+        <p class="note">Accounts and their progress (levels, points, purchases, loadouts, rank and match history) are stored in this browser on this device. Progress saves when a match ends or you leave it. Clearing this site’s data deletes them.</p>
+      </div>
+      <footer class="sheet-foot"><p class="summary">A guest can play everything but nothing is saved.</p><div class="actions"><button type="button" class="btn" data-act="acct-guest">Play as guest</button></div></footer>
+    </div>`;
+    this.welcome = '';
+    const pin = $('acct-pinin');
+    if (pin && !Input.touch.enabled) pin.focus();
+  },
+  renderNewAcct() {
+    const el = $('scr-newacct'), first = !Accounts.list.length, conv = this.acctConvert && Accounts.hasProgress(Profile.v);
+    const legacy = first && !conv ? Accounts.legacy() : null;
+    const carry = conv ? `<p class="note good">This guest session’s progress (level ${Profile.level().level}, ${fmtN(Profile.v.points)} points) moves into the new account.</p>`
+      : legacy ? `<p class="note good">Progress already on this device (level ${LEVELS.of(legacy.xp).level}, ${fmtN(legacy.points)} points, ${legacy.history.length} matches) moves into this account.</p>` : '';
+    const blocked = !Accounts.storageOK ? '<p class="err">This browser isn’t letting the game store anything here (a private window or blocked site data), so accounts can’t be saved. You can still play as a guest.</p>' : '';
+    el.innerHTML = `<div class="sheet narrow">
+      <header class="sheet-head">${first && !this.acctReturn ? '' : '<button type="button" class="btn ghost back" data-back>‹ Back</button>'}<h2>${first ? 'Create your account' : 'New account'}</h2><span class="head-aside">Saved on this device</span></header>
+      <form class="sheet-body acct-form" data-form="create" autocomplete="off">
+        ${blocked}
+        <label class="field"><span>Callsign</span><input id="acct-name" class="field-in" maxlength="16" placeholder="e.g. Ember" value="${escHTML(this.acctDraft || '')}" spellcheck="false"></label>
+        <div class="field-row">
+          <label class="field"><span>PIN <small>optional · 4–8 digits</small></span><input id="acct-pin" class="field-in" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password"></label>
+          <label class="field"><span>Repeat PIN</span><input id="acct-pin2" class="field-in" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password"></label>
+        </div>
+        ${carry}
+        <p class="note">Your levels, points, purchases, loadouts, rank and match history save in this browser when a match ends or you leave it. A PIN stops other people on this device from playing as you; it isn’t encryption.</p>
+        <p class="err" id="acct-err">${escHTML(this.acctErr || '')}</p>
+        <button type="submit" hidden></button>
+      </form>
+      <footer class="sheet-foot"><div class="actions">${first && !this.acctReturn ? '<button type="button" class="btn" data-act="acct-guest">Play as guest</button>' : ''}<button type="button" class="btn primary" data-act="acct-create"${Accounts.storageOK ? '' : ' disabled'}>Create account</button></div></footer>
+    </div>`;
+    const nm = $('acct-name');
+    if (nm && !Input.touch.enabled) nm.focus();
+  },
+  renderAcctSet() {
+    const a = Accounts.cur, el = $('scr-acctset');
+    if (!a) { el.innerHTML = ''; return; }
+    const pinIn = (id, label) => `<label class="field"><span>${label}</span><input id="${id}" class="field-in" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></label>`;
+    const del = this.acctDel
+      ? `<form class="acct-form" data-form="delete" autocomplete="off"><p class="note warn">This deletes ${escHTML(a.name)} and all of its progress from this device. It can’t be undone.</p>
+          <div class="field-row"><label class="field"><span>Type the callsign</span><input id="del-name" class="field-in" maxlength="16" spellcheck="false"></label>${a.pin ? pinIn('del-pin', 'PIN') : ''}</div>
+          <div class="actions"><button type="submit" class="btn danger">Delete forever</button></div></form>`
+      : `<div class="actions"><button type="button" class="btn danger" data-act="acct-delete">Delete this account…</button></div>`;
+    el.innerHTML = `<div class="sheet narrow">
+      <header class="sheet-head"><button type="button" class="btn ghost back" data-back>‹ Back</button><h2>Account</h2><span class="head-aside">${escHTML(a.name)}</span></header>
+      <div class="sheet-body acct-set">
+        <p class="note">Created ${new Date(a.created).toLocaleDateString()} · ${a.pin ? 'protected by a PIN' : 'no PIN'} · ${escHTML(Profile.saveLabel())}</p>
+        ${this.acctMsg ? `<p class="msg">${escHTML(this.acctMsg)}</p>` : ''}
+        <form class="acct-form inline" data-form="rename" autocomplete="off"><label class="field"><span>Callsign</span><input id="set-name" class="field-in" maxlength="16" value="${escHTML(a.name)}" spellcheck="false"></label><button type="submit" class="btn">Rename</button></form>
+        <form class="acct-form" data-form="pin" autocomplete="off">
+          <h3 class="sect">${a.pin ? 'Change or remove the PIN' : 'Add a PIN'}</h3>
+          <div class="field-row">${a.pin ? pinIn('set-pin0', 'Current PIN') : ''}${pinIn('set-pin1', a.pin ? 'New PIN <small>empty removes it</small>' : 'New PIN <small>4–8 digits</small>')}${pinIn('set-pin2', 'Repeat')}</div>
+          <div class="actions"><button type="submit" class="btn">${a.pin ? 'Save PIN' : 'Add PIN'}</button></div>
+        </form>
+        <h3 class="sect">Delete</h3>${del}
+      </div>
+      <footer class="sheet-foot"><p class="summary">Progress saves on this device when a match ends or you leave it, and whenever you buy or equip something.</p><div class="actions"><button type="button" class="btn" data-act="acct-switch">Switch account</button><button type="button" class="btn" data-act="acct-signout">Sign out</button></div></footer>
+    </div>`;
   },
 
   // ---------------- home ----------------
@@ -10155,7 +10510,17 @@ const Menu = {
     $('home-card').innerHTML = `
       <div class="hc-top">${emblemSVG(rk, 64)}<div><div class="hc-rank">${escHTML(rankName(rk, v.placed))}</div><div class="hc-elo">${rk < 0 ? 'Play ranked matches to place' : `${fmtN(v.elo)} Elo · peak ${fmtN(v.peak)}`}</div></div></div>
       <div class="hc-level">${levelBadge(lv.level)}<div class="hc-xp"><div class="hc-xpl"><span>Level ${lv.level}</span><span>${fmtN(lv.into)} / ${fmtN(lv.need)} XP</span></div>${xpBar(lv)}</div></div>
-      <div class="hc-foot">${ptsHTML(v.points)}<span class="sync">${escHTML(Profile.syncLabel())}</span></div>`;
+      <div class="hc-foot">${ptsHTML(v.points)}<span class="sync">${escHTML(Profile.saveLabel())}</span></div>`;
+    $('home-card').insertAdjacentHTML('afterbegin', Accounts.guest
+      ? `<div class="hc-acct guest"><span class="hc-name">Guest</span><span class="hc-acts"><button type="button" class="link" data-act="acct-new" data-convert="1">Create account</button><button type="button" class="link" data-act="acct-switch">Switch</button></span></div>`
+      : `<div class="hc-acct"><span class="hc-name">${escHTML(Accounts.cur.name)}</span><span class="hc-acts"><button type="button" class="link" data-act="acct-settings">Account</button><button type="button" class="link" data-act="acct-switch">Switch</button></span></div>`);
+    const n = Accounts.notice, nb = $('home-notice');
+    if (n && n.res) {
+      const r = n.res, c = r.cfg, what = { left: 'left early', none: 'left before it started', practice: 'practice' }[r.outcome] || r.outcome;
+      nb.innerHTML = `<p>Saved when the game closed: <b>${escHTML(MAPS[c.map] ? MAPS[c.map].name : c.map)}</b> · ${c.mode === 'defuse' ? (c.ranked ? 'ranked' : 'casual') : 'skirmish'} · ${escHTML(what)} · +${fmtN(r.xp.total)} XP${r.elo ? ` · Elo ${signed(r.elo.delta)}` : ''}</p><button type="button" class="link" data-act="notice-close" aria-label="Dismiss">✕</button>`;
+      nb.hidden = false;
+    } else if (this.welcome) { nb.innerHTML = `<p>${escHTML(this.welcome)}</p><button type="button" class="link" data-act="notice-close" aria-label="Dismiss">✕</button>`; nb.hidden = false; }
+    else nb.hidden = true;
     $('home-points').innerHTML = `${fmtN(v.points)} points to spend`;
     const L = Game.L;
     $('home-map').textContent = L ? `${L.name}` : '';
@@ -10299,6 +10664,7 @@ const Menu = {
     el.innerHTML = `<div class="sheet wide">
       <header class="sheet-head"><button type="button" class="btn ghost back" data-back>‹ Back</button><h2>Career</h2><span class="head-aside">${ptsHTML(v.points)}</span></header>
       <div class="sheet-body career">
+        <div class="car-acct"><span>${Accounts.guest ? 'Playing as a <b>guest</b>: nothing here is saved.' : `Account <b>${escHTML(Accounts.cur.name)}</b> · ${escHTML(Profile.saveLabel())}`}</span>${Accounts.guest ? '<button type="button" class="btn" data-act="acct-new" data-convert="1">Create account</button>' : '<button type="button" class="btn" data-act="acct-settings">Account settings</button>'}</div>
         <div class="car-top">
           <div class="car-rank">${emblemSVG(rk, 96)}<div><small>Rank</small><b>${escHTML(rankName(rk, v.placed))}</b><span>${rk < 0 ? `Elo ${fmtN(v.elo)} (hidden until placed)` : `${fmtN(v.elo)} Elo · peak ${fmtN(v.peak)}`}</span>
             ${nextRk ? `<div class="xpbar rank"><i style="width:${(prog * 100).toFixed(1)}%"></i></div><small>${rk < 0 ? '' : `${fmtN(Math.max(0, nextRk.min - v.elo))} to ${nextRk.name}`}</small>` : ''}</div></div>
@@ -10324,6 +10690,7 @@ const Menu = {
     const ranked = Session.active && c && c.ranked && !Session.done;
     $('pause-warn').hidden = !ranked;
     $('btn-leave').textContent = Session.active && !Session.done ? 'Leave match' : 'Main menu';
+    $('pause-save').textContent = Accounts.guest ? 'Playing as a guest: this match won’t be saved.' : `Progress saves to ${Accounts.cur.name} on this device when the match ends or you leave it.`;
   },
   renderReady() { $('ready-map').textContent = Game.L ? Game.L.name : ''; $('ready-info').textContent = Session.cfg ? `${Session.cfg.ranked ? 'Ranked' : Session.cfg.mode === 'defuse' ? 'Casual' : 'Skirmish'} · ${DIFFS[Session.cfg.diff].name} bots` : ''; },
 
@@ -10357,7 +10724,7 @@ const Menu = {
           ${eloHTML || `<div class="res-box"><h3 class="sect">Rank</h3><p class="note">${cfg.mode === 'defuse' ? 'This match ended before it started, so your rating did not change.' : 'Skirmish is practice: it pays some XP but never changes your Elo. Play a defuse match to move your rank.'}</p></div>`}
         </div>
       </div>
-      <footer class="sheet-foot"><p class="summary">${outcome === 'left' && cfg.ranked ? 'Leaving a ranked match counts as a loss.' : ''}</p><div class="actions"><button type="button" class="btn" data-go="shop">Shop</button><button type="button" class="btn" data-act="home">Main menu</button><button type="button" class="btn primary" data-act="again" data-autofocus>Play again</button></div></footer>
+      <footer class="sheet-foot"><p class="summary">${Accounts.guest ? 'Guest: this progress isn’t saved. <button type="button" class="btn small" data-act="acct-new" data-convert="1">Create an account to keep it</button>' : `<span class="saved">✓ ${escHTML(Profile.saveLabel())} (${escHTML(Accounts.cur.name)})</span>`}${outcome === 'left' && cfg.ranked ? ' Leaving a ranked match counts as a loss.' : ''}</p><div class="actions"><button type="button" class="btn" data-go="shop">Shop</button><button type="button" class="btn" data-act="home">Main menu</button><button type="button" class="btn primary" data-act="again" data-autofocus>Play again</button></div></footer>
     </div>`;
   },
 
@@ -10739,6 +11106,7 @@ async function loadMap(key, from = 0, to = 1) {
     Game.loadout = new Loadout(undefined, (id) => Arsenal.def(id));
   } else Game.player.cw = L.cw;
   Actors.init();
+  Actors.me.name = Accounts.name();
   Game.player.maxSpeed = Game.loadout.active.def.maxSpeed;
   MenuCam.reset(L);
   HUD.el['hud-tag'].textContent = L.name;
@@ -10747,7 +11115,7 @@ async function loadMap(key, from = 0, to = 1) {
 
 // One match as the player set it up in Create Game: roster, side, rules; rewards at the end.
 const Session = {
-  active: false, cfg: null, done: false, results: null, resultsT: 0,
+  active: false, cfg: null, done: false, results: null, resultsT: 0, matchId: '',
   stats(me) {
     const M = Match;
     return { kills: me.kills, deaths: me.deaths, hs: me.hs, dmg: me.dmg, plants: me.plants, defuses: me.defuses,
@@ -10770,12 +11138,34 @@ const Session = {
     Game.spectate = null; Game.freeze = false; Game.botsFrozen = false;
     Match.setMode(cfg.mode);
     if (cfg.mode !== 'defuse') { Actors.feed = []; Actors.score = [0, 0]; }
-    this.active = true; this.cfg = cfg; this.done = false; this.results = null;
+    me.name = Accounts.name();
+    this.active = true; this.cfg = cfg; this.done = false; this.results = null; this.matchId = randomId(6) + Date.now().toString(36);
   },
+  // What leaving now would record: practice XP in skirmish; in defuse a loss once the match has
+  // started (nothing if you leave during the first buy time without a kill).
+  exitOutcome(st) {
+    if (this.cfg.mode !== 'defuse') return 'practice';
+    return Match.round > 1 || Match.phase !== 'freeze' || st.kills ? 'left' : 'none';
+  },
+  // Fold the match into the profile (saved to the signed-in account on this device) exactly once.
+  record(outcome) {
+    this.done = true;
+    this.results = Profile.applyMatch(this.cfg, this.stats(Actors.me), outcome, this.matchId);
+    Accounts.clearCheckpoint();
+    return this.results;
+  },
+  // Kept up to date every round and when the tab is hidden, so an exit still counts if the page dies.
+  checkpoint() {
+    if (!this.active || this.done || Accounts.guest) return;
+    const st = this.stats(Actors.me);
+    Accounts.checkpoint({ matchId: this.matchId, cfg: this.cfg, st, outcome: this.exitOutcome(st), at: Date.now() });
+  },
+  // The page is closing or reloading mid-match: that is an exit, save it now.
+  exitNow() { if (this.active && !this.done) this.record(this.exitOutcome(this.stats(Actors.me))); },
   matchOver(outcome) {
     if (!this.active || this.done) return;
-    this.done = true; Match.hold = true;
-    this.results = Profile.applyMatch(this.cfg, this.stats(Actors.me), outcome);
+    Match.hold = true;
+    this.record(outcome);
     clearTimeout(this.resultsT);
     this.resultsT = setTimeout(() => this.showResults(), 5500);
   },
@@ -10790,11 +11180,8 @@ const Session = {
   // Leaving from the pause menu: a ranked match that has started counts as a loss.
   leave() {
     if (this.active && !this.done) {
-      const c = this.cfg, me = Actors.me, st = this.stats(me);
-      let outcome = 'practice';
-      if (c.mode === 'defuse') outcome = Match.round > 1 || Match.phase !== 'freeze' || st.kills ? 'left' : 'none';
-      this.done = true;
-      this.results = Profile.applyMatch(c, st, outcome);
+      const outcome = this.exitOutcome(this.stats(Actors.me));
+      this.record(outcome);
       if (outcome !== 'none' || this.results.xp.total > 0) { this.showResults(); return; }
     }
     this.active = false;
@@ -10850,6 +11237,9 @@ async function boot(hot) {
   const tex = await generateTextures((f) => Menu.loading('Generating textures', f * 0.26));
   R.makeTextures(tex);
   Game.tex = tex;
+  // accounts on this device: the one that signed in last comes straight back unless it has a PIN
+  Accounts.init();
+  if (Accounts.remembered && !Accounts.remembered.pin) Accounts.signIn(Accounts.remembered);
   // ?map=key in the page address overrides the last map played
   let qmap = null;
   try { qmap = new URLSearchParams(location.search).get('map'); } catch (e) { qmap = null; }
@@ -10870,17 +11260,17 @@ async function boot(hot) {
   $('buy-menu').addEventListener('click', (e) => { const b = e.target.closest('button[data-id]'); if (b && !b.disabled) BuyMenu.buy(b.dataset.id); });
   window.addEventListener('resize', () => R.resize());
   window.addEventListener('beforeunload', (e) => { if (Game.state === 'playing') { e.preventDefault(); e.returnValue = ''; } });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { Session.checkpoint(); pause(); } });
+  window.addEventListener('pagehide', () => Session.exitNow());
   R.resize();
   Game.state = 'menu';
-  Menu.home();
+  Menu.firstScreen();
   requestAnimationFrame(frame);
-  Profile.connect();
 
   // Test/debug hooks (harmless in normal play).
   window.__SF = {
     Game, R, Ents, FX, Input, Ballistics, Grenades, Settings, Viewmodel, Snd, Actors, Nav, Bots, Items, Bomb, Match, SHOP, Tactics, BuyMenu, Radar, MAPS,
-    Profile, Arsenal, Session, Menu, Rewards, ArmoryView, launch, loadMap,
+    Profile, Arsenal, Session, Menu, Rewards, ArmoryView, Accounts, launch, loadMap,
     setView(x, y, z, yawDeg, pitchDeg) {
       const p = Game.player; p.spawn([x, y, z], yawDeg * DEG); p.pitch = (pitchDeg || 0) * DEG;
       const w = Game.loadout.active; if (w.state === 'draw') { w.state = 'idle'; w.anim = 'idle'; }

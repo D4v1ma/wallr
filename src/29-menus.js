@@ -3,7 +3,16 @@
 // Settings and Controls, the in-match pause menu, a "ready" card after a map load, and results.
 
 const MAP_LIST = ['depot', 'kiln', 'frost', 'range'];
-const SCREENS = ['loading', 'home', 'create', 'armory', 'career', 'settings', 'controls', 'pause', 'ready', 'results'];
+const SCREENS = ['loading', 'account', 'newacct', 'acctset', 'home', 'create', 'armory', 'career', 'settings', 'controls', 'pause', 'ready', 'results'];
+// "5 minutes ago" style times for the account cards
+function ago(t) {
+  const s = (Date.now() - t) / 1000;
+  if (s < 90) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)} minutes ago`;
+  if (s < 86400 * 1.5) return `${Math.round(s / 3600)} hour${Math.round(s / 3600) === 1 ? '' : 's'} ago`;
+  if (s < 86400 * 30) return `${Math.round(s / 86400)} days ago`;
+  return new Date(t).toLocaleDateString();
+}
 const escHTML = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const fmtN = (n) => Math.round(n).toLocaleString('en-US');
 const signed = (n, d = 0) => (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(n).toFixed(d);
@@ -117,15 +126,17 @@ const Menu = {
   init() {
     $('sf-overlay').addEventListener('click', (e) => this.onClick(e));
     $('sf-overlay').addEventListener('change', (e) => { if (e.target.id === 'cfg-ff') { this.cfg.ff = e.target.checked; this.renderCreate(); } });
+    $('sf-overlay').addEventListener('submit', (e) => { const f = e.target.closest('form[data-form]'); if (!f) return; e.preventDefault(); Snd.init(); this.act('form-' + f.dataset.form, f.dataset, f); });
     this.bindSettings();
-    Profile.on(() => {
+    const rerender = () => {
       if (this.cur === 'home') this.renderHome();
       else if (this.cur === 'armory') this.renderArmory();
       else if (this.cur === 'career') this.renderCareer();
-    });
+    };
+    Profile.on(rerender); Accounts.on(rerender);
     document.addEventListener('keydown', (e) => {
       if (e.code !== 'Escape' || Game.state === 'playing' || !this.cur) return;
-      if (['create', 'armory', 'career', 'settings', 'controls'].includes(this.cur)) { e.preventDefault(); this.back(); }
+      if (['create', 'armory', 'career', 'settings', 'controls', 'acctset'].includes(this.cur) || (this.cur === 'newacct' && Accounts.list.length)) { e.preventDefault(); this.back(); }
     });
   },
   loading(label, frac) {
@@ -145,7 +156,7 @@ const Menu = {
     $('sf-overlay').hidden = false;
     $('sf-overlay').dataset.scr = name;
     for (const s of SCREENS) { const el = $('scr-' + s); if (el) el.hidden = s !== name; }
-    const r = { home: 'renderHome', create: 'renderCreate', armory: 'renderArmory', career: 'renderCareer', pause: 'renderPause', results: 'renderResults', ready: 'renderReady' }[name];
+    const r = { home: 'renderHome', create: 'renderCreate', armory: 'renderArmory', career: 'renderCareer', pause: 'renderPause', results: 'renderResults', ready: 'renderReady', account: 'renderAccount', newacct: 'renderNewAcct', acctset: 'renderAcctSet' }[name];
     if (r) this[r]();
     if (name !== 'armory') ArmoryView.stop();
     const focus = $('scr-' + name) && $('scr-' + name).querySelector('[data-autofocus]');
@@ -203,7 +214,152 @@ const Menu = {
       case 'home': Snd.ui(); Game.state = 'menu'; this.home(); break;
       case 'career-tab': this.careerTab = d.v; Snd.ui(); this.renderCareer(); break;
       case 'fullscreen': toggleFullscreen(); break;
+      // ---- accounts ----
+      case 'acct-pick': {
+        const a = Accounts.list.find((x) => x.id === d.id);
+        if (!a) break;
+        Snd.ui();
+        if (!a.pin) { Accounts.signIn(a); this.afterSignIn(); }
+        else { this.acctSel = a.id; this.acctErr = ''; this.renderAccount(); }
+        break;
+      }
+      case 'form-signin': {
+        const a = Accounts.list.find((x) => x.id === d.id), inp = $('acct-pinin');
+        if (!a || this.busy) break;
+        this.busy = true;
+        Accounts.verify(a, inp ? inp.value : '').then((ok) => {
+          this.busy = false;
+          if (ok) { Snd.ui(); Accounts.signIn(a); this.afterSignIn(); } else { Snd.dry(); this.acctErr = 'Wrong PIN'; this.renderAccount(); }
+        });
+        break;
+      }
+      case 'acct-new': Snd.ui(); this.acctConvert = !!d.convert; this.acctReturn = d.convert ? this.cur : null; this.acctErr = ''; this.acctDraft = ''; this.show('newacct'); break;
+      case 'acct-create': case 'form-create': {
+        if (this.busy) break;
+        const name = $('acct-name').value, pin = $('acct-pin').value, pin2 = $('acct-pin2').value;
+        const pc = Accounts.checkPin(pin, pin2), nc = Accounts.checkName(name);
+        this.acctDraft = name;
+        if (!nc.ok || !pc.ok) { Snd.dry(); this.acctErr = (!nc.ok ? nc : pc).msg; this.renderNewAcct(); break; }
+        this.busy = true;
+        Accounts.create(name, pc.pin, { fromGuest: this.acctConvert }).then((r) => {
+          this.busy = false;
+          if (!r.ok) { Snd.dry(); this.acctErr = r.msg; this.renderNewAcct(); return; }
+          Snd.buy();
+          this.welcome = r.from === 'guest' ? 'Account created: this session’s progress is saved to it.' : r.from === 'legacy' ? 'Account created: the progress already on this device moved into it.' : `Welcome, ${r.account.name}. Your progress saves on this device.`;
+          const back = this.acctReturn; this.acctConvert = false; this.acctReturn = null;
+          if (back === 'results') { this.stack = []; this.show('results', false); } else this.afterSignIn();
+        });
+        break;
+      }
+      case 'acct-guest': Snd.ui(); Accounts.playAsGuest(); this.afterSignIn(); break;
+      case 'acct-switch': case 'acct-signout': Snd.ui(); this.acctConvert = false; this.acctReturn = null; Accounts.signOut(); this.acctSel = Accounts.remembered ? Accounts.remembered.id : null; this.acctErr = ''; this.stack = []; this.show(Accounts.list.length ? 'account' : 'newacct', false); break;
+      case 'acct-settings': Snd.ui(); this.acctMsg = ''; this.acctDel = false; this.show('acctset'); break;
+      case 'form-rename': { const r = Accounts.rename($('set-name').value); this.acctMsg = r.msg; if (r.ok) Snd.ui(); else Snd.dry(); this.renderAcctSet(); break; }
+      case 'form-pin': {
+        if (this.busy) break;
+        this.busy = true;
+        const old = $('set-pin0') ? $('set-pin0').value : '';
+        Accounts.setPin(old, $('set-pin1').value, $('set-pin2').value).then((r) => { this.busy = false; this.acctMsg = r.msg; if (r.ok) Snd.ui(); else Snd.dry(); this.renderAcctSet(); });
+        break;
+      }
+      case 'acct-delete': Snd.ui(); this.acctDel = true; this.acctMsg = ''; this.renderAcctSet(); break;
+      case 'form-delete': {
+        const a = Accounts.cur;
+        if (!a || this.busy) break;
+        if (Accounts.cleanName($('del-name').value).toLowerCase() !== a.name.toLowerCase()) { Snd.dry(); this.acctMsg = 'Type the callsign exactly to confirm'; this.renderAcctSet(); break; }
+        this.busy = true;
+        Accounts.remove(a, $('del-pin') ? $('del-pin').value : '').then((r) => {
+          this.busy = false;
+          if (!r.ok) { Snd.dry(); this.acctMsg = r.msg; this.renderAcctSet(); return; }
+          this.acctSel = null; this.stack = []; this.welcome = r.msg; this.show(Accounts.list.length ? 'account' : 'newacct', false);
+        });
+        break;
+      }
+      case 'notice-close': Accounts.notice = null; this.welcome = ''; this.renderHome(); break;
     }
+  },
+
+  // ---------------- accounts ----------------
+  // Which screen opens after loading: straight in for the account that signed in last (if it has
+  // no PIN), the account picker, or the create-account form on a device with no accounts yet.
+  firstScreen() {
+    if (!Accounts.storageOK) { this.welcome = 'This browser is blocking storage for this page (a private window or blocked site data), so you are playing as a guest and progress can’t be saved.'; this.home(); }
+    else if (Accounts.cur) this.home();
+    else if (Accounts.list.length) { this.acctSel = Accounts.remembered ? Accounts.remembered.id : null; this.show('account', false); }
+    else this.show('newacct', false);
+  },
+  afterSignIn() { if (Actors.me) Actors.me.name = Accounts.name(); this.acctSel = null; this.acctErr = ''; this.home(); },
+  renderAccount() {
+    const el = $('scr-account'), sel = this.acctSel ? Accounts.list.find((a) => a.id === this.acctSel) : null;
+    const cards = Accounts.list.slice().sort((a, b) => (b.lastPlayed || b.created) - (a.lastPlayed || a.created)).map((a) => {
+      const p = Accounts.profileOf(a), lv = LEVELS.of(p.xp), rk = p.placed >= PLACEMENTS ? rankFor(p.elo) : -1, open = sel === a && a.pin;
+      const when = a.lastPlayed ? `Last played ${ago(a.lastPlayed)}` : `Created ${ago(a.created)}`;
+      const pinForm = open ? `<form class="pin-form" data-form="signin" data-id="${a.id}" autocomplete="off"><input id="acct-pinin" class="field-in" type="password" inputmode="numeric" maxlength="8" placeholder="PIN" aria-label="PIN for ${escHTML(a.name)}"><button type="submit" class="btn primary">Sign in</button></form>${this.acctErr ? `<p class="err">${escHTML(this.acctErr)}</p>` : ''}` : '';
+      return `<div class="acard${open ? ' open' : ''}"><button type="button" class="acard-main" data-act="acct-pick" data-id="${a.id}">${emblemSVG(rk, 48)}<span class="acard-t"><b>${escHTML(a.name)}</b><small>Level ${lv.level} · ${escHTML(rk < 0 ? 'Unranked' : RANKS[rk].name)} · ${fmtN(p.points)} pts</small><small>${when}</small></span>${a.pin ? '<i class="lock" title="Protected by a PIN">PIN</i>' : ''}</button>${pinForm}</div>`;
+    }).join('');
+    el.innerHTML = `<div class="sheet acct-sheet">
+      <header class="sheet-head brandhead"><div class="brand">Short<span>·</span>Fuse</div><div class="stagecode"><b>Accounts</b>on this device</div></header>
+      <div class="sheet-body">
+        <h2 class="acct-title">Who’s playing?</h2>
+        ${this.welcome ? `<p class="msg">${escHTML(this.welcome)}</p>` : ''}
+        <div class="acct-grid">${cards}<button type="button" class="acard new" data-act="acct-new"><b>+ New account</b><small>Your own callsign and progress</small></button></div>
+        <p class="note">Accounts and their progress (levels, points, purchases, loadouts, rank and match history) are stored in this browser on this device. Progress saves when a match ends or you leave it. Clearing this site’s data deletes them.</p>
+      </div>
+      <footer class="sheet-foot"><p class="summary">A guest can play everything but nothing is saved.</p><div class="actions"><button type="button" class="btn" data-act="acct-guest">Play as guest</button></div></footer>
+    </div>`;
+    this.welcome = '';
+    const pin = $('acct-pinin');
+    if (pin && !Input.touch.enabled) pin.focus();
+  },
+  renderNewAcct() {
+    const el = $('scr-newacct'), first = !Accounts.list.length, conv = this.acctConvert && Accounts.hasProgress(Profile.v);
+    const legacy = first && !conv ? Accounts.legacy() : null;
+    const carry = conv ? `<p class="note good">This guest session’s progress (level ${Profile.level().level}, ${fmtN(Profile.v.points)} points) moves into the new account.</p>`
+      : legacy ? `<p class="note good">Progress already on this device (level ${LEVELS.of(legacy.xp).level}, ${fmtN(legacy.points)} points, ${legacy.history.length} matches) moves into this account.</p>` : '';
+    const blocked = !Accounts.storageOK ? '<p class="err">This browser isn’t letting the game store anything here (a private window or blocked site data), so accounts can’t be saved. You can still play as a guest.</p>' : '';
+    el.innerHTML = `<div class="sheet narrow">
+      <header class="sheet-head">${first && !this.acctReturn ? '' : '<button type="button" class="btn ghost back" data-back>‹ Back</button>'}<h2>${first ? 'Create your account' : 'New account'}</h2><span class="head-aside">Saved on this device</span></header>
+      <form class="sheet-body acct-form" data-form="create" autocomplete="off">
+        ${blocked}
+        <label class="field"><span>Callsign</span><input id="acct-name" class="field-in" maxlength="16" placeholder="e.g. Ember" value="${escHTML(this.acctDraft || '')}" spellcheck="false"></label>
+        <div class="field-row">
+          <label class="field"><span>PIN <small>optional · 4–8 digits</small></span><input id="acct-pin" class="field-in" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password"></label>
+          <label class="field"><span>Repeat PIN</span><input id="acct-pin2" class="field-in" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password"></label>
+        </div>
+        ${carry}
+        <p class="note">Your levels, points, purchases, loadouts, rank and match history save in this browser when a match ends or you leave it. A PIN stops other people on this device from playing as you; it isn’t encryption.</p>
+        <p class="err" id="acct-err">${escHTML(this.acctErr || '')}</p>
+        <button type="submit" hidden></button>
+      </form>
+      <footer class="sheet-foot"><div class="actions">${first && !this.acctReturn ? '<button type="button" class="btn" data-act="acct-guest">Play as guest</button>' : ''}<button type="button" class="btn primary" data-act="acct-create"${Accounts.storageOK ? '' : ' disabled'}>Create account</button></div></footer>
+    </div>`;
+    const nm = $('acct-name');
+    if (nm && !Input.touch.enabled) nm.focus();
+  },
+  renderAcctSet() {
+    const a = Accounts.cur, el = $('scr-acctset');
+    if (!a) { el.innerHTML = ''; return; }
+    const pinIn = (id, label) => `<label class="field"><span>${label}</span><input id="${id}" class="field-in" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></label>`;
+    const del = this.acctDel
+      ? `<form class="acct-form" data-form="delete" autocomplete="off"><p class="note warn">This deletes ${escHTML(a.name)} and all of its progress from this device. It can’t be undone.</p>
+          <div class="field-row"><label class="field"><span>Type the callsign</span><input id="del-name" class="field-in" maxlength="16" spellcheck="false"></label>${a.pin ? pinIn('del-pin', 'PIN') : ''}</div>
+          <div class="actions"><button type="submit" class="btn danger">Delete forever</button></div></form>`
+      : `<div class="actions"><button type="button" class="btn danger" data-act="acct-delete">Delete this account…</button></div>`;
+    el.innerHTML = `<div class="sheet narrow">
+      <header class="sheet-head"><button type="button" class="btn ghost back" data-back>‹ Back</button><h2>Account</h2><span class="head-aside">${escHTML(a.name)}</span></header>
+      <div class="sheet-body acct-set">
+        <p class="note">Created ${new Date(a.created).toLocaleDateString()} · ${a.pin ? 'protected by a PIN' : 'no PIN'} · ${escHTML(Profile.saveLabel())}</p>
+        ${this.acctMsg ? `<p class="msg">${escHTML(this.acctMsg)}</p>` : ''}
+        <form class="acct-form inline" data-form="rename" autocomplete="off"><label class="field"><span>Callsign</span><input id="set-name" class="field-in" maxlength="16" value="${escHTML(a.name)}" spellcheck="false"></label><button type="submit" class="btn">Rename</button></form>
+        <form class="acct-form" data-form="pin" autocomplete="off">
+          <h3 class="sect">${a.pin ? 'Change or remove the PIN' : 'Add a PIN'}</h3>
+          <div class="field-row">${a.pin ? pinIn('set-pin0', 'Current PIN') : ''}${pinIn('set-pin1', a.pin ? 'New PIN <small>empty removes it</small>' : 'New PIN <small>4–8 digits</small>')}${pinIn('set-pin2', 'Repeat')}</div>
+          <div class="actions"><button type="submit" class="btn">${a.pin ? 'Save PIN' : 'Add PIN'}</button></div>
+        </form>
+        <h3 class="sect">Delete</h3>${del}
+      </div>
+      <footer class="sheet-foot"><p class="summary">Progress saves on this device when a match ends or you leave it, and whenever you buy or equip something.</p><div class="actions"><button type="button" class="btn" data-act="acct-switch">Switch account</button><button type="button" class="btn" data-act="acct-signout">Sign out</button></div></footer>
+    </div>`;
   },
 
   // ---------------- home ----------------
@@ -212,7 +368,17 @@ const Menu = {
     $('home-card').innerHTML = `
       <div class="hc-top">${emblemSVG(rk, 64)}<div><div class="hc-rank">${escHTML(rankName(rk, v.placed))}</div><div class="hc-elo">${rk < 0 ? 'Play ranked matches to place' : `${fmtN(v.elo)} Elo · peak ${fmtN(v.peak)}`}</div></div></div>
       <div class="hc-level">${levelBadge(lv.level)}<div class="hc-xp"><div class="hc-xpl"><span>Level ${lv.level}</span><span>${fmtN(lv.into)} / ${fmtN(lv.need)} XP</span></div>${xpBar(lv)}</div></div>
-      <div class="hc-foot">${ptsHTML(v.points)}<span class="sync">${escHTML(Profile.syncLabel())}</span></div>`;
+      <div class="hc-foot">${ptsHTML(v.points)}<span class="sync">${escHTML(Profile.saveLabel())}</span></div>`;
+    $('home-card').insertAdjacentHTML('afterbegin', Accounts.guest
+      ? `<div class="hc-acct guest"><span class="hc-name">Guest</span><span class="hc-acts"><button type="button" class="link" data-act="acct-new" data-convert="1">Create account</button><button type="button" class="link" data-act="acct-switch">Switch</button></span></div>`
+      : `<div class="hc-acct"><span class="hc-name">${escHTML(Accounts.cur.name)}</span><span class="hc-acts"><button type="button" class="link" data-act="acct-settings">Account</button><button type="button" class="link" data-act="acct-switch">Switch</button></span></div>`);
+    const n = Accounts.notice, nb = $('home-notice');
+    if (n && n.res) {
+      const r = n.res, c = r.cfg, what = { left: 'left early', none: 'left before it started', practice: 'practice' }[r.outcome] || r.outcome;
+      nb.innerHTML = `<p>Saved when the game closed: <b>${escHTML(MAPS[c.map] ? MAPS[c.map].name : c.map)}</b> · ${c.mode === 'defuse' ? (c.ranked ? 'ranked' : 'casual') : 'skirmish'} · ${escHTML(what)} · +${fmtN(r.xp.total)} XP${r.elo ? ` · Elo ${signed(r.elo.delta)}` : ''}</p><button type="button" class="link" data-act="notice-close" aria-label="Dismiss">✕</button>`;
+      nb.hidden = false;
+    } else if (this.welcome) { nb.innerHTML = `<p>${escHTML(this.welcome)}</p><button type="button" class="link" data-act="notice-close" aria-label="Dismiss">✕</button>`; nb.hidden = false; }
+    else nb.hidden = true;
     $('home-points').innerHTML = `${fmtN(v.points)} points to spend`;
     const L = Game.L;
     $('home-map').textContent = L ? `${L.name}` : '';
@@ -356,6 +522,7 @@ const Menu = {
     el.innerHTML = `<div class="sheet wide">
       <header class="sheet-head"><button type="button" class="btn ghost back" data-back>‹ Back</button><h2>Career</h2><span class="head-aside">${ptsHTML(v.points)}</span></header>
       <div class="sheet-body career">
+        <div class="car-acct"><span>${Accounts.guest ? 'Playing as a <b>guest</b>: nothing here is saved.' : `Account <b>${escHTML(Accounts.cur.name)}</b> · ${escHTML(Profile.saveLabel())}`}</span>${Accounts.guest ? '<button type="button" class="btn" data-act="acct-new" data-convert="1">Create account</button>' : '<button type="button" class="btn" data-act="acct-settings">Account settings</button>'}</div>
         <div class="car-top">
           <div class="car-rank">${emblemSVG(rk, 96)}<div><small>Rank</small><b>${escHTML(rankName(rk, v.placed))}</b><span>${rk < 0 ? `Elo ${fmtN(v.elo)} (hidden until placed)` : `${fmtN(v.elo)} Elo · peak ${fmtN(v.peak)}`}</span>
             ${nextRk ? `<div class="xpbar rank"><i style="width:${(prog * 100).toFixed(1)}%"></i></div><small>${rk < 0 ? '' : `${fmtN(Math.max(0, nextRk.min - v.elo))} to ${nextRk.name}`}</small>` : ''}</div></div>
@@ -381,6 +548,7 @@ const Menu = {
     const ranked = Session.active && c && c.ranked && !Session.done;
     $('pause-warn').hidden = !ranked;
     $('btn-leave').textContent = Session.active && !Session.done ? 'Leave match' : 'Main menu';
+    $('pause-save').textContent = Accounts.guest ? 'Playing as a guest: this match won’t be saved.' : `Progress saves to ${Accounts.cur.name} on this device when the match ends or you leave it.`;
   },
   renderReady() { $('ready-map').textContent = Game.L ? Game.L.name : ''; $('ready-info').textContent = Session.cfg ? `${Session.cfg.ranked ? 'Ranked' : Session.cfg.mode === 'defuse' ? 'Casual' : 'Skirmish'} · ${DIFFS[Session.cfg.diff].name} bots` : ''; },
 
@@ -414,7 +582,7 @@ const Menu = {
           ${eloHTML || `<div class="res-box"><h3 class="sect">Rank</h3><p class="note">${cfg.mode === 'defuse' ? 'This match ended before it started, so your rating did not change.' : 'Skirmish is practice: it pays some XP but never changes your Elo. Play a defuse match to move your rank.'}</p></div>`}
         </div>
       </div>
-      <footer class="sheet-foot"><p class="summary">${outcome === 'left' && cfg.ranked ? 'Leaving a ranked match counts as a loss.' : ''}</p><div class="actions"><button type="button" class="btn" data-go="shop">Shop</button><button type="button" class="btn" data-act="home">Main menu</button><button type="button" class="btn primary" data-act="again" data-autofocus>Play again</button></div></footer>
+      <footer class="sheet-foot"><p class="summary">${Accounts.guest ? 'Guest: this progress isn’t saved. <button type="button" class="btn small" data-act="acct-new" data-convert="1">Create an account to keep it</button>' : `<span class="saved">✓ ${escHTML(Profile.saveLabel())} (${escHTML(Accounts.cur.name)})</span>`}${outcome === 'left' && cfg.ranked ? ' Leaving a ranked match counts as a loss.' : ''}</p><div class="actions"><button type="button" class="btn" data-go="shop">Shop</button><button type="button" class="btn" data-act="home">Main menu</button><button type="button" class="btn primary" data-act="again" data-autofocus>Play again</button></div></footer>
     </div>`;
   },
 
