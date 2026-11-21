@@ -9,7 +9,7 @@
     <div class="hud-corner hud-tl">
       <div class="radar-wrap"><canvas id="hud-radar" width="168" height="168" aria-hidden="true"></canvas><div class="place" id="hud-place"></div></div>
       <div class="tag" id="hud-tag">Saltpan Depot</div>
-      <div class="hint" id="hud-hint"><kbd>WASD</kbd> move <kbd>Space</kbd> jump <kbd>C</kbd> crouch <kbd>Shift</kbd> walk<br><kbd>1</kbd>–<kbd>5</kbd> weapons <kbd>B</kbd> buy <kbd>G</kbd> drop <kbd>E</kbd> use / defuse<br><kbd>R</kbd> reload <kbd>Tab</kbd> scores <kbd>F1</kbd> debug <kbd>H</kbd> hide hints</div>
+      <div class="hint" id="hud-hint"><kbd>WASD</kbd> move <kbd>Space</kbd> jump <kbd>C</kbd> crouch <kbd>Shift</kbd> walk<br><kbd>X</kbd> wallbang round <kbd>Mouse 2</kbd> scope in <kbd>1</kbd>–<kbd>5</kbd> weapons<br><kbd>B</kbd> buy <kbd>G</kbd> drop <kbd>E</kbd> use / defuse <kbd>R</kbd> reload <kbd>Tab</kbd> scores <kbd>F1</kbd> debug <kbd>H</kbd> hide hints</div>
     </div>
     <div class="hud-top">
       <div class="hud-score" id="hud-score"></div>
@@ -34,6 +34,7 @@
     </div>
     <div class="hud-bc"><div id="hud-prompt"></div><div id="hud-speed"></div></div>
     <div class="hud-corner hud-br">
+      <div class="wbx" id="hud-wb" aria-live="polite"></div>
       <div class="wname" id="hud-wname">KESTREL AR</div>
       <div class="reloadbar" id="hud-reload"><i></i></div>
       <div class="stat ammo" id="hud-ammo"><span class="big" id="hud-mag">30</span><span class="res" id="hud-res">/ 90</span></div>
@@ -54,6 +55,7 @@
       <button type="button" data-act="use">USE</button>
       <button type="button" data-act="switch">SWAP</button>
       <button type="button" data-act="buy">BUY</button>
+      <button type="button" class="wbt" data-act="wallbang">WALL</button>
     </div>
     <button type="button" class="btn tmenu" id="t-menu">Menu</button>
   </div>
@@ -63,8 +65,8 @@
     <section id="scr-loading" class="scr scr-center" aria-labelledby="sf-title">
       <div class="sheet narrow">
         <header class="sheet-head brandhead">
-          <div class="brand" id="sf-title">Short<span>·</span>Fuse</div>
-          <div class="stagecode"><b>Stage 6</b><span id="load-map">Loading</span></div>
+          <div class="brand" id="sf-title">wall<span>r</span></div>
+          <div class="stagecode"><b>Stage 7</b><span id="load-map">Loading</span></div>
         </header>
         <div class="sheet-body">
           <div class="load-line"><span id="load-label">Preparing</span><b id="load-pct">0%</b></div>
@@ -76,7 +78,7 @@
 
     <section id="scr-home" class="scr scr-home" hidden>
       <div class="home-left">
-        <div class="home-brand"><div class="brand big">Short<span>·</span>Fuse</div><div class="tagline">Tactical defuse shooter · 5v5 with bots</div></div>
+        <div class="home-brand"><div class="brand big">wall<span>r</span></div><div class="tagline">The wallbang shooter · 5v5 with bots</div></div>
         <nav class="home-nav" aria-label="Main menu">
           <button type="button" class="hn primary" data-go="create" id="btn-play" data-autofocus><b>Play</b><small>Create a match: map, bots, casual or ranked</small></button>
           <button type="button" class="hn" data-go="loadout"><b>Loadout</b><small>Attachments and camos for every gun</small></button>
@@ -84,7 +86,7 @@
           <button type="button" class="hn" data-go="career"><b>Career</b><small>Rank, level, stats, match history</small></button>
           <div class="hn-row"><button type="button" class="hn small" data-go="settings"><b>Settings</b></button><button type="button" class="hn small" data-go="controls"><b>Controls</b></button><button type="button" class="hn small" data-act="fullscreen" id="btn-full"><b>Fullscreen</b></button></div>
         </nav>
-        <p class="home-foot">An original browser shooter. Progress is saved on this device. <span class="stagecode-inline">Stage 6</span></p>
+        <p class="home-foot">An original browser shooter. Progress is saved on this device. <span class="stagecode-inline">Stage 7</span></p>
       </div>
       <aside class="home-card" id="home-card" aria-label="Your profile"></aside>
       <div class="home-notice" id="home-notice" hidden role="status"></div>
@@ -162,6 +164,7 @@
               <div class="set check"><input type="checkbox" id="set-fps"><label for="set-fps">Show frame rate</label></div>
               <div class="set check"><input type="checkbox" id="set-speed"><label for="set-speed">Show speed (units/s)</label></div>
             </div>
+          <div class="admin-box" id="admin-box"></div>
         </div>
       </div>
     </section>
@@ -178,16 +181,18 @@
               <div><span>Fire / slash / throw</span><span><kbd>Mouse 1</kbd></span></div>
               <div><span>Stab / underhand lob</span><span><kbd>Mouse 2</kbd></span></div>
               <div><span>Reload</span><span><kbd>R</kbd></span></div>
+              <div><span>Load a wallbang round (next shot pierces every wall)</span><span><kbd>X</kbd></span></div>
+              <div><span>Scope in (a little more accurate)</span><span>hold <kbd>Mouse 2</kbd></span></div>
               <div><span>Weapon slots (5 = the charge)</span><span><kbd>1</kbd> – <kbd>5</kbd></span></div>
               <div><span>Buy menu (buy time, near spawn)</span><span><kbd>B</kbd>, then <kbd>1</kbd> – <kbd>9</kbd></span></div>
               <div><span>Drop weapon</span><span><kbd>G</kbd></span></div>
               <div><span>Plant the charge (in A or B)</span><span>hold <kbd>Mouse 1</kbd></span></div>
               <div><span>Defuse the charge</span><span>hold <kbd>E</kbd></span></div>
-              <div><span>Scoped zoom</span><span><kbd>Mouse 2</kbd></span></div>
+              <div><span>Osprey LR scope zoom</span><span><kbd>Mouse 2</kbd></span></div>
               <div><span>Last weapon / cycle</span><span><kbd>Q</kbd> / <kbd>Wheel</kbd></span></div>
               <div><span>Inspect weapon</span><span><kbd>F</kbd></span></div>
               <div><span>Open door / pick up weapon</span><span><kbd>E</kbd></span></div>
-              <div><span>Noclip fly</span><span><kbd>V</kbd></span></div>
+              <div><span>Noclip fly (admins)</span><span><kbd>V</kbd></span></div>
               <div><span>Debug readout</span><span><kbd>F1</kbd> / <kbd>`</kbd></span></div>
               <div><span>Hide hints</span><span><kbd>H</kbd></span></div>
               <div><span>Scoreboard</span><span><kbd>Tab</kbd></span></div>

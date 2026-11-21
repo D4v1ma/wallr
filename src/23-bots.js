@@ -1,23 +1,52 @@
-// Bot brains. Perception at 10 Hz (vision cone, line of sight through walls/doors/smoke, hearing),
-// reaction delay, aim error that settles while tracking, recoil compensation, burst fire with
-// counter-strafing, and waypoint navigation with string pulling, jump links, doors and unsticking.
+// Bot brains. A bot only knows what it has seen, heard or been told:
+//  - sight: a view cone and line of sight (walls, doors and smoke block it); an enemy has to be in
+//    view long enough to be noticed (faster near the middle of the view, up close, when moving or
+//    firing), then the reaction delay runs before the first shot;
+//  - hearing: gunfire and running footsteps give a rough position (muffled and vaguer through walls);
+//  - getting shot: only the rough direction it came from;
+//  - teammates: a callout of where an enemy was seen, a second or so later.
+// What it knows fades: it checks the last position it had, looks around, then goes back to its job.
+// Aim error that settles while tracking, recoil compensation, burst fire with counter-strafing,
+// and waypoint navigation with string pulling, jump links, doors and unsticking.
 
+// spot: how fast an enemy in view gets noticed (1/s at the middle of the view, close by);
+// wallbang: chance to put a wall-piercing shot through cover where an enemy was just seen
 const BOT_SKILL = {
-  easy: { react: 0.62, aimErr: 4.5, turn: 210, recoil: 0.25, head: 0.08, burst: [2, 4], fov: 100, settle: 1.2 },
-  normal: { react: 0.36, aimErr: 2.4, turn: 330, recoil: 0.55, head: 0.25, burst: [3, 6], fov: 110, settle: 1.9 },
-  hard: { react: 0.2, aimErr: 1.1, turn: 520, recoil: 0.85, head: 0.55, burst: [4, 8], fov: 120, settle: 2.8 },
-  expert: { react: 0.13, aimErr: 0.7, turn: 700, recoil: 0.95, head: 0.7, burst: [5, 10], fov: 126, settle: 3.5 },
+  easy: { react: 0.62, aimErr: 4.5, turn: 210, recoil: 0.25, head: 0.08, burst: [2, 4], fov: 100, settle: 1.2, spot: 2.6, wallbang: 0 },
+  normal: { react: 0.36, aimErr: 2.4, turn: 330, recoil: 0.55, head: 0.25, burst: [3, 6], fov: 110, settle: 1.9, spot: 4.0, wallbang: 0.3 },
+  hard: { react: 0.2, aimErr: 1.1, turn: 520, recoil: 0.85, head: 0.55, burst: [4, 8], fov: 120, settle: 2.8, spot: 5.6, wallbang: 0.5 },
+  expert: { react: 0.13, aimErr: 0.7, turn: 700, recoil: 0.95, head: 0.7, burst: [5, 10], fov: 126, settle: 3.5, spot: 7.5, wallbang: 0.7 },
 };
 
 const Bots = {
   rnd: mulberry32(4242),
   get skill() { return BOT_SKILL[Settings.v.botSkill] || BOT_SKILL.normal; },
-  // A loud event: enemies of `src` within `radius` may come to look.
+  ear: [0, 0, 0], tr: null,
+  // A loud event (a shot, a running footstep): enemies of `src` within `radius` hear it, half as far
+  // through walls, and only roughly where it came from (worse with distance and through walls).
   noise(pos, src, radius) {
     for (const a of Actors.list) {
       if (!a.brain || !a.alive || (src && a.team === src.team)) continue;
-      const d = Math.hypot(a.player.pos[0] - pos[0], a.player.pos[2] - pos[2]);
-      if (d < radius) a.brain.hear(pos, d / radius);
+      const ear = tickEye(a.player, this.ear), d = Math.hypot(ear[0] - pos[0], ear[2] - pos[2]);
+      if (d >= radius) continue;
+      const walls = !this.clear(ear, pos), eff = radius * (walls ? 0.5 : 1);
+      if (d >= eff) continue;
+      const err = 40 + d * (walls ? 0.3 : 0.14), r = this.rnd;
+      a.brain.hear([pos[0] + (r() - 0.5) * 2 * err, pos[1], pos[2] + (r() - 0.5) * 2 * err], d / eff);
+    }
+  },
+  // Plain line of sight through the level (no smoke): used for hearing.
+  clear(a, b) {
+    if (!this.tr) this.tr = makeTrace();
+    Game.L.cw.trace(this.tr, a[0], a[1], a[2], b[0], b[1], b[2], 0, 0, 0, MASK_SHOT);
+    return this.tr.fraction >= 1;
+  },
+  // A bot that spots an enemy tells its teammates where, a moment later (where it was then).
+  callout(from, enemy) {
+    const pos = enemy.player.pos.slice();
+    for (const m of Actors.list) {
+      if (m === from || !m.brain || !m.alive || m.team !== from.team) continue;
+      m.brain.inbox.push({ pos, at: m.brain.clock + 0.8 + this.rnd() * 0.8, who: enemy });
     }
   },
 };
@@ -32,6 +61,7 @@ class BotBrain {
     this.strafe = 0; this.strafeT = 0; this.stuckT = 0; this.anchor = null; this.anchorT = 0; this.doorT = 0; this.pullT = 0;
     this.investigate = null; this.lookYaw = null; this.wantYaw = this.a.player.yaw; this.wantPitch = 0; this.fireToggle = false;
     this.order = null; this.via = null; this.altPrev = false; this.glanceT = 0; this.glance = 0; this.smokeAt = null; this.smokeT = 0;
+    this.aware = new Map(); this.inbox = []; this.scanT = 0; this.wbTry = null; this.wbPrev = false; this.lostT = -9;
   }
 
   // Orders come from Tactics; repeating the same order keeps the current route.
@@ -51,17 +81,33 @@ class BotBrain {
     return prim || pistol || null;
   }
 
+  // A rough position from a sound: turn toward close ones, go and check.
   hear(pos, k) {
-    if (this.target) return;
-    if (!this.investigate || Bots.rnd() < 0.5) this.investigate = pos.slice();
-    if (k < 0.6) this.lookYaw = Math.atan2(-(pos[0] - this.a.player.pos[0]), -(pos[2] - this.a.player.pos[2]));
+    if (this.target && this.visible) return;
+    if (!this.investigate || k < 0.5 || Bots.rnd() < 0.4) this.investigate = pos.slice();
+    if (k < 0.7) this.lookYaw = Math.atan2(-(pos[0] - this.a.player.pos[0]), -(pos[2] - this.a.player.pos[2]));
     this.goal = null;
   }
 
+  // Shot by someone: only the rough direction it came from, not how far.
   onHurt(attacker, from) {
-    if (!from || this.target) return;
-    this.lookYaw = Math.atan2(-(from[0] - this.a.player.pos[0]), -(from[2] - this.a.player.pos[2]));
-    this.investigate = from.slice(); this.goal = null;
+    if (!from || (this.target && this.visible)) return;
+    const p = this.a.player.pos, dx = from[0] - p[0], dz = from[2] - p[2];
+    const yaw = Math.atan2(-dx, -dz) + (Bots.rnd() - 0.5) * 0.35, guess = Math.min(Math.hypot(dx, dz), 350 + Bots.rnd() * 450);
+    this.lookYaw = yaw;
+    this.investigate = [p[0] - Math.sin(yaw) * guess, p[1], p[2] - Math.cos(yaw) * guess]; this.goal = null;
+  }
+
+  // A teammate's callout: go and check where the enemy was seen (if it isn't fighting already).
+  readInbox() {
+    if (!this.inbox.length) return;
+    const now = this.inbox.filter((m) => m.at <= this.clock);
+    if (!now.length) return;
+    this.inbox = this.inbox.filter((m) => m.at > this.clock);
+    if (this.target && this.visible) return;
+    const m = now[now.length - 1], p = this.a.player.pos;
+    this.investigate = m.pos.slice(); this.goal = null;
+    if (Math.hypot(m.pos[0] - p[0], m.pos[2] - p[2]) < 900) this.lookYaw = Math.atan2(-(m.pos[0] - p[0]), -(m.pos[2] - p[2]));
   }
 
   los(a, b) {
@@ -76,21 +122,32 @@ class BotBrain {
     return [[p[0], p[1] + eyeH + 2, p[2]], [p[0], p[1] + eyeH - 14, p[2]]];
   }
 
+  // Sight, 10 times a second. Each enemy in view builds up "noticed" until the bot has really seen
+  // it; out of view it fades. Nothing outside the view cone (bar someone brushing past) is seen.
   perceive(sk) {
-    const a = this.a, pl = a.player, eye = tickEye(pl, this.eyeV), f = viewDir(pl), cosF = Math.cos(sk.fov / 2 * DEG);
-    let best = null, bestD = Infinity, bestPts = null;
+    const a = this.a, pl = a.player, eye = tickEye(pl, this.eyeV), f = viewDir(pl), cosF = Math.cos(sk.fov / 2 * DEG), dt = 0.1;
+    let best = null, bestD = Infinity;
     for (const e of Actors.list) {
-      if (!e.alive || e.team === a.team) continue;
+      if (!e.alive || e.team === a.team) { this.aware.delete(e); continue; }
       const [head, chest] = this.points(e);
-      const dx = chest[0] - eye[0], dy = chest[1] - eye[1], dz = chest[2] - eye[2], d = Math.hypot(dx, dy, dz);
-      if (d > 5000) continue;
-      const inView = (dx * f[0] + dy * f[1] + dz * f[2]) / d > cosF || d < 200 || e === this.target;
-      if (!inView) continue;
-      if (!this.los(eye, chest) && !this.los(eye, head)) continue;
-      if (d < bestD) { bestD = d; best = e; bestPts = [head, chest]; }
+      const dx = chest[0] - eye[0], dy = chest[1] - eye[1], dz = chest[2] - eye[2], d = Math.hypot(dx, dy, dz) || 1;
+      const cos = (dx * f[0] + dy * f[1] + dz * f[2]) / d, touching = d < 90;
+      const seen = d < 5000 && (cos > cosF || touching) && (this.los(eye, chest) || this.los(eye, head));
+      let aw = this.aware.get(e) || 0;
+      if (seen) {
+        const c = smoothstep(cosF, 0.995, cos), center = 0.25 + 2.75 * c * c;          // straight ahead: almost at once; the edge of view: slowly
+        const far = clamp(1.6 - d / 1600, 0.3, 1.6);                                   // close and big, or far and small
+        const move = e.player.speed() > 130 ? 1.3 : e.player.ducked ? 0.6 : 0.9;
+        const loud = Game.time - (e.lastShotT || -9) < 0.6 ? 2.2 : 1;                   // muzzle flash
+        const known = e === this.target || Math.hypot(e.player.pos[0] - (this.lastSeen ? this.lastSeen[0] : 1e9), e.player.pos[2] - (this.lastSeen ? this.lastSeen[2] : 1e9)) < 300 ? 3 : 1;
+        aw += dt * sk.spot * center * far * move * loud * known * (touching ? 4 : 1);
+      } else aw -= dt * 0.35;
+      if (aw > 0) this.aware.set(e, Math.min(aw, 1.6)); else this.aware.delete(e);
+      if (seen && aw >= 1 && d < bestD) { bestD = d; best = e; }
     }
     if (best) {
       if (best !== this.target) {
+        if (this.clock - this.lastSeenT > 4 && Bots.rnd() < 0.85) Bots.callout(a, best);
         const fresh = this.clock - this.lastSeenT > 1.5;
         this.target = best;
         this.reactUntil = this.clock + sk.react * (0.75 + Bots.rnd() * 0.5) * (fresh ? 1 : 0.4);
@@ -100,12 +157,43 @@ class BotBrain {
       }
       this.visible = true; this.lastSeen = best.player.pos.slice(); this.lastSeenT = this.clock;
     } else if (this.target) {
+      if (this.visible) this.lostT = this.clock;
       this.visible = false;
       if (!this.target.alive || this.clock - this.lastSeenT > 2.5) {
-        if (this.target.alive && this.lastSeen) this.investigate = this.lastSeen;
+        if (this.target.alive && this.lastSeen) { this.investigate = this.lastSeen; this.scanT = 0; }
         this.target = null; this.goal = null; this.path = null;
       }
     }
+  }
+
+  // Just lost sight of someone: sometimes put a wall-piercing shot through the cover where they were.
+  // Uses only where the enemy was last seen, like a player pre-firing a corner.
+  wallbangTry(dt, cmd, sk, w) {
+    const a = this.a, pl = a.player;
+    if (!this.wbTry) {
+      if (!this.target || this.visible || this.lostT < 0 || this.clock - this.lostT > 0.25 || !this.lastSeen) return false;
+      if (w.kind !== 'gun' || w.ammo <= 0 || !Wallbang.ready(a) || Bots.rnd() >= sk.wallbang) { this.lostT = -9; return false; }
+      const p = this.lastSeen, d = Math.hypot(p[0] - pl.pos[0], p[2] - pl.pos[2]);
+      this.lostT = -9;
+      if (d > 1800 || d < 120) return false;
+      const e = sk.aimErr * 1.5;
+      this.wbTry = { pos: [p[0], p[1] + 48, p[2]], t: 0, err: [(Bots.rnd() - 0.5) * e, (Bots.rnd() - 0.5) * e * 0.6], armed: false };
+    }
+    const t = this.wbTry, eye = tickEye(pl, this.eyeV);
+    t.t += dt;
+    if (t.t > 1.6 || w.kind !== 'gun' || this.visible) { this.wbTry = null; if (Wallbang.armed(a)) Wallbang.toggle(a); return false; }
+    const dx = t.pos[0] - eye[0], dy = t.pos[1] - eye[1], dz = t.pos[2] - eye[2];
+    this.wantYaw = Math.atan2(-dx, -dz) + t.err[0] * DEG; this.wantPitch = Math.atan2(dy, Math.hypot(dx, dz)) + t.err[1] * DEG;
+    if (!Wallbang.armed(a)) {
+      if (t.armed) { this.wbTry = null; return false; }            // the round went out: done
+      t.armed = true;
+      if (Wallbang.toggle(a) !== 'armed') { this.wbTry = null; return false; }
+      return true;
+    }
+    const off = Math.hypot(wrapAngle(this.wantYaw - pl.yaw), this.wantPitch - pl.pitch) / DEG;
+    if (off < 1.2 && (w.state === 'idle' || w.state === 'inspect') && w.ammo > 0) { cmd.fire = !this.fireToggle; this.fireToggle = !this.fireToggle; }
+    if (pl.speed() > 60) { const rx = Math.cos(pl.yaw), rz = -Math.sin(pl.yaw), lat = pl.vel[0] * rx + pl.vel[2] * rz; if (Math.abs(lat) > 40) cmd.side = -Math.sign(lat); }
+    return true;
   }
 
   think(dt) {
@@ -114,6 +202,7 @@ class BotBrain {
     if (!a.alive) return cmd;
     this.clock += dt;
     if ((this.perceiveT -= dt) <= 0) { this.perceiveT = 0.1; this.perceive(sk); }
+    this.readInbox();
     if (this.target && !this.target.alive) { this.target = null; this.visible = false; }
     const w = a.loadout.active, o = this.order, p = a.player.pos;
     const near = (q, r) => q && Math.hypot(q[0] - p[0], q[2] - p[2]) < r && Math.abs(q[1] - p[1]) < 60;
@@ -121,6 +210,7 @@ class BotBrain {
     const mustDefuse = o && o.kind === 'defuse' && Bomb.state === 'planted' && near(Bomb.pos, 44) && Bomb.timer < Bomb.defuseDur + 1.5;
     let busy = false;
     if (this.target && this.visible && !mustDefuse) this.fight(dt, cmd, sk, w);
+    else if (!mustDefuse && this.wallbangTry(dt, cmd, sk, w)) busy = true;
     else {
       if (this.target && this.lastSeen && !this.investigate) this.investigate = this.lastSeen;
       if (this.smokeAt) { busy = (this.smokeT += dt) < 4 && this.throwSmoke(cmd, this.smokeAt); if (!busy) { this.smokeAt = null; this.smokeT = 0; } }

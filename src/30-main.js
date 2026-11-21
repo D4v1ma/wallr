@@ -71,7 +71,13 @@ function fireShot(actor, w, e) {
   if (bodies.size && actor.isMe) HUD.hitmarker(head);
   const r0 = shot.results[0].res;
   const end = r0.end || [eye[0] + dir[0] * def.range, eye[1] + dir[1] * def.range, eye[2] + dir[2] * def.range];
-  if (e.tracer) FX.tracers.spawn(mz, end);
+  if (shot.wallbang) {
+    // a wallbang round: a hot streak along the whole line, sparks where it leaves each wall
+    FX.tracers.spawn(mz, end, 9500, 900); FX.tracers.spawn(mz, end, 9000, 600);
+    Snd.wallbang(actor.isMe ? null : mz);
+    DLights.add(mz[0], mz[1], mz[2], [1.0, 0.45, 0.2], 360, 0.09);
+    if (actor.isMe) HUD.note(`Wallbang · ${shot.results[0].res.pens} wall${shot.results[0].res.pens === 1 ? '' : 's'}`);
+  } else if (e.tracer) FX.tracers.spawn(mz, end);
   FX.muzzleSmoke(mz, dir, w.heat);
   if (actor.isMe) Game.lastHit = { what, damage, pens: r0.pens, dist: r0.dist, dealt: shot.dealt };
 }
@@ -102,6 +108,7 @@ function simTick(dt) {
     // freeze time: look and buy only; defusing pins you in place
     if (Match.frozen() || Bomb.defusing(a)) cmd = Object.assign({}, cmd, { fwd: 0, side: 0, jump: false, fire: false, alt: false, drop: false });
     Bomb.control(a, cmd, dt);
+    if (cmd.wallbang && a.isMe) HUD.wallbangNote(Wallbang.toggle(a));
     if (cmd.use && !Bomb.defusing(a) && !Items.use(a)) { const d = Ents.doorInReach(tickEye(a.player), viewDir(a.player)); if (d) d.toggle(a.player); }
     if (cmd.drop) Items.drop(a, a.loadout.active, true);
     a.player.tick(cmd, dt);
@@ -140,7 +147,10 @@ function simTick(dt) {
 
 function handleHotkeys() {
   const pl = Game.player;
-  if (Input.pressed('KeyV')) { pl.noclip = !pl.noclip; if (!pl.noclip) pl.vel = [0, 0, 0]; HUD.note(pl.noclip ? 'Noclip on · Space up, C down' : 'Noclip off'); }
+  if (Input.pressed('KeyV')) {
+    if (!Actors.me.admin) HUD.note('Noclip is an admin power');
+    else { pl.noclip = !pl.noclip; if (!pl.noclip) pl.vel = [0, 0, 0]; HUD.note(pl.noclip ? 'Noclip on · Space up, C down' : 'Noclip off'); }
+  }
   if (Input.pressed('F1') || Input.pressed('Backquote')) { HUD.debug = !HUD.debug; $('hud-debug').hidden = !HUD.debug; }
   if (Input.pressed('KeyH')) { const shown = !HUD.el['hud-hint'].hidden; HUD.hintPinned = !shown; Settings.set('showHints', !shown); }
   if (Input.pressed('KeyB') || Input.touch.buyEdge) { Input.touch.buyEdge = false; BuyMenu.toggle(); }
@@ -190,7 +200,7 @@ function frame(now) {
   Game.last = t;
   const t0 = performance.now();
   const me = Actors.me, pl = Game.player;
-  const held = Game.loadout.active, zoomFov = me.alive && !Game.spectate && held.kind === 'gun' ? held.scopeFov() : 0;
+  const held = Game.loadout.active, zoomFov = me.alive && !Game.spectate && held.kind === 'gun' ? held.scopeFov() || held.adsFov() : 0;
   if (Game.state === 'playing') {
     Input.takeLook(Game.look, dt);
     if (me.alive) {
@@ -240,7 +250,8 @@ function frame(now) {
     FX.lightAt(mq.st.x, mq.st.y + 40, mq.st.z, mq.pm.light); mq.pm.setLight(mq.pm.light[0], mq.pm.light[1], mq.pm.light[2]);
   }
   const zf = me.alive && !Game.spectate && w.kind === 'gun' ? w.scopeFov() : 0;   // after this frame's ticks
-  R.setZoom(zf); HUD.scope(zf);
+  const af = me.alive && !Game.spectate && w.kind === 'gun' ? w.adsFov() : 0;
+  R.setZoom(zf || af); HUD.scope(zf); HUD.ads(me.alive && w.kind === 'gun' ? w.ads : 0);
   Viewmodel.rig.visible = me.alive && !Game.spectate && !zf && !inMenu;
   if (!inMenu) $('sf-fade').style.opacity = '0';
   Viewmodel.update(dt, pl, w, Game.look, eye, Game.alpha);
@@ -331,6 +342,7 @@ async function loadMap(key, from = 0, to = 1) {
   } else Game.player.cw = L.cw;
   Actors.init();
   Actors.me.name = Accounts.name();
+  Admin.apply();
   Game.player.maxSpeed = Game.loadout.active.def.maxSpeed;
   MenuCam.reset(L);
   HUD.el['hud-tag'].textContent = L.name;
@@ -364,6 +376,7 @@ const Session = {
     if (cfg.mode !== 'defuse') { Actors.feed = []; Actors.score = [0, 0]; }
     me.name = Accounts.name();
     this.active = true; this.cfg = cfg; this.done = false; this.results = null; this.matchId = randomId(6) + Date.now().toString(36);
+    this.adminUsed = false; Admin.apply();
   },
   // What leaving now would record: practice XP in skirmish; in defuse a loss once the match has
   // started (nothing if you leave during the first buy time without a kill).
@@ -374,13 +387,14 @@ const Session = {
   // Fold the match into the profile (saved to the signed-in account on this device) exactly once.
   record(outcome) {
     this.done = true;
+    if (this.adminUsed) { this.results = Profile.adminResults(this.cfg, this.stats(Actors.me), outcome); Accounts.clearCheckpoint(); return this.results; }
     this.results = Profile.applyMatch(this.cfg, this.stats(Actors.me), outcome, this.matchId);
     Accounts.clearCheckpoint();
     return this.results;
   },
   // Kept up to date every round and when the tab is hidden, so an exit still counts if the page dies.
   checkpoint() {
-    if (!this.active || this.done || Accounts.guest) return;
+    if (!this.active || this.done || Accounts.guest || this.adminUsed) return;
     const st = this.stats(Actors.me);
     Accounts.checkpoint({ matchId: this.matchId, cfg: this.cfg, st, outcome: this.exitOutcome(st), at: Date.now() });
   },
@@ -494,7 +508,7 @@ async function boot(hot) {
   // Test/debug hooks (harmless in normal play).
   window.__SF = {
     Game, R, Ents, FX, Input, Ballistics, Grenades, Settings, Viewmodel, Snd, Actors, Nav, Bots, Items, Bomb, Match, SHOP, Tactics, BuyMenu, Radar, MAPS,
-    Profile, Arsenal, Session, Menu, Rewards, ArmoryView, Accounts, launch, loadMap,
+    Profile, Arsenal, Session, Menu, Rewards, ArmoryView, Accounts, Admin, Wallbang, WALLBANG, launch, loadMap,
     setView(x, y, z, yawDeg, pitchDeg) {
       const p = Game.player; p.spawn([x, y, z], yawDeg * DEG); p.pitch = (pitchDeg || 0) * DEG;
       const w = Game.loadout.active; if (w.state === 'draw') { w.state = 'idle'; w.anim = 'idle'; }

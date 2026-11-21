@@ -99,6 +99,8 @@ const WEAPONS = {
   },
 };
 
+const ADS = { time: 0.16, zoom: 0.82, inacc: 0.78, spread: 0.85, speed: 0.8 };   // a little more accurate, a little slower
+
 class Weapon {
   constructor(def) {
     this.def = def; this.kind = def.kind; this.state = 'holstered'; this.t = 0; this.clock = 0;
@@ -139,21 +141,23 @@ class Gun extends Weapon {
     this.ammo = def.mag; this.reserve = def.reserve; this.nextFire = 0; this.fireInacc = 0;
     this.sprayIdx = 0; this.jit = [0, 0]; this.triggerHeld = true; this.emptyReload = false; this.slideLocked = false;
     this.lastShot = -9; this.shotCount = 0; this.heat = 0; this.reloadDur = 0; this.rnd = mulberry32(def.slot * 977 + def.mag);
-    this.zoom = 0; this.zoomResume = 0; this.altHeld = true; this.reloadPhase = null; this.phaseT = 0; this.reloadAbort = false;
+    this.zoom = 0; this.zoomResume = 0; this.altHeld = true; this.reloadPhase = null; this.phaseT = 0; this.reloadAbort = false; this.ads = 0;
   }
-  spreadBase() { return this.def.spread; }
-  speed() { return this.zoom && this.def.scopedSpeed ? this.def.scopedSpeed : this.def.maxSpeed; }
+  spreadBase() { return this.def.spread * (1 - (1 - ADS.spread) * this.ads); }
+  speed() { return (this.zoom && this.def.scopedSpeed ? this.def.scopedSpeed : this.def.maxSpeed) * (1 - (1 - ADS.speed) * this.ads); }
+  // Horizontal 4:3 FOV while scoped in with Mouse 2 (0 when not).
+  adsFov() { return this.ads > 0.001 ? Settings.v.fov * (1 - (1 - ADS.zoom) * smoothstep(0, 1, this.ads)) : 0; }
   // Horizontal 4:3 FOV of the current scope level (0 when not zoomed).
   scopeFov() { return this.zoom && this.def.scope ? this.def.scope[this.zoom - 1] : 0; }
-  draw() { super.draw(); this.triggerHeld = true; this.altHeld = true; this.zoom = 0; this.zoomResume = 0; }
-  holster() { super.holster(); this.zoom = 0; this.zoomResume = 0; this.reloadPhase = null; }
+  draw() { super.draw(); this.triggerHeld = true; this.altHeld = true; this.zoom = 0; this.zoomResume = 0; this.ads = 0; }
+  holster() { super.holster(); this.zoom = 0; this.zoomResume = 0; this.reloadPhase = null; this.ads = 0; }
 
   inaccuracy(pl) {
     const d = this.def, scoped = this.zoom > 0;
     let a = scoped ? (pl.ducked ? d.inScopedCrouch : d.inScoped) : (pl.ducked ? d.inCrouch : d.inStand);
     a += d.inMove * smoothstep(d.maxSpeed * 0.34, d.maxSpeed * 0.95, pl.speed());
     if (!pl.onGround && !pl.noclip) a += d.inAir;
-    return a + d.inLand * pl.landPenalty + this.fireInacc;
+    return (a + d.inLand * pl.landPenalty + this.fireInacc) * (1 - (1 - ADS.inacc) * this.ads);
   }
 
   startReload() {
@@ -219,8 +223,12 @@ class Gun extends Weapon {
       if (this.zoomResume && ready && time >= this.nextFire - 0.08) { this.zoom = this.zoomResume; this.zoomResume = 0; this.events.push({ type: 'zoom', level: this.zoom }); }
     }
     this.altHeld = cmd.alt;
+    // scope in (every gun without a real scope): hold Mouse 2; reloading drops it
+    const adsWant = !d.scope && cmd.alt && (ready || this.state === 'draw') ? 1 : 0;
+    if (adsWant && this.state === 'inspect') this.state = 'idle';
+    this.ads = adsWant ? Math.min(1, this.ads + dt / ADS.time) : Math.max(0, this.ads - dt / (ADS.time * 0.8));
     if (cmd.reload && ready && this.ammo < d.mag && this.reserve > 0) this.startReload();
-    else if (cmd.inspect && !this.zoom) this.startInspect();
+    else if (cmd.inspect && !this.zoom && this.ads < 0.05) this.startInspect();
     if (cmd.fire && (this.state === 'idle' || this.state === 'inspect') && time >= this.nextFire && (d.auto || !this.triggerHeld)) {
       if (this.ammo > 0) this.fire(pl, time, interval);
       else { this.events.push({ type: 'dry' }); this.nextFire = time + 0.25; if (this.reserve > 0) this.startReload(); }

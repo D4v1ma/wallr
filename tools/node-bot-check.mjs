@@ -15,7 +15,7 @@ const FX = { L: null, probe: [0, 0, 0, 0], lightAt: (x, y, z, o) => o };
 const Ents = { targets: [], doors: [], doorInReach: () => null, tick: noop };
 const Game = { L: null, player: null, loadout: null, time: 0 };`;
 const src = stubs + files.map((f) => readFileSync(new URL(f, dir), 'utf8')).join('\n');
-const api = new Function(`${src}\nreturn { TEX_DEFS, buildTestRange, compileLevel, Nav, Player, Loadout, Actors, Actor, Combat, Game, Settings, WEAPONS, SmokeCloud, Grenades, IDLE_CMD };`)();
+const api = new Function(`${src}\nreturn { TEX_DEFS, buildTestRange, compileLevel, Nav, Player, Loadout, Actors, Actor, Combat, Game, Settings, WEAPONS, SmokeCloud, Grenades, IDLE_CMD, Bots };`)();
 const { Game, Actors, Combat, Nav, Settings, WEAPONS } = api;
 const tex = Object.fromEntries(Object.entries(api.TEX_DEFS).map(([n, def]) => [n, { def, avg: [0.5, 0.5, 0.5] }]));
 const L = api.compileLevel(api.buildTestRange(), tex);
@@ -27,6 +27,7 @@ Settings.v.team = 1; Settings.v.botSkill = 'normal'; Settings.v.ff = false;
 Actors.init();
 const DT = 1 / 64;
 let ok = true; const check = (name, cond, info = '') => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}  ${info}`); ok &&= !!cond; };
+const wrapA = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
 const place = (a, x, y, z, yaw) => { a.player.spawn([x, y, z], yaw); a.player.pitch = 0; a.alive = true; a.health = 100; a.armor = 100; a.helmet = true; };
 const pose = () => Actors.render(DT, 1);
 const me = Actors.me;
@@ -94,9 +95,32 @@ for (let s = 0; s < 64 * 20; s += 32) {
   stuckMax = Math.max(stuckMax, bot.brain.stuckT);
 }
 check('bot roams the map between hotspots', travelled > 1500, `travelled ${travelled.toFixed(0)}u in 20s, worst stuck ${stuckMax.toFixed(1)}s, now at ${bot.player.pos.map((v) => v.toFixed(0))}`);
-// 7) bot vs bot duel
+// 7) what a bot does NOT know: you behind it, you behind a wall, exactly where a shot came from
+me.alive = true; me.health = 100;
+place(me, 300, 0, 100, -Math.PI / 2); place(bot, 700, 0, 100, -Math.PI / 2); bot.brain.reset();   // you stand behind it, still and silent
+bot.brain.setOrder({ kind: 'hold', pos: [700, 0, 100], yaw: -Math.PI / 2 }); shots.length = 0;
+step(64 * 2, { noRespawn: true, botStatic: true });
+check('a bot doesn’t see you standing behind it', !bot.brain.target && me.alive && shots.length === 0, `target=${!!bot.brain.target}`);
+place(bot, 300, 0, 100, Math.PI / 2); bot.brain.reset();
+api.Bots.noise([-200, 64, 300], null, 1700);                     // a shot on the far side of the hall wall
+const inv = bot.brain.investigate, off = inv ? Math.hypot(inv[0] + 200, inv[2] - 300) : -1;
+check('hearing a shot through a wall gives only a rough position', inv && off > 1 && off < 0.5 * Math.hypot(300 + 200, 300 - 100), `off by ${off.toFixed(0)} u`);
+place(bot, 700, 0, 100, Math.PI / 2);
+bot.brain.reset();
+place(me, 300, 0, 100, -Math.PI / 2); bot.player.yaw = -Math.PI / 2;
+bot.brain.onHurt(me, [300, 64, 100]);
+const g = bot.brain.investigate, dirErr = g ? Math.abs(wrapA(Math.atan2(-(g[0] - 700), -(g[2] - 100)) - Math.atan2(-(300 - 700), -(100 - 100)))) : 9;
+check('getting shot only gives the rough direction it came from', g && dirErr < 0.3 && !bot.brain.target, `direction off by ${(dirErr * 57.3).toFixed(0)}°, aims at ${g ? g.map((v) => v.toFixed(0)) : '-'}`);
+const mate = Actors.addBot(0); place(mate, -600, 0, 100, 0); mate.brain.reset(); bot.brain.reset();
+api.Bots.callout(bot, me);
+const heardEarly = !!mate.brain.investigate;
+step(64 * 2, { noRespawn: true, botStatic: true });
+const told = mate.brain.investigate || mate.brain.goal;
+check('a callout reaches teammates a moment later, with where you were', !heardEarly && told && Math.hypot(told[0] - 300, told[2] - 100) < 60, JSON.stringify(told && told.map((v) => +v.toFixed(0))));
+Actors.list.splice(Actors.list.indexOf(mate), 1);
+// 8) bot vs bot duel in the open
 const w = Actors.addBot(1);
-place(bot, 200, 0, -40, -Math.PI / 2); place(w, 900, 0, -40, Math.PI / 2); bot.brain.reset(); w.brain.reset(); shots.length = 0;
+place(bot, 300, 0, 100, -Math.PI / 2); place(w, 700, 0, 100, Math.PI / 2); bot.brain.reset(); w.brain.reset(); shots.length = 0;
 step(64 * 8, { noRespawn: true });
 check('bot duel ends with one side dead', bot.alive !== w.alive, `raider alive=${bot.alive} (${bot.health}hp) warden alive=${w.alive} (${w.health}hp), shots=${shots.length}`);
 check('killfeed and score updated', Actors.feed.length > 0 && Actors.score[0] + Actors.score[1] > 0, JSON.stringify(Actors.score));

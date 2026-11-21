@@ -86,6 +86,7 @@ const Radar = {
     const eye = tickEye(me.player), f = viewDir(me.player);
     for (const e of Actors.list) {
       if (!e.alive || e.team === me.team) continue;
+      if (me.admin) { this.spotted.set(e, 1.0); continue; }
       let seen = Actors.list.some((t) => t.alive && t.team === me.team && t.brain && t.brain.target === e && t.brain.visible);
       if (!seen && me.alive) {
         const p = e.player.pos, c = [p[0], p[1] + 46, p[2]], dx = c[0] - eye[0], dy = c[1] - eye[1], dz = c[2] - eye[2], d = Math.hypot(dx, dy, dz) || 1;

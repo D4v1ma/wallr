@@ -1,4 +1,4 @@
-# Short Fuse: the path to a real engine and to multiplayer
+# wallr: the path to a real engine and to multiplayer
 
 The browser prototype is built so both moves are incremental rather than rewrites:
 

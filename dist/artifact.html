@@ -1,4 +1,4 @@
-<title>Short Fuse</title>
+<title>wallr</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -551,6 +551,29 @@ button.link:hover, button.link:focus-visible { color: #ffc565; text-decoration: 
 .car-acct { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 12px; background: var(--field); border: 1px solid var(--panel-edge); font-size: 14px; }
 .saved { color: var(--ok); }
 @media (max-width: 700px) { .home-notice { position: static; transform: none; max-width: none; } }
+
+/* ---------- wallbang rounds ---------- */
+.wbx { display: flex; align-items: center; gap: 8px; padding: 3px 8px; font-size: 11px; letter-spacing: 0.14em; color: var(--hud-dim); background: rgba(8, 10, 9, 0.45); border-left: 2px solid rgba(255, 122, 61, 0.6); }
+.wbx:empty { display: none; }
+.wbx .wb-l { font-weight: 600; color: #ff9a6a; }
+.wbx .wb-p { display: flex; gap: 3px; align-items: center; }
+.wbx .wb-p i { width: 9px; height: 9px; border: 1px solid #ff9a6a; transform: rotate(45deg); }
+.wbx .wb-p i.on { background: #ff7a3d; border-color: #ff7a3d; box-shadow: 0 0 6px rgba(255, 122, 61, 0.7); }
+.wbx .wb-p .inf { font-size: 15px; color: #ff9a6a; }
+.wbx em { font-style: normal; letter-spacing: 0.06em; text-transform: none; font-family: var(--font-body); font-size: 12px; }
+.wbx.locked { opacity: 0.6; }
+.wbx.armed { color: var(--hud); background: rgba(120, 36, 10, 0.55); border-left-color: #ff7a3d; animation: sf-pulse 0.9s ease-in-out infinite; }
+.xh.wb { --xc: #ff7a3d; }
+.xh.wb::after { content: ""; position: absolute; left: -11px; top: -11px; width: 18px; height: 18px; border: 2px solid #ff7a3d; border-radius: 50%; box-shadow: 0 0 6px rgba(255, 122, 61, 0.6); }
+.hud-feed .wbk { font-style: normal; font-family: var(--font-display); font-size: 10px; letter-spacing: 0.08em; padding: 0 3px; color: #1b1306; background: #ff7a3d; }
+#sf-touch .btns button.wbt { background: rgba(255, 122, 61, 0.35); }
+
+/* the wallr wordmark: lowercase, the r in the accent colour */
+.brand { text-transform: none; letter-spacing: 0.01em; }
+.home-card .hc-acct .adm, .adm { font-style: normal; font-family: var(--font-display); font-size: 10px; letter-spacing: 0.14em; padding: 1px 5px; margin-left: 6px; color: #1b1306; background: #ff7a3d; vertical-align: 2px; }
+.admin-box { display: flex; flex-direction: column; gap: 10px; padding-top: 8px; border-top: 1px solid var(--panel-edge); }
+.admin-box .sect { margin: 0; }
+.admin-list { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.6; }
 </style>
 <div id="sf-root">
   <div id="sf-stage"><canvas id="sf-canvas" tabindex="-1" aria-label="Game view"></canvas></div>
@@ -563,7 +586,7 @@ button.link:hover, button.link:focus-visible { color: #ffc565; text-decoration: 
     <div class="hud-corner hud-tl">
       <div class="radar-wrap"><canvas id="hud-radar" width="168" height="168" aria-hidden="true"></canvas><div class="place" id="hud-place"></div></div>
       <div class="tag" id="hud-tag">Saltpan Depot</div>
-      <div class="hint" id="hud-hint"><kbd>WASD</kbd> move <kbd>Space</kbd> jump <kbd>C</kbd> crouch <kbd>Shift</kbd> walk<br><kbd>1</kbd>–<kbd>5</kbd> weapons <kbd>B</kbd> buy <kbd>G</kbd> drop <kbd>E</kbd> use / defuse<br><kbd>R</kbd> reload <kbd>Tab</kbd> scores <kbd>F1</kbd> debug <kbd>H</kbd> hide hints</div>
+      <div class="hint" id="hud-hint"><kbd>WASD</kbd> move <kbd>Space</kbd> jump <kbd>C</kbd> crouch <kbd>Shift</kbd> walk<br><kbd>X</kbd> wallbang round <kbd>Mouse 2</kbd> scope in <kbd>1</kbd>–<kbd>5</kbd> weapons<br><kbd>B</kbd> buy <kbd>G</kbd> drop <kbd>E</kbd> use / defuse <kbd>R</kbd> reload <kbd>Tab</kbd> scores <kbd>F1</kbd> debug <kbd>H</kbd> hide hints</div>
     </div>
     <div class="hud-top">
       <div class="hud-score" id="hud-score"></div>
@@ -588,6 +611,7 @@ button.link:hover, button.link:focus-visible { color: #ffc565; text-decoration: 
     </div>
     <div class="hud-bc"><div id="hud-prompt"></div><div id="hud-speed"></div></div>
     <div class="hud-corner hud-br">
+      <div class="wbx" id="hud-wb" aria-live="polite"></div>
       <div class="wname" id="hud-wname">KESTREL AR</div>
       <div class="reloadbar" id="hud-reload"><i></i></div>
       <div class="stat ammo" id="hud-ammo"><span class="big" id="hud-mag">30</span><span class="res" id="hud-res">/ 90</span></div>
@@ -608,6 +632,7 @@ button.link:hover, button.link:focus-visible { color: #ffc565; text-decoration: 
       <button type="button" data-act="use">USE</button>
       <button type="button" data-act="switch">SWAP</button>
       <button type="button" data-act="buy">BUY</button>
+      <button type="button" class="wbt" data-act="wallbang">WALL</button>
     </div>
     <button type="button" class="btn tmenu" id="t-menu">Menu</button>
   </div>
@@ -617,8 +642,8 @@ button.link:hover, button.link:focus-visible { color: #ffc565; text-decoration: 
     <section id="scr-loading" class="scr scr-center" aria-labelledby="sf-title">
       <div class="sheet narrow">
         <header class="sheet-head brandhead">
-          <div class="brand" id="sf-title">Short<span>·</span>Fuse</div>
-          <div class="stagecode"><b>Stage 6</b><span id="load-map">Loading</span></div>
+          <div class="brand" id="sf-title">wall<span>r</span></div>
+          <div class="stagecode"><b>Stage 7</b><span id="load-map">Loading</span></div>
         </header>
         <div class="sheet-body">
           <div class="load-line"><span id="load-label">Preparing</span><b id="load-pct">0%</b></div>
@@ -630,7 +655,7 @@ button.link:hover, button.link:focus-visible { color: #ffc565; text-decoration: 
 
     <section id="scr-home" class="scr scr-home" hidden>
       <div class="home-left">
-        <div class="home-brand"><div class="brand big">Short<span>·</span>Fuse</div><div class="tagline">Tactical defuse shooter · 5v5 with bots</div></div>
+        <div class="home-brand"><div class="brand big">wall<span>r</span></div><div class="tagline">The wallbang shooter · 5v5 with bots</div></div>
         <nav class="home-nav" aria-label="Main menu">
           <button type="button" class="hn primary" data-go="create" id="btn-play" data-autofocus><b>Play</b><small>Create a match: map, bots, casual or ranked</small></button>
           <button type="button" class="hn" data-go="loadout"><b>Loadout</b><small>Attachments and camos for every gun</small></button>
@@ -638,7 +663,7 @@ button.link:hover, button.link:focus-visible { color: #ffc565; text-decoration: 
           <button type="button" class="hn" data-go="career"><b>Career</b><small>Rank, level, stats, match history</small></button>
           <div class="hn-row"><button type="button" class="hn small" data-go="settings"><b>Settings</b></button><button type="button" class="hn small" data-go="controls"><b>Controls</b></button><button type="button" class="hn small" data-act="fullscreen" id="btn-full"><b>Fullscreen</b></button></div>
         </nav>
-        <p class="home-foot">An original browser shooter. Progress is saved on this device. <span class="stagecode-inline">Stage 6</span></p>
+        <p class="home-foot">An original browser shooter. Progress is saved on this device. <span class="stagecode-inline">Stage 7</span></p>
       </div>
       <aside class="home-card" id="home-card" aria-label="Your profile"></aside>
       <div class="home-notice" id="home-notice" hidden role="status"></div>
@@ -716,6 +741,7 @@ button.link:hover, button.link:focus-visible { color: #ffc565; text-decoration: 
               <div class="set check"><input type="checkbox" id="set-fps"><label for="set-fps">Show frame rate</label></div>
               <div class="set check"><input type="checkbox" id="set-speed"><label for="set-speed">Show speed (units/s)</label></div>
             </div>
+          <div class="admin-box" id="admin-box"></div>
         </div>
       </div>
     </section>
@@ -732,16 +758,18 @@ button.link:hover, button.link:focus-visible { color: #ffc565; text-decoration: 
               <div><span>Fire / slash / throw</span><span><kbd>Mouse 1</kbd></span></div>
               <div><span>Stab / underhand lob</span><span><kbd>Mouse 2</kbd></span></div>
               <div><span>Reload</span><span><kbd>R</kbd></span></div>
+              <div><span>Load a wallbang round (next shot pierces every wall)</span><span><kbd>X</kbd></span></div>
+              <div><span>Scope in (a little more accurate)</span><span>hold <kbd>Mouse 2</kbd></span></div>
               <div><span>Weapon slots (5 = the charge)</span><span><kbd>1</kbd> – <kbd>5</kbd></span></div>
               <div><span>Buy menu (buy time, near spawn)</span><span><kbd>B</kbd>, then <kbd>1</kbd> – <kbd>9</kbd></span></div>
               <div><span>Drop weapon</span><span><kbd>G</kbd></span></div>
               <div><span>Plant the charge (in A or B)</span><span>hold <kbd>Mouse 1</kbd></span></div>
               <div><span>Defuse the charge</span><span>hold <kbd>E</kbd></span></div>
-              <div><span>Scoped zoom</span><span><kbd>Mouse 2</kbd></span></div>
+              <div><span>Osprey LR scope zoom</span><span><kbd>Mouse 2</kbd></span></div>
               <div><span>Last weapon / cycle</span><span><kbd>Q</kbd> / <kbd>Wheel</kbd></span></div>
               <div><span>Inspect weapon</span><span><kbd>F</kbd></span></div>
               <div><span>Open door / pick up weapon</span><span><kbd>E</kbd></span></div>
-              <div><span>Noclip fly</span><span><kbd>V</kbd></span></div>
+              <div><span>Noclip fly (admins)</span><span><kbd>V</kbd></span></div>
               <div><span>Debug readout</span><span><kbd>F1</kbd> / <kbd>`</kbd></span></div>
               <div><span>Hide hints</span><span><kbd>H</kbd></span></div>
               <div><span>Scoreboard</span><span><kbd>Tab</kbd></span></div>
@@ -789,7 +817,7 @@ button.link:hover, button.link:focus-visible { color: #ffc565; text-decoration: 
 // Core helpers: math, deterministic noise, settings persistence.
 // All game modules share this IIFE scope; keep names stable.
 
-const GAME_VERSION = 'stage-6';
+const GAME_VERSION = 'stage-7';
 const DEG = Math.PI / 180;
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -4885,6 +4913,16 @@ const Snd = {
     else if (kind === 'shotgun') this.shotgunShot(pos); else if (kind === 'sniper') this.sniperShot(pos); else this.rifleShot(pos);
   },
 
+  // A wallbang round: a hard supersonic crack with a ringing tail over the gun's own report.
+  wallbang(pos) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime, o = this.dest(pos || null, 1.1), dry = pos ? o : [this.master];
+    this.nz(t, dry, { type: 'highpass', f: 4200, q: 0.7, g: 0.5, a: 0.0004, d: 0.03 });
+    this.tone(t, o, { f0: 2400, f1: 900, dur: 0.22, g: 0.12 });
+    this.tone(t, o, { f0: 70, f1: 38, dur: 0.3, g: 0.6 });
+    this.nz(t + 0.02, [this.revSend], { type: 'bandpass', f: 1300, q: 0.8, g: 0.5, a: 0.01, d: 0.7 });
+  },
+
   // Suppressed: a dull cough and the action cycling, little echo.
   suppShot(pos, kind) {
     if (!this.ready) return;
@@ -4933,6 +4971,12 @@ const Snd = {
     if (!this.ready) return;
     const t = this.ctx.currentTime, o = [this.master];
     switch (part) {
+      case 'wbArm':
+        this.nz(t, o, { type: 'bandpass', f: 3000, q: 3, g: 0.5, d: 0.025 });
+        this.tone(t + 0.03, o, { f0: 600, f1: 1500, dur: 0.16, g: 0.07 });
+        this.nz(t + 0.09, o, { type: 'bandpass', f: 1900, q: 2.5, g: 0.45, d: 0.03 });
+        break;
+      case 'wbOff': this.nz(t, o, { type: 'bandpass', f: 1700, q: 2.5, g: 0.35, d: 0.03 }); break;
       case 'magout': this.reload('out'); break;
       case 'magin': this.reload('in'); break;
       case 'bolt': this.reload('bolt'); break;
@@ -5082,7 +5126,7 @@ const Snd = {
 // ==== 12-input.js ====
 // Keyboard / mouse / touch input. Edge-triggered presses are latched until a tick consumes them.
 
-const GAME_KEYS = new Set(['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyC', 'KeyE', 'KeyR', 'KeyV', 'KeyH', 'KeyF', 'KeyQ', 'Digit1', 'Digit2', 'Digit3', 'Digit4',
+const GAME_KEYS = new Set(['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyC', 'KeyE', 'KeyR', 'KeyV', 'KeyH', 'KeyF', 'KeyQ', 'KeyX', 'Digit1', 'Digit2', 'Digit3', 'Digit4',
   'F1', 'Backquote', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight']);
 
 const Input = {
@@ -5193,6 +5237,7 @@ const Input = {
         else if (act === 'use') { t.useEdge = true; t.useDown = true; }
         else if (act === 'switch') t.switchEdge = true;
         else if (act === 'buy') t.buyEdge = true;
+        else if (act === 'wallbang') t.wbEdge = true;
         e.preventDefault();
       }, { passive: false });
       b.addEventListener('touchend', (e) => { if (act === 'fire') t.fire = false; if (act === 'use') t.useDown = false; e.preventDefault(); }, { passive: false });
@@ -5218,6 +5263,7 @@ const Input = {
     cmd.drop = this.pressed('KeyG');
     cmd.alt = !ui && this.mouse[2];
     cmd.inspect = this.pressed('KeyF');
+    cmd.wallbang = (!ui && this.pressed('KeyX')) || t.wbEdge; t.wbEdge = false;
     cmd.slot = ui ? 0 : this.pressed('Digit1') ? 1 : this.pressed('Digit2') ? 2 : this.pressed('Digit3') ? 3 : this.pressed('Digit4') ? 4 : this.pressed('Digit5') ? 5 : 0;
     cmd.last = this.pressed('KeyQ');
     cmd.cycle = this.wheel > 0 ? 1 : this.wheel < 0 ? -1 : t.switchEdge ? 1 : 0;
@@ -5623,6 +5669,8 @@ const WEAPONS = {
   },
 };
 
+const ADS = { time: 0.16, zoom: 0.82, inacc: 0.78, spread: 0.85, speed: 0.8 };   // a little more accurate, a little slower
+
 class Weapon {
   constructor(def) {
     this.def = def; this.kind = def.kind; this.state = 'holstered'; this.t = 0; this.clock = 0;
@@ -5663,21 +5711,23 @@ class Gun extends Weapon {
     this.ammo = def.mag; this.reserve = def.reserve; this.nextFire = 0; this.fireInacc = 0;
     this.sprayIdx = 0; this.jit = [0, 0]; this.triggerHeld = true; this.emptyReload = false; this.slideLocked = false;
     this.lastShot = -9; this.shotCount = 0; this.heat = 0; this.reloadDur = 0; this.rnd = mulberry32(def.slot * 977 + def.mag);
-    this.zoom = 0; this.zoomResume = 0; this.altHeld = true; this.reloadPhase = null; this.phaseT = 0; this.reloadAbort = false;
+    this.zoom = 0; this.zoomResume = 0; this.altHeld = true; this.reloadPhase = null; this.phaseT = 0; this.reloadAbort = false; this.ads = 0;
   }
-  spreadBase() { return this.def.spread; }
-  speed() { return this.zoom && this.def.scopedSpeed ? this.def.scopedSpeed : this.def.maxSpeed; }
+  spreadBase() { return this.def.spread * (1 - (1 - ADS.spread) * this.ads); }
+  speed() { return (this.zoom && this.def.scopedSpeed ? this.def.scopedSpeed : this.def.maxSpeed) * (1 - (1 - ADS.speed) * this.ads); }
+  // Horizontal 4:3 FOV while scoped in with Mouse 2 (0 when not).
+  adsFov() { return this.ads > 0.001 ? Settings.v.fov * (1 - (1 - ADS.zoom) * smoothstep(0, 1, this.ads)) : 0; }
   // Horizontal 4:3 FOV of the current scope level (0 when not zoomed).
   scopeFov() { return this.zoom && this.def.scope ? this.def.scope[this.zoom - 1] : 0; }
-  draw() { super.draw(); this.triggerHeld = true; this.altHeld = true; this.zoom = 0; this.zoomResume = 0; }
-  holster() { super.holster(); this.zoom = 0; this.zoomResume = 0; this.reloadPhase = null; }
+  draw() { super.draw(); this.triggerHeld = true; this.altHeld = true; this.zoom = 0; this.zoomResume = 0; this.ads = 0; }
+  holster() { super.holster(); this.zoom = 0; this.zoomResume = 0; this.reloadPhase = null; this.ads = 0; }
 
   inaccuracy(pl) {
     const d = this.def, scoped = this.zoom > 0;
     let a = scoped ? (pl.ducked ? d.inScopedCrouch : d.inScoped) : (pl.ducked ? d.inCrouch : d.inStand);
     a += d.inMove * smoothstep(d.maxSpeed * 0.34, d.maxSpeed * 0.95, pl.speed());
     if (!pl.onGround && !pl.noclip) a += d.inAir;
-    return a + d.inLand * pl.landPenalty + this.fireInacc;
+    return (a + d.inLand * pl.landPenalty + this.fireInacc) * (1 - (1 - ADS.inacc) * this.ads);
   }
 
   startReload() {
@@ -5743,8 +5793,12 @@ class Gun extends Weapon {
       if (this.zoomResume && ready && time >= this.nextFire - 0.08) { this.zoom = this.zoomResume; this.zoomResume = 0; this.events.push({ type: 'zoom', level: this.zoom }); }
     }
     this.altHeld = cmd.alt;
+    // scope in (every gun without a real scope): hold Mouse 2; reloading drops it
+    const adsWant = !d.scope && cmd.alt && (ready || this.state === 'draw') ? 1 : 0;
+    if (adsWant && this.state === 'inspect') this.state = 'idle';
+    this.ads = adsWant ? Math.min(1, this.ads + dt / ADS.time) : Math.max(0, this.ads - dt / (ADS.time * 0.8));
     if (cmd.reload && ready && this.ammo < d.mag && this.reserve > 0) this.startReload();
-    else if (cmd.inspect && !this.zoom) this.startInspect();
+    else if (cmd.inspect && !this.zoom && this.ads < 0.05) this.startInspect();
     if (cmd.fire && (this.state === 'idle' || this.state === 'inspect') && time >= this.nextFire && (d.auto || !this.triggerHeld)) {
       if (this.ammo > 0) this.fire(pl, time, interval);
       else { this.events.push({ type: 'dry' }); this.nextFire = time + 0.25; if (this.reserve > 0) this.startReload(); }
@@ -6311,6 +6365,53 @@ const Ballistics = {
       if (remaining <= 0) return res;
       sx = q[0] + dir[0] * 0.1; sy = q[1] + dir[1] * 0.1; sz = q[2] + dir[2] * 0.1;
     }
+    return res;
+  },
+
+  // Every wall a ray crosses before maxT: merged entry/exit intervals with the brush faces they use.
+  crossings(L, eye, dir, maxT) {
+    const hits = [], [ex, ey, ez] = eye, [dx, dy, dz] = dir;
+    const scan = (b, kind) => {
+      if (!slabHit(ex, ey, ez, dx, dy, dz, b.min[0], b.min[1], b.min[2], b.max[0], b.max[1], b.max[2], maxT)) return;
+      const P = b.P;
+      let t0 = -Infinity, t1 = Infinity, p0 = -1, p1 = -1;
+      for (let i = 0, o = 0; i < b.n; i++, o += 4) {
+        const den = P[o] * dx + P[o + 1] * dy + P[o + 2] * dz, dist = P[o + 3] - (P[o] * ex + P[o + 1] * ey + P[o + 2] * ez);
+        if (den > -1e-9 && den < 1e-9) { if (dist < 0) return; continue; }
+        const t = dist / den;
+        if (den < 0) { if (t > t0) { t0 = t; p0 = i; } } else if (t < t1) { t1 = t; p1 = i; }
+      }
+      if (t0 < t1 && t0 > 0 && t0 < maxT) hits.push({ b, kind, t0, p0, t1: Math.min(t1, maxT), p1: t1 <= maxT ? p1 : -1 });
+    };
+    for (const b of L.cw.brushes) if (b.contents & CONTENTS.SOLID) scan(b, 'world');
+    for (const b of L.cw.dynamic) if (b.active && (b.contents & CONTENTS.SOLID)) scan(b, 'door');
+    hits.sort((a, b) => a.t0 - b.t0);
+    const walls = [];
+    for (const h of hits) {
+      const w = walls[walls.length - 1];
+      if (w && h.t0 <= w.t1 + 0.5) { if (h.t1 > w.t1) { w.t1 = h.t1; w.out = h; } } else walls.push({ t0: h.t0, t1: h.t1, in: h, out: h });
+    }
+    return walls;
+  },
+
+  // A wallbang round: straight through every wall to the first enemy on the line, at full damage
+  // (only the usual range falloff). Each wall it crosses still gets entry and exit marks.
+  wallbang(L, eye, dir, def, shooter = null) {
+    const range = Math.max(def.range, 8192), res = { impacts: [], target: null, actor: null, end: null, dist: 0, pens: 0, wallbang: true };
+    const ah = Actors.hitscan(eye, dir, range, shooter), maxT = ah ? ah.t : range;
+    const walls = this.crossings(L, eye, dir, maxT);
+    const at = (t) => [eye[0] + dir[0] * t, eye[1] + dir[1] * t, eye[2] + dir[2] * t];
+    for (const w of walls.slice(0, 16)) {
+      const a = w.in, b = w.out, P0 = a.b.P, P1 = b.b.P;
+      res.impacts.push({ kind: a.kind, door: a.b.door || null, brush: a.b, plane: a.p0, point: this.onPlane(a.b, a.p0, at(w.t0)), normal: [P0[a.p0 * 4], P0[a.p0 * 4 + 1], P0[a.p0 * 4 + 2]], surf: a.b.surf[a.p0], exit: false, dist: w.t0, damage: def.damage });
+      if (b.p1 >= 0) res.impacts.push({ kind: b.kind, door: b.b.door || null, brush: b.b, plane: b.p1, point: this.onPlane(b.b, b.p1, at(w.t1)), normal: [P1[b.p1 * 4], P1[b.p1 * 4 + 1], P1[b.p1 * 4 + 2]], surf: b.b.surf[b.p1], exit: true, dist: w.t1, damage: def.damage });
+    }
+    res.pens = walls.length;
+    if (ah) {
+      const p = at(ah.t);
+      res.actor = { target: ah.actor, group: ah.group, point: p, dist: ah.t, damage: def.damage * Math.pow(def.rangeMod, ah.t / 500) };
+      res.end = p; res.dist = ah.t;
+    } else { res.end = at(range); res.dist = range; }
     return res;
   },
 
@@ -7162,6 +7263,9 @@ function vmPrepareKit(m, Mg) {
   m.flashBase = m.flash ? m.flash.position.z : 0;
   m.flashBaseScale = m.flashScale || 1;
   m.kitSig = '';
+  // scoped in: the sight line on the screen's centre, gun straight ahead and a little closer
+  m.ironY = { rifle: 2.0, pistol: 1.82, smg: 1.88, shotgun: 1.52, sniper: 3.0 }[m.id] || 2;
+  m.adsPose = { x: 0, y: -m.ironY, z: m.base.z * 0.94, rx: 0, ry: 0, rz: 0 };
 }
 function vmMatsFor(M) {
   return Object.assign({}, M, { metal: M.metal.clone(), poly: M.poly.clone(), tan: M.tan.clone(), wood: M.wood.clone() });
@@ -7180,6 +7284,9 @@ function vmApplyKit(m, def) {
   if (m.flash) m.flash.position.z = m.flashBase - ext;
   const stock = WEAPONS[m.id];
   m.flashScale = m.flashBaseScale * (stock && stock.flash ? def.flash / stock.flash : 1);
+  // a red dot or holo sight sits higher than the iron sights
+  const rail = { rifle: 1.46, pistol: 1.525, smg: 1.425, shotgun: 1.5 }[m.id], optic = kit && kit.optic;
+  if (m.adsPose) m.adsPose.y = -(optic === 'pip' && rail ? rail + 0.58 * (m.id === 'pistol' ? 0.78 : 1) : optic === 'halo' && rail ? rail + 0.78 : m.ironY);
   const camo = kit && kit.camo ? CAMOS[kit.camo] : null, tex = camo ? Arsenal.camoTexture(kit.camo) : null;
   for (const mesh of m.bodyMeshes) {
     const g = mesh.geometry;
@@ -7269,11 +7376,13 @@ const Viewmodel = {
     x += this.swayX * 0.45; y += this.swayY * 0.35; ry += this.swayX * 0.035; rx -= this.swayY * 0.03; rz += this.swayX * 0.05;
     y += pl.duckAmt * 0.35 - pl.landKick * 0.08 + (!pl.onGround && !pl.noclip ? 0.25 : 0);
     rz -= pl.duckAmt * 0.04;
-    this.rig.position.set(x, y, 0);
-    this.rig.rotation.set(rx, ry, rz);
+    const ak = w.kind === 'gun' && m.adsPose ? smoothstep(0, 1, w.ads || 0) : 0, calm = 1 - 0.8 * ak;
+    this.rig.position.set(x * calm, y * calm, 0);
+    this.rig.rotation.set(rx * calm, ry * calm, rz * calm);
     // --- weapon pose: base + clip + kick
     const rate = (w.anim.startsWith('reload') && w.def.reloadRate) || (w.anim === 'draw' && w.def.drawRate) || 1;
-    const t = (w.animTime() + alpha * TICK) * rate, clips = VM_CLIPS[m.id], clip = clips[w.anim], s = this.s6, b = m.base;
+    const t = (w.animTime() + alpha * TICK) * rate, clips = VM_CLIPS[m.id], clip = clips[w.anim], s = this.s6, b0 = m.base, ap = m.adsPose || b0;
+    const b = ak > 0 ? { x: lerp(b0.x, ap.x, ak), y: lerp(b0.y, ap.y, ak), z: lerp(b0.z, ap.z, ak), rx: lerp(b0.rx, ap.rx, ak), ry: lerp(b0.ry, ap.ry, ak), rz: lerp(b0.rz, ap.rz, ak) } : b0;
     sampleKeys(clip ? clip.root : null, t, s);
     this.kick = damp(this.kick, 0, 15, dt);
     m.root.position.set(b.x + s[0], b.y + s[1] + this.kick * 0.12, b.z + s[2] + this.kick * 1.15);
@@ -7878,6 +7987,18 @@ class PlayerModel {
   }
 
   setLight(r, g, b) { this.light[0] = r; this.light[1] = g; this.light[2] = b; this.mat.color.setRGB(r, g, b); this.wmat.color.setRGB(r, g, b); }
+  // Admin x-ray: the body drawn in a flat colour wherever a wall is in front of it.
+  setXray(on) {
+    if (!on && !this.xray) return;
+    if (!this.xray) {
+      const mat = new THREE.MeshBasicMaterial({ color: this.team === 0 ? 0xff8a3d : 0x5fb4ff, skinning: true, transparent: true, opacity: 0.6, depthWrite: false, depthFunc: THREE.GreaterDepth });
+      this.xray = new THREE.SkinnedMesh(this.mesh.geometry, mat);
+      this.xray.bind(this.mesh.skeleton, this.mesh.bindMatrix);
+      this.xray.frustumCulled = false; this.xray.renderOrder = 20;
+      this.mesh.add(this.xray);
+    }
+    this.xray.visible = on;
+  }
 
   muzzleWorld(out) {
     const a = this.muzzles[this.weaponId];
@@ -8137,6 +8258,7 @@ class Actor {
     this.kills = 0; this.deaths = 0; this.hurtT = 0; this.hurtFrom = null; this.killer = null;
     this.money = 800; this.kit = false; this.squad = 0;
     this.dmg = 0; this.hs = 0; this.plants = 0; this.defuses = 0;
+    this.wbCharges = 3; this.wbArmed = false; this.aliveT = 0; this.lastShotT = -9; this.admin = false;
     this.cmd = Object.assign({}, IDLE_CMD);
     this.brain = isBot ? new BotBrain(this) : null;
     this.prevPos = [0, 0, 0];
@@ -8147,12 +8269,14 @@ class Actor {
     this.player.spawn(sp.pos, sp.yaw);
     this.health = 100; this.armor = 100; this.helmet = true; this.alive = true; this.deadT = 0; this.killer = null;
     this.loadout.refill();
-    this.model.dead = 0;
+    this.model.dead = 0; this.aliveT = 0;
+    if (typeof Wallbang !== 'undefined') Wallbang.reset(this);
     if (this.brain) this.brain.reset();
   }
 
-  damage(amount, group, attacker, def, from) {
+  damage(amount, group, attacker, def, from, wallbang = false) {
     if (!this.alive) return 0;
+    this.lastHitWB = wallbang;
     let dmg = amount * (GROUP_MUL[group] || 1);
     if (this.armor > 0 && group !== 'leg' && (group !== 'head' || this.helmet)) {
       let toHealth = dmg * (def.armorPen ?? 0.5), toArmor = (dmg - toHealth) * 0.5;
@@ -8171,13 +8295,13 @@ class Actor {
   }
 
   die(attacker, def, headshot) {
-    this.alive = false; this.deadT = 0; this.deaths++; this.killer = attacker || null;
+    this.alive = false; this.deadT = 0; this.deaths++; this.killer = attacker || null; this.wbArmed = false;
     this.killInfo = { weapon: def ? def.name : '', headshot };
     if (attacker && attacker !== this) {
       if (attacker.team !== this.team) { attacker.kills++; if (headshot) attacker.hs++; Actors.score[attacker.team]++; } else attacker.kills--;
     }
     Actors.feed.push({ killer: attacker ? attacker.name : '', kTeam: attacker ? attacker.team : this.team, victim: this.name, vTeam: this.team,
-      weapon: def ? def.name : '', wid: def ? def.id : '', hs: headshot, age: 0, me: !!(attacker && attacker.isMe) || this.isMe });
+      weapon: def ? def.name : '', wid: def ? def.id : '', hs: headshot, wb: !!this.lastHitWB, age: 0, me: !!(attacker && attacker.isMe) || this.isMe });
     if (Actors.feed.length > 6) Actors.feed.shift();
     this.model.deathDir = headshot ? 1 : (Math.random() < 0.5 ? 1 : -1);
     if (typeof Snd !== 'undefined' && Snd.death) Snd.death(this.player.pos.slice());
@@ -8255,6 +8379,7 @@ const Actors = {
   tick(dt) {
     for (const a of this.list) {
       a.hurtT = Math.max(0, a.hurtT - dt * 1.6);
+      if (a.alive) a.aliveT += dt;
       if (!a.alive && (a.deadT += dt) >= RESPAWN_TIME && !(typeof Match !== 'undefined' && Match.active)) a.spawn();
     }
     for (const f of this.feed) f.age += dt;
@@ -8268,6 +8393,7 @@ const Actors = {
       const p = a.player, m = a.model;
       m.setWeapon(a.loadout.active.def.id, !!a.loadout.byId('charge'));
       m.mesh.visible = !a.isMe && !this.hidden;
+      if (m.setXray && R.scene) m.setXray(!!(this.me && this.me.admin && !a.isMe && a.team !== this.me.team && a.alive && !this.hidden));
       m.update(dt, { x: lerp(p.prev[0], p.pos[0], alpha), y: lerp(p.prev[1], p.pos[1], alpha), z: lerp(p.prev[2], p.pos[2], alpha),
         yaw: p.yaw, pitch: p.pitch, vx: p.vel[0], vz: p.vel[2], ducked: p.ducked, onGround: p.onGround || p.noclip, alive: a.alive });
       if (FX.L) { FX.lightAt(p.pos[0], p.pos[1] + 40, p.pos[2], tmp); m.setLight(tmp[0], tmp[1], tmp[2]); }
@@ -8280,17 +8406,19 @@ const Combat = {
   // One trace per pellet (1 for bullets). Every pellet is its own hit, like separate bullets.
   shot(actor, w, e) {
     const pl = actor.player, eye = tickEye(pl), def = w.def, n = e.pellets || 1;
-    const base = Ballistics.aimDir(pl, e.off, e.inacc, def.spread, [0, 0, 0]);
+    const wb = Wallbang.take(actor, w);
+    const base = Ballistics.aimDir(pl, e.off, e.inacc, w.spreadBase ? w.spreadBase() : def.spread, [0, 0, 0]);
     const results = [];
     let dealt = 0;
     for (let i = 0; i < n; i++) {
       const dir = n > 1 ? Ballistics.pellet(base, i, def.pelletSpread, [0, 0, 0]) : base;
-      const res = Ballistics.bullet(Game.L, eye, dir, def, actor);
-      if (res.actor) dealt += res.actor.target.damage(res.actor.damage, res.actor.group, actor, def, eye);
+      const res = wb ? Ballistics.wallbang(Game.L, eye, dir, def, actor) : Ballistics.bullet(Game.L, eye, dir, def, actor);
+      if (res.actor) dealt += res.actor.target.damage(res.actor.damage, res.actor.group, actor, def, eye, wb);
       results.push({ res, dir });
     }
-    Bots.noise(eye, actor, def.noise || 1700);
-    return { res: results[0].res, dir: base, results, eye, dealt };
+    actor.lastShotT = Game.time;
+    Bots.noise(eye, actor, (def.noise || 1700) * (wb ? 1.25 : 1));
+    return { res: results[0].res, dir: base, results, eye, dealt, wallbang: wb };
   },
   knife(actor, e) {
     const pl = actor.player, eye = tickEye(pl), dir = viewDir(pl);
@@ -8301,27 +8429,101 @@ const Combat = {
   },
 };
 
-// ==== 23-bots.js ====
-// Bot brains. Perception at 10 Hz (vision cone, line of sight through walls/doors/smoke, hearing),
-// reaction delay, aim error that settles while tracking, recoil compensation, burst fire with
-// counter-strafing, and waypoint navigation with string pulling, jump links, doors and unsticking.
+// ==== 22-wallbang.js ====
+// Wallbang rounds, the heart of wallr. Press X to load one: your next gun shot goes through every
+// wall in its way, at full damage, and hits the first enemy along the line. Everyone gets a few per
+// round; they unlock 10 s after the round goes live (10 s after spawning in skirmish), and the HUD
+// shows how many are left. Bots use them too, but only where they last saw someone. Admins have no
+// limit and no wait.
 
+const WALLBANG = { perRound: 3, unlock: 10 };
+
+const Wallbang = {
+  reset(a) { a.wbCharges = WALLBANG.perRound; a.wbArmed = false; },
+  charges(a) { return a.admin ? Infinity : a.wbCharges === undefined ? WALLBANG.perRound : a.wbCharges; },
+  // Seconds until wallbang rounds unlock for this actor (0: now; Infinity: not until next round).
+  unlockIn(a) {
+    if (a.admin) return 0;
+    if (typeof Match !== 'undefined' && Match.active) {
+      if (Match.phase === 'freeze') return Match.t + WALLBANG.unlock;
+      if (Match.phase === 'live' || Match.phase === 'planted') return Math.max(0, WALLBANG.unlock - Match.liveT);
+      return Infinity;
+    }
+    return Math.max(0, WALLBANG.unlock - (a.aliveT || 0));
+  },
+  ready(a) { return !!a.alive && this.unlockIn(a) <= 0 && this.charges(a) > 0; },
+  armed(a) { return !!a.wbArmed; },
+  // X: load a wallbang round for the next shot, or take it out again. Returns what happened.
+  toggle(a) {
+    if (a.wbArmed) { a.wbArmed = false; return 'off'; }
+    if (!a.alive) return 'dead';
+    if (this.unlockIn(a) > 0) return 'locked';
+    if (this.charges(a) <= 0) return 'empty';
+    const w = a.loadout.active;
+    if (!w || w.kind !== 'gun') return 'nogun';
+    a.wbArmed = true;
+    return 'armed';
+  },
+  // A gun fires: a loaded wallbang round is used up (one per trigger pull; every shotgun pellet pierces).
+  take(a, w) {
+    if (!a.wbArmed || !w || w.kind !== 'gun') return false;
+    a.wbArmed = false;
+    if (!a.admin) a.wbCharges = Math.max(0, this.charges(a) - 1);
+    a.wbUsed = (a.wbUsed || 0) + 1;
+    return true;
+  },
+};
+
+// ==== 23-bots.js ====
+// Bot brains. A bot only knows what it has seen, heard or been told:
+//  - sight: a view cone and line of sight (walls, doors and smoke block it); an enemy has to be in
+//    view long enough to be noticed (faster near the middle of the view, up close, when moving or
+//    firing), then the reaction delay runs before the first shot;
+//  - hearing: gunfire and running footsteps give a rough position (muffled and vaguer through walls);
+//  - getting shot: only the rough direction it came from;
+//  - teammates: a callout of where an enemy was seen, a second or so later.
+// What it knows fades: it checks the last position it had, looks around, then goes back to its job.
+// Aim error that settles while tracking, recoil compensation, burst fire with counter-strafing,
+// and waypoint navigation with string pulling, jump links, doors and unsticking.
+
+// spot: how fast an enemy in view gets noticed (1/s at the middle of the view, close by);
+// wallbang: chance to put a wall-piercing shot through cover where an enemy was just seen
 const BOT_SKILL = {
-  easy: { react: 0.62, aimErr: 4.5, turn: 210, recoil: 0.25, head: 0.08, burst: [2, 4], fov: 100, settle: 1.2 },
-  normal: { react: 0.36, aimErr: 2.4, turn: 330, recoil: 0.55, head: 0.25, burst: [3, 6], fov: 110, settle: 1.9 },
-  hard: { react: 0.2, aimErr: 1.1, turn: 520, recoil: 0.85, head: 0.55, burst: [4, 8], fov: 120, settle: 2.8 },
-  expert: { react: 0.13, aimErr: 0.7, turn: 700, recoil: 0.95, head: 0.7, burst: [5, 10], fov: 126, settle: 3.5 },
+  easy: { react: 0.62, aimErr: 4.5, turn: 210, recoil: 0.25, head: 0.08, burst: [2, 4], fov: 100, settle: 1.2, spot: 2.6, wallbang: 0 },
+  normal: { react: 0.36, aimErr: 2.4, turn: 330, recoil: 0.55, head: 0.25, burst: [3, 6], fov: 110, settle: 1.9, spot: 4.0, wallbang: 0.3 },
+  hard: { react: 0.2, aimErr: 1.1, turn: 520, recoil: 0.85, head: 0.55, burst: [4, 8], fov: 120, settle: 2.8, spot: 5.6, wallbang: 0.5 },
+  expert: { react: 0.13, aimErr: 0.7, turn: 700, recoil: 0.95, head: 0.7, burst: [5, 10], fov: 126, settle: 3.5, spot: 7.5, wallbang: 0.7 },
 };
 
 const Bots = {
   rnd: mulberry32(4242),
   get skill() { return BOT_SKILL[Settings.v.botSkill] || BOT_SKILL.normal; },
-  // A loud event: enemies of `src` within `radius` may come to look.
+  ear: [0, 0, 0], tr: null,
+  // A loud event (a shot, a running footstep): enemies of `src` within `radius` hear it, half as far
+  // through walls, and only roughly where it came from (worse with distance and through walls).
   noise(pos, src, radius) {
     for (const a of Actors.list) {
       if (!a.brain || !a.alive || (src && a.team === src.team)) continue;
-      const d = Math.hypot(a.player.pos[0] - pos[0], a.player.pos[2] - pos[2]);
-      if (d < radius) a.brain.hear(pos, d / radius);
+      const ear = tickEye(a.player, this.ear), d = Math.hypot(ear[0] - pos[0], ear[2] - pos[2]);
+      if (d >= radius) continue;
+      const walls = !this.clear(ear, pos), eff = radius * (walls ? 0.5 : 1);
+      if (d >= eff) continue;
+      const err = 40 + d * (walls ? 0.3 : 0.14), r = this.rnd;
+      a.brain.hear([pos[0] + (r() - 0.5) * 2 * err, pos[1], pos[2] + (r() - 0.5) * 2 * err], d / eff);
+    }
+  },
+  // Plain line of sight through the level (no smoke): used for hearing.
+  clear(a, b) {
+    if (!this.tr) this.tr = makeTrace();
+    Game.L.cw.trace(this.tr, a[0], a[1], a[2], b[0], b[1], b[2], 0, 0, 0, MASK_SHOT);
+    return this.tr.fraction >= 1;
+  },
+  // A bot that spots an enemy tells its teammates where, a moment later (where it was then).
+  callout(from, enemy) {
+    const pos = enemy.player.pos.slice();
+    for (const m of Actors.list) {
+      if (m === from || !m.brain || !m.alive || m.team !== from.team) continue;
+      m.brain.inbox.push({ pos, at: m.brain.clock + 0.8 + this.rnd() * 0.8, who: enemy });
     }
   },
 };
@@ -8336,6 +8538,7 @@ class BotBrain {
     this.strafe = 0; this.strafeT = 0; this.stuckT = 0; this.anchor = null; this.anchorT = 0; this.doorT = 0; this.pullT = 0;
     this.investigate = null; this.lookYaw = null; this.wantYaw = this.a.player.yaw; this.wantPitch = 0; this.fireToggle = false;
     this.order = null; this.via = null; this.altPrev = false; this.glanceT = 0; this.glance = 0; this.smokeAt = null; this.smokeT = 0;
+    this.aware = new Map(); this.inbox = []; this.scanT = 0; this.wbTry = null; this.wbPrev = false; this.lostT = -9;
   }
 
   // Orders come from Tactics; repeating the same order keeps the current route.
@@ -8355,17 +8558,33 @@ class BotBrain {
     return prim || pistol || null;
   }
 
+  // A rough position from a sound: turn toward close ones, go and check.
   hear(pos, k) {
-    if (this.target) return;
-    if (!this.investigate || Bots.rnd() < 0.5) this.investigate = pos.slice();
-    if (k < 0.6) this.lookYaw = Math.atan2(-(pos[0] - this.a.player.pos[0]), -(pos[2] - this.a.player.pos[2]));
+    if (this.target && this.visible) return;
+    if (!this.investigate || k < 0.5 || Bots.rnd() < 0.4) this.investigate = pos.slice();
+    if (k < 0.7) this.lookYaw = Math.atan2(-(pos[0] - this.a.player.pos[0]), -(pos[2] - this.a.player.pos[2]));
     this.goal = null;
   }
 
+  // Shot by someone: only the rough direction it came from, not how far.
   onHurt(attacker, from) {
-    if (!from || this.target) return;
-    this.lookYaw = Math.atan2(-(from[0] - this.a.player.pos[0]), -(from[2] - this.a.player.pos[2]));
-    this.investigate = from.slice(); this.goal = null;
+    if (!from || (this.target && this.visible)) return;
+    const p = this.a.player.pos, dx = from[0] - p[0], dz = from[2] - p[2];
+    const yaw = Math.atan2(-dx, -dz) + (Bots.rnd() - 0.5) * 0.35, guess = Math.min(Math.hypot(dx, dz), 350 + Bots.rnd() * 450);
+    this.lookYaw = yaw;
+    this.investigate = [p[0] - Math.sin(yaw) * guess, p[1], p[2] - Math.cos(yaw) * guess]; this.goal = null;
+  }
+
+  // A teammate's callout: go and check where the enemy was seen (if it isn't fighting already).
+  readInbox() {
+    if (!this.inbox.length) return;
+    const now = this.inbox.filter((m) => m.at <= this.clock);
+    if (!now.length) return;
+    this.inbox = this.inbox.filter((m) => m.at > this.clock);
+    if (this.target && this.visible) return;
+    const m = now[now.length - 1], p = this.a.player.pos;
+    this.investigate = m.pos.slice(); this.goal = null;
+    if (Math.hypot(m.pos[0] - p[0], m.pos[2] - p[2]) < 900) this.lookYaw = Math.atan2(-(m.pos[0] - p[0]), -(m.pos[2] - p[2]));
   }
 
   los(a, b) {
@@ -8380,21 +8599,32 @@ class BotBrain {
     return [[p[0], p[1] + eyeH + 2, p[2]], [p[0], p[1] + eyeH - 14, p[2]]];
   }
 
+  // Sight, 10 times a second. Each enemy in view builds up "noticed" until the bot has really seen
+  // it; out of view it fades. Nothing outside the view cone (bar someone brushing past) is seen.
   perceive(sk) {
-    const a = this.a, pl = a.player, eye = tickEye(pl, this.eyeV), f = viewDir(pl), cosF = Math.cos(sk.fov / 2 * DEG);
-    let best = null, bestD = Infinity, bestPts = null;
+    const a = this.a, pl = a.player, eye = tickEye(pl, this.eyeV), f = viewDir(pl), cosF = Math.cos(sk.fov / 2 * DEG), dt = 0.1;
+    let best = null, bestD = Infinity;
     for (const e of Actors.list) {
-      if (!e.alive || e.team === a.team) continue;
+      if (!e.alive || e.team === a.team) { this.aware.delete(e); continue; }
       const [head, chest] = this.points(e);
-      const dx = chest[0] - eye[0], dy = chest[1] - eye[1], dz = chest[2] - eye[2], d = Math.hypot(dx, dy, dz);
-      if (d > 5000) continue;
-      const inView = (dx * f[0] + dy * f[1] + dz * f[2]) / d > cosF || d < 200 || e === this.target;
-      if (!inView) continue;
-      if (!this.los(eye, chest) && !this.los(eye, head)) continue;
-      if (d < bestD) { bestD = d; best = e; bestPts = [head, chest]; }
+      const dx = chest[0] - eye[0], dy = chest[1] - eye[1], dz = chest[2] - eye[2], d = Math.hypot(dx, dy, dz) || 1;
+      const cos = (dx * f[0] + dy * f[1] + dz * f[2]) / d, touching = d < 90;
+      const seen = d < 5000 && (cos > cosF || touching) && (this.los(eye, chest) || this.los(eye, head));
+      let aw = this.aware.get(e) || 0;
+      if (seen) {
+        const c = smoothstep(cosF, 0.995, cos), center = 0.25 + 2.75 * c * c;          // straight ahead: almost at once; the edge of view: slowly
+        const far = clamp(1.6 - d / 1600, 0.3, 1.6);                                   // close and big, or far and small
+        const move = e.player.speed() > 130 ? 1.3 : e.player.ducked ? 0.6 : 0.9;
+        const loud = Game.time - (e.lastShotT || -9) < 0.6 ? 2.2 : 1;                   // muzzle flash
+        const known = e === this.target || Math.hypot(e.player.pos[0] - (this.lastSeen ? this.lastSeen[0] : 1e9), e.player.pos[2] - (this.lastSeen ? this.lastSeen[2] : 1e9)) < 300 ? 3 : 1;
+        aw += dt * sk.spot * center * far * move * loud * known * (touching ? 4 : 1);
+      } else aw -= dt * 0.35;
+      if (aw > 0) this.aware.set(e, Math.min(aw, 1.6)); else this.aware.delete(e);
+      if (seen && aw >= 1 && d < bestD) { bestD = d; best = e; }
     }
     if (best) {
       if (best !== this.target) {
+        if (this.clock - this.lastSeenT > 4 && Bots.rnd() < 0.85) Bots.callout(a, best);
         const fresh = this.clock - this.lastSeenT > 1.5;
         this.target = best;
         this.reactUntil = this.clock + sk.react * (0.75 + Bots.rnd() * 0.5) * (fresh ? 1 : 0.4);
@@ -8404,12 +8634,43 @@ class BotBrain {
       }
       this.visible = true; this.lastSeen = best.player.pos.slice(); this.lastSeenT = this.clock;
     } else if (this.target) {
+      if (this.visible) this.lostT = this.clock;
       this.visible = false;
       if (!this.target.alive || this.clock - this.lastSeenT > 2.5) {
-        if (this.target.alive && this.lastSeen) this.investigate = this.lastSeen;
+        if (this.target.alive && this.lastSeen) { this.investigate = this.lastSeen; this.scanT = 0; }
         this.target = null; this.goal = null; this.path = null;
       }
     }
+  }
+
+  // Just lost sight of someone: sometimes put a wall-piercing shot through the cover where they were.
+  // Uses only where the enemy was last seen, like a player pre-firing a corner.
+  wallbangTry(dt, cmd, sk, w) {
+    const a = this.a, pl = a.player;
+    if (!this.wbTry) {
+      if (!this.target || this.visible || this.lostT < 0 || this.clock - this.lostT > 0.25 || !this.lastSeen) return false;
+      if (w.kind !== 'gun' || w.ammo <= 0 || !Wallbang.ready(a) || Bots.rnd() >= sk.wallbang) { this.lostT = -9; return false; }
+      const p = this.lastSeen, d = Math.hypot(p[0] - pl.pos[0], p[2] - pl.pos[2]);
+      this.lostT = -9;
+      if (d > 1800 || d < 120) return false;
+      const e = sk.aimErr * 1.5;
+      this.wbTry = { pos: [p[0], p[1] + 48, p[2]], t: 0, err: [(Bots.rnd() - 0.5) * e, (Bots.rnd() - 0.5) * e * 0.6], armed: false };
+    }
+    const t = this.wbTry, eye = tickEye(pl, this.eyeV);
+    t.t += dt;
+    if (t.t > 1.6 || w.kind !== 'gun' || this.visible) { this.wbTry = null; if (Wallbang.armed(a)) Wallbang.toggle(a); return false; }
+    const dx = t.pos[0] - eye[0], dy = t.pos[1] - eye[1], dz = t.pos[2] - eye[2];
+    this.wantYaw = Math.atan2(-dx, -dz) + t.err[0] * DEG; this.wantPitch = Math.atan2(dy, Math.hypot(dx, dz)) + t.err[1] * DEG;
+    if (!Wallbang.armed(a)) {
+      if (t.armed) { this.wbTry = null; return false; }            // the round went out: done
+      t.armed = true;
+      if (Wallbang.toggle(a) !== 'armed') { this.wbTry = null; return false; }
+      return true;
+    }
+    const off = Math.hypot(wrapAngle(this.wantYaw - pl.yaw), this.wantPitch - pl.pitch) / DEG;
+    if (off < 1.2 && (w.state === 'idle' || w.state === 'inspect') && w.ammo > 0) { cmd.fire = !this.fireToggle; this.fireToggle = !this.fireToggle; }
+    if (pl.speed() > 60) { const rx = Math.cos(pl.yaw), rz = -Math.sin(pl.yaw), lat = pl.vel[0] * rx + pl.vel[2] * rz; if (Math.abs(lat) > 40) cmd.side = -Math.sign(lat); }
+    return true;
   }
 
   think(dt) {
@@ -8418,6 +8679,7 @@ class BotBrain {
     if (!a.alive) return cmd;
     this.clock += dt;
     if ((this.perceiveT -= dt) <= 0) { this.perceiveT = 0.1; this.perceive(sk); }
+    this.readInbox();
     if (this.target && !this.target.alive) { this.target = null; this.visible = false; }
     const w = a.loadout.active, o = this.order, p = a.player.pos;
     const near = (q, r) => q && Math.hypot(q[0] - p[0], q[2] - p[2]) < r && Math.abs(q[1] - p[1]) < 60;
@@ -8425,6 +8687,7 @@ class BotBrain {
     const mustDefuse = o && o.kind === 'defuse' && Bomb.state === 'planted' && near(Bomb.pos, 44) && Bomb.timer < Bomb.defuseDur + 1.5;
     let busy = false;
     if (this.target && this.visible && !mustDefuse) this.fight(dt, cmd, sk, w);
+    else if (!mustDefuse && this.wallbangTry(dt, cmd, sk, w)) busy = true;
     else {
       if (this.target && this.lastSeen && !this.investigate) this.investigate = this.lastSeen;
       if (this.smokeAt) { busy = (this.smokeT += dt) < 4 && this.throwSmoke(cmd, this.smokeAt); if (!busy) { this.smokeAt = null; this.smokeT = 0; } }
@@ -9005,6 +9268,7 @@ const Accounts = {
     this.saveIndex();
     this.applyPending();
     if (typeof Actors !== 'undefined' && Actors.me) Actors.me.name = a.name;
+    if (typeof Admin !== 'undefined') Admin.load();
     this.emit(); Profile.emit();
   },
   signOut() {
@@ -9014,6 +9278,7 @@ const Accounts = {
     Profile.v = Profile.blank();
     if (typeof Arsenal !== 'undefined') Arsenal.cache.clear();
     if (typeof Actors !== 'undefined' && Actors.me) Actors.me.name = 'You';
+    if (typeof Admin !== 'undefined') Admin.load();
     this.emit(); Profile.emit();
   },
   playAsGuest() { if (this.cur) this.signOut(); else { Profile.v = Profile.blank(); this.emit(); Profile.emit(); } },
@@ -9071,6 +9336,58 @@ const Accounts = {
     const res = Profile.applyMatch(rec.cfg, rec.st, rec.outcome || 'left', rec.matchId);
     this.notice = { res, at: rec.at || Date.now() };
     return res;
+  },
+};
+
+// ==== 26-admin.js ====
+// Admin mode, unlocked with a passcode in Settings. Only hashes of the passcode are in the code
+// (tools/admin-hash.mjs makes new ones). An admin can fly (V: noclip), has unlimited wallbang
+// rounds with no wait, unlimited money, and sees enemies through walls (and on the radar).
+// Admin belongs to the account that entered the code (a guest keeps it for the session) and can be
+// switched off or removed. Matches played with admin powers don't change XP, points, rank or history.
+// This is a game setting, not security: everything runs in the browser.
+
+const ADMIN_HASHES = ['s256:ac0db9cb7158353579373ff6cca2aa6aa4285ca3cbff519540ba730de0f43725', 'c53:2frhyg3pbmd'];
+
+const Admin = {
+  unlocked: false, on: false,
+
+  // The signed-in account's admin state (none for a guest who hasn't entered the code).
+  load() {
+    const a = typeof Accounts !== 'undefined' ? Accounts.cur : null;
+    this.unlocked = !!(a && a.admin);
+    this.on = this.unlocked && !a.adminOff;
+    this.apply();
+  },
+  async tryCode(code) {
+    const c = String(code || '').trim().toLowerCase();
+    if (!c) return { ok: false, msg: 'Enter the passcode' };
+    const [s, f] = await Promise.all([pinHash('admin', c, 's256'), pinHash('admin', c, 'c53')]);
+    if (!ADMIN_HASHES.includes(s) && !ADMIN_HASHES.includes(f)) return { ok: false, msg: 'Wrong passcode' };
+    this.unlocked = true; this.on = true;
+    this.save(); this.apply();
+    const a = Accounts.cur;
+    return { ok: true, msg: a ? `${a.name} is now an admin` : 'You are an admin for this session (guest)' };
+  },
+  set(on) { this.on = !!on && this.unlocked; this.save(); this.apply(); },
+  remove() { this.unlocked = false; this.on = false; this.save(); this.apply(); },
+  save() {
+    const a = typeof Accounts !== 'undefined' ? Accounts.cur : null;
+    if (!a) return;
+    if (this.unlocked) a.admin = true; else delete a.admin;
+    if (this.unlocked && !this.on) a.adminOff = true; else delete a.adminOff;
+    Accounts.saveIndex();
+  },
+  // Powers follow the switch: noclip only while on, money topped up, the match marked as an admin match.
+  apply() {
+    const me = typeof Actors !== 'undefined' ? Actors.me : null;
+    if (me) {
+      me.admin = this.on;
+      if (!this.on && me.player.noclip) { me.player.noclip = false; me.player.vel = [0, 0, 0]; }
+      if (this.on && typeof Match !== 'undefined' && Match.active) me.money = MATCH.max;
+      if (!this.on && me.wbCharges === undefined) me.wbCharges = WALLBANG.perRound;
+    }
+    if (this.on && typeof Session !== 'undefined' && Session.active && !Session.done) Session.adminUsed = true;
   },
 };
 
@@ -9152,7 +9469,9 @@ const Match = {
       }
       const sp = Actors.spawnPoint(a);
       a.player.spawn(sp.pos, sp.yaw);
-      a.health = 100; a.alive = true; a.deadT = 0; a.killer = null; a.hurtT = 0; a.model.dead = 0;
+      a.health = 100; a.alive = true; a.deadT = 0; a.killer = null; a.hurtT = 0; a.model.dead = 0; a.aliveT = 0;
+      Wallbang.reset(a);
+      if (a.admin) a.money = MATCH.max;
       if (lo.active.state === 'holstered') lo.active.draw();
       lo.select(lo.best());
       if (a.brain) a.brain.reset();
@@ -9198,7 +9517,7 @@ const Match = {
     const q = this.quote(a, e);
     if (q.no) return { ok: false, msg: q.no };
     if (a.money < q.price) return { ok: false, msg: 'Not enough money' };
-    a.money -= q.price;
+    if (!a.admin) a.money -= q.price;
     if (e.kind === 'weapon') {
       const old = a.loadout.give(e.id, true);
       if (old) Items.drop(a, old, false);
@@ -9340,14 +9659,14 @@ const RANK_FAMILIES = [
   { name: 'Spark', col: '#c07a4a', col2: '#6e3d22' }, { name: 'Flint', col: '#aeb6bb', col2: '#535b61' },
   { name: 'Fuse', col: '#f0a53a', col2: '#8a5310' }, { name: 'Charge', col: '#4fc6b8', col2: '#1b5f58' },
   { name: 'Blast', col: '#e5573f', col2: '#7a1f13' }, { name: 'Shockwave', col: '#a688f0', col2: '#4b3290' },
-  { name: 'Short Fuse', col: '#ffd76a', col2: '#9a6a00' },
+  { name: 'Wallbreaker', col: '#ffd76a', col2: '#9a6a00' },
 ];
 const RANKS = (() => {
   const list = [], roman = ['I', 'II', 'III'];
   let r = 0;
   for (let f = 0; f < 5; f++) for (let t = 0; t < 3; t++) { list.push({ name: `${RANK_FAMILIES[f].name} ${roman[t]}`, fam: f, tier: t + 1, min: r }); r = r === 0 ? 700 : r + 100; }
   list.push({ name: 'Shockwave', fam: 5, tier: 0, min: 2200 });
-  list.push({ name: 'Short Fuse', fam: 6, tier: 0, min: 2400 });
+  list.push({ name: 'Wallbreaker', fam: 6, tier: 0, min: 2400 });
   return list;
 })();
 const PLACEMENTS = 3;
@@ -9448,6 +9767,13 @@ const Profile = {
     Arsenal.cache.clear();
     this.save();
     return true;
+  },
+
+  // An admin match: what the results screen shows, with nothing earned and nothing recorded.
+  adminResults(cfg, st, outcome) {
+    const lv = this.level(), rk = this.rank(), v = this.v;
+    return { outcome, cfg, st, xp: { lines: [], base: 0, k: 1, mults: ['Admin match'], total: 0 }, ups: [], lv0: lv, lv1: lv, elo: null, elo0: v.elo, elo1: v.elo,
+      rank0: rk, rank1: rk, placed0: v.placed, placed1: v.placed, pointsNow: v.points, admin: true };
   },
 
   // Fold a finished (or abandoned) match into the career; returns everything the results screen shows.
@@ -9758,6 +10084,7 @@ const Radar = {
     const eye = tickEye(me.player), f = viewDir(me.player);
     for (const e of Actors.list) {
       if (!e.alive || e.team === me.team) continue;
+      if (me.admin) { this.spotted.set(e, 1.0); continue; }
       let seen = Actors.list.some((t) => t.alive && t.team === me.team && t.brain && t.brain.target === e && t.brain.visible);
       if (!seen && me.alive) {
         const p = e.player.pos, c = [p[0], p[1] + 46, p[2]], dx = c[0] - eye[0], dy = c[1] - eye[1], dz = c[2] - eye[2], d = Math.hypot(dx, dy, dz) || 1;
@@ -9871,7 +10198,7 @@ const HUD = {
   init() {
     for (const id of ['sf-hud', 'xh', 'hitmark', 'hud-hint', 'hud-fps', 'hud-hp', 'hud-ar', 'hud-prompt', 'hud-speed', 'hud-wname', 'hud-reload', 'hud-ammo', 'hud-mag', 'hud-res',
       'hud-debug', 'hud-note', 'r-hits', 'r-shots', 'r-acc', 'hud-wlist', 'sf-smoke', 'hud-feed', 'hud-score', 'hud-dmg', 'hud-hurt', 'hud-dead', 'hud-board', 'hud-target', 'hud-scope', 'hud-tag', 'hud-alive', 'hud-range', 'hud-money', 'hud-cash', 'hud-cashd',
-      'hud-buyzone', 'hud-carry', 'hud-banner', 'hud-progress', 'hud-progress-label', 'hud-progress-bar', 'buy-menu', 'hud-place'])
+      'hud-buyzone', 'hud-carry', 'hud-banner', 'hud-progress', 'hud-progress-label', 'hud-progress-bar', 'buy-menu', 'hud-place', 'hud-wb'])
       this.el[id] = $(id);
     this.applyCrosshairStyle();
     this.applyToggles();
@@ -9892,6 +10219,35 @@ const HUD = {
   },
   note(text) { this.el['hud-note'].textContent = text; this.el['hud-note'].classList.add('on'); this.noteT = 2.2; },
   hitmarker(head) { this.el.hitmark.classList.add('on'); this.el.hitmark.classList.toggle('hs', !!head); this.hitT = head ? 0.16 : 0.1; },
+  // Wallbang rounds by the ammo counter: pips for what's left, locked/ready/armed state.
+  wallbang(me) {
+    const el = this.el['hud-wb'];
+    if (!el) return;
+    const inf = me.admin, left = Wallbang.charges(me), unlock = Wallbang.unlockIn(me), armed = Wallbang.armed(me);
+    const state = !me.alive ? '' : armed ? 'ARMED · next shot pierces every wall' : unlock === Infinity ? 'round over' : unlock > 0 ? `unlocks in ${Math.ceil(unlock)} s` : left <= 0 ? 'none left this round' : 'X to load';
+    const pips = inf ? '<b class="inf">∞</b>' : Array.from({ length: WALLBANG.perRound }, (_, i) => `<i class="${i < left ? 'on' : ''}"></i>`).join('');
+    const sig = `${pips}|${state}|${armed}|${unlock > 0}`;
+    if (this.last.wb !== sig) {
+      this.last.wb = sig;
+      el.innerHTML = `<span class="wb-l">WALLBANG</span><span class="wb-p">${pips}</span><em>${state}</em>`;
+      el.classList.toggle('armed', armed); el.classList.toggle('locked', unlock > 0 && !armed);
+      this.el.xh.classList.toggle('wb', armed);
+    }
+  },
+  wallbangNote(r) {
+    const me = Actors.me;
+    if (r === 'armed') { Snd.sfx('wbArm'); this.note('Wallbang round loaded: your next shot goes through every wall'); }
+    else if (r === 'off') { Snd.sfx('wbOff'); this.note('Wallbang round unloaded'); }
+    else if (r === 'locked') this.note(Wallbang.unlockIn(me) === Infinity ? 'Wallbang rounds come back next round' : `Wallbang rounds unlock in ${Math.ceil(Wallbang.unlockIn(me))} s`);
+    else if (r === 'empty') this.note('No wallbang rounds left this round');
+    else if (r === 'nogun') this.note('Hold a gun to load a wallbang round');
+  },
+  // Scoped in: the crosshair fades out.
+  ads(k) {
+    const q = Math.round((1 - k) * 20) / 20;
+    if (this.last.ads === q) return;
+    this.last.ads = q; this.el.xh.style.opacity = String(q);
+  },
   scope(fov) {
     const on = fov > 0;
     if (this.last.scope === on) return;
@@ -9911,7 +10267,7 @@ const HUD = {
     if (Game.state === 'playing') this.hintAge += dt;
     const hints = Settings.v.showHints && !Input.touch.enabled && (this.hintAge < 30 || this.hintPinned);
     if (this.last.hints !== hints) { this.last.hints = hints; el['hud-hint'].hidden = !hints; }
-    this.set('hud-tag', on ? `${Game.L.name} · Round ${M.round}` : `${Game.L.name} · Skirmish`);
+    this.set('hud-tag', (me.admin ? 'ADMIN · ' : '') + (on ? `${Game.L.name} · Round ${M.round}` : `${Game.L.name} · Skirmish`));
     if (this.last.defuse !== on) { this.last.defuse = on; el['hud-range'].hidden = on; el['hud-money'].hidden = !on; el['hud-alive'].hidden = !on; }
     let clock = '<i>:</i>';
     if (on) {
@@ -9926,7 +10282,7 @@ const HUD = {
       this.set('hud-alive', `<span class="t0">${pips(0)}</span><span class="t1">${pips(1)}</span>`, 'innerHTML');
       if (this.last.money !== undefined && me.money !== this.last.money) { this.cashD = me.money - this.last.money; this.cashT = 2.4; }
       this.last.money = me.money;
-      this.set('hud-cash', me.money.toLocaleString('en-US'));
+      this.set('hud-cash', me.admin ? '∞' : me.money.toLocaleString('en-US'));
       this.cashT = Math.max(0, (this.cashT || 0) - dt);
       const dtxt = this.cashD ? `${this.cashD > 0 ? '+' : '−'}$${Math.abs(this.cashD).toLocaleString('en-US')}` : '';
       this.set('hud-cashd', dtxt);
@@ -9980,7 +10336,7 @@ const HUD = {
     const sig = Actors.feed.map((f) => f.victim + f.age.toFixed(0)).join('|') + Actors.feed.length;
     if (this.last.feed !== sig) {
       this.last.feed = sig;
-      el['hud-feed'].innerHTML = Actors.feed.map((f) => `<div class="${f.me ? 'mine' : ''}" style="opacity:${f.age > 5.5 ? (7 - f.age) / 1.5 : 1}"><b class="t${f.kTeam}">${this.esc(f.killer)}</b><span title="${this.esc(f.weapon)}">${WeaponIcons.img(f.wid) || this.esc(f.weapon)}${f.hs ? ' <i class="hs">◉</i>' : ''}</span><b class="t${f.vTeam}">${this.esc(f.victim)}</b></div>`).join('');
+      el['hud-feed'].innerHTML = Actors.feed.map((f) => `<div class="${f.me ? 'mine' : ''}" style="opacity:${f.age > 5.5 ? (7 - f.age) / 1.5 : 1}"><b class="t${f.kTeam}">${this.esc(f.killer)}</b><span title="${this.esc(f.weapon)}">${WeaponIcons.img(f.wid) || this.esc(f.weapon)}${f.hs ? ' <i class="hs">◉</i>' : ''}${f.wb ? ' <i class="wbk" title="wallbang">WB</i>' : ''}</span><b class="t${f.vTeam}">${this.esc(f.victim)}</b></div>`).join('');
     }
     const by = me.killer && me.killer !== me ? `Killed by <b class="t${me.killer.team}">${this.esc(me.killer.name)}</b> · ${this.esc(me.killInfo.weapon)}${me.killInfo.headshot ? ' · headshot' : ''}`
       : me.killInfo && me.killInfo.weapon === BLAST.name ? 'Caught in the blast' : 'You died';
@@ -10062,6 +10418,7 @@ const HUD = {
     this.set('r-hits', String(Ents.stats.hits)); this.set('r-shots', String(Ents.stats.shots));
     this.set('r-acc', `${Ents.plateCount() - Ents.platesUp()}/${Ents.plateCount()}`);
     this.updateRound(dt);
+    this.wallbang(Actors.me);
     this.updateCombat(dt, pl, cam);
     // inside a smoke cloud: wash the screen out
     const k = Grenades.insideAt(cam.position.x, cam.position.y, cam.position.z, this.smokeCol);
@@ -10162,7 +10519,7 @@ const EMBLEM_GLYPH = [
   '<path d="M35 14 L23 34 L31 34 L28 50 L42 28 L34 28 Z" fill="#f2fffc"/>',
   '<path d="M32 13 L35.5 25 L47 19 L40 30 L51 34 L39 37 L44 49 L33 41 L27 51 L26 39 L14 41 L23 32 L14 23 L27 26 Z" fill="#fff1ea"/>',
   '<circle cx="32" cy="32" r="5" fill="#fff"/><circle cx="32" cy="32" r="11" fill="none" stroke="#f3eeff" stroke-width="2.4"/><circle cx="32" cy="32" r="17" fill="none" stroke="#f3eeff" stroke-width="1.6" opacity=".7"/>',
-  '<path d="M32 12 C38 20 44 24 42 34 C41 41 36 46 32 47 C27 46 22 42 22 35 C22 29 26 27 27 22 C30 26 30 29 31 31 C33 26 33 18 32 12 Z" fill="#fff6d8"/><path d="M32 30 C35 34 37 37 35 41 C34 43 31 44 29 42 C28 39 30 36 32 30 Z" fill="#e5573f"/>',
+  '<g fill="#fff6d8"><rect x="16" y="19" width="14" height="6"/><rect x="33" y="19" width="15" height="6"/><rect x="16" y="28" width="7" height="6"/><rect x="41" y="28" width="7" height="6"/><rect x="16" y="37" width="14" height="6"/><rect x="33" y="37" width="15" height="6"/></g><path d="M25 27 L31 24 L35 28 L40 26 L38 32 L42 37 L35 37 L31 42 L28 36 L22 36 L26 31 Z" fill="#e5573f"/>',
 ];
 function emblemSVG(rk, px = 56) {
   const id = `eg${++emblemSeq}`;
@@ -10260,7 +10617,10 @@ const Menu = {
 
   init() {
     $('sf-overlay').addEventListener('click', (e) => this.onClick(e));
-    $('sf-overlay').addEventListener('change', (e) => { if (e.target.id === 'cfg-ff') { this.cfg.ff = e.target.checked; this.renderCreate(); } });
+    $('sf-overlay').addEventListener('change', (e) => {
+      if (e.target.id === 'cfg-ff') { this.cfg.ff = e.target.checked; this.renderCreate(); }
+      if (e.target.id === 'admin-on') { Admin.set(e.target.checked); this.adminMsg = Admin.on ? 'Admin powers on' : 'Admin powers off: this account plays normally'; this.adminOk = true; this.renderAdmin(); }
+    });
     $('sf-overlay').addEventListener('submit', (e) => { const f = e.target.closest('form[data-form]'); if (!f) return; e.preventDefault(); Snd.init(); this.act('form-' + f.dataset.form, f.dataset, f); });
     this.bindSettings();
     const rerender = () => {
@@ -10291,7 +10651,7 @@ const Menu = {
     $('sf-overlay').hidden = false;
     $('sf-overlay').dataset.scr = name;
     for (const s of SCREENS) { const el = $('scr-' + s); if (el) el.hidden = s !== name; }
-    const r = { home: 'renderHome', create: 'renderCreate', armory: 'renderArmory', career: 'renderCareer', pause: 'renderPause', results: 'renderResults', ready: 'renderReady', account: 'renderAccount', newacct: 'renderNewAcct', acctset: 'renderAcctSet' }[name];
+    const r = { home: 'renderHome', create: 'renderCreate', armory: 'renderArmory', career: 'renderCareer', pause: 'renderPause', results: 'renderResults', ready: 'renderReady', account: 'renderAccount', newacct: 'renderNewAcct', acctset: 'renderAcctSet', settings: 'renderAdmin' }[name];
     if (r) this[r]();
     if (name !== 'armory') ArmoryView.stop();
     const focus = $('scr-' + name) && $('scr-' + name).querySelector('[data-autofocus]');
@@ -10411,6 +10771,14 @@ const Menu = {
         break;
       }
       case 'notice-close': Accounts.notice = null; this.welcome = ''; this.renderHome(); break;
+      // ---- admin ----
+      case 'form-admin': {
+        if (this.busy) break;
+        this.busy = true;
+        Admin.tryCode($('admin-code').value).then((r) => { this.busy = false; this.adminMsg = r.msg; this.adminOk = r.ok; if (r.ok) Snd.buy(); else Snd.dry(); this.renderAdmin(); });
+        break;
+      }
+      case 'admin-remove': Snd.ui(); Admin.remove(); this.adminMsg = 'Admin removed'; this.adminOk = true; this.renderAdmin(); break;
     }
   },
 
@@ -10433,7 +10801,7 @@ const Menu = {
       return `<div class="acard${open ? ' open' : ''}"><button type="button" class="acard-main" data-act="acct-pick" data-id="${a.id}">${emblemSVG(rk, 48)}<span class="acard-t"><b>${escHTML(a.name)}</b><small>Level ${lv.level} · ${escHTML(rk < 0 ? 'Unranked' : RANKS[rk].name)} · ${fmtN(p.points)} pts</small><small>${when}</small></span>${a.pin ? '<i class="lock" title="Protected by a PIN">PIN</i>' : ''}</button>${pinForm}</div>`;
     }).join('');
     el.innerHTML = `<div class="sheet acct-sheet">
-      <header class="sheet-head brandhead"><div class="brand">Short<span>·</span>Fuse</div><div class="stagecode"><b>Accounts</b>on this device</div></header>
+      <header class="sheet-head brandhead"><div class="brand">wall<span>r</span></div><div class="stagecode"><b>Accounts</b>on this device</div></header>
       <div class="sheet-body">
         <h2 class="acct-title">Who’s playing?</h2>
         ${this.welcome ? `<p class="msg">${escHTML(this.welcome)}</p>` : ''}
@@ -10497,6 +10865,24 @@ const Menu = {
     </div>`;
   },
 
+  // ---------------- admin (bottom of Settings) ----------------
+  renderAdmin() {
+    const el = $('admin-box');
+    if (!el) return;
+    const msg = this.adminMsg ? `<p class="${this.adminOk ? 'msg' : 'err'}">${escHTML(this.adminMsg)}</p>` : '';
+    const rules = 'Matches played with admin powers on don’t count toward XP, points, rank or match history.';
+    el.innerHTML = !Admin.unlocked
+      ? `<h3 class="sect">Admin</h3>
+        <form class="acct-form inline" data-form="admin" autocomplete="off"><label class="field"><span>Admin passcode</span><input id="admin-code" class="field-in" type="password" autocomplete="off" spellcheck="false"></label><button type="submit" class="btn">Unlock admin</button></form>
+        ${msg}<p class="note">An admin can fly through walls (noclip), has unlimited wallbang rounds with no wait, unlimited money, and sees enemies through walls. ${rules}</p>`
+      : `<h3 class="sect">Admin <i class="adm">${Admin.on ? 'ON' : 'OFF'}</i></h3>
+        <label class="check"><input type="checkbox" id="admin-on"${Admin.on ? ' checked' : ''}> Admin powers on</label>
+        <ul class="admin-list"><li>Noclip: <kbd>V</kbd> to fly through walls</li><li>Unlimited wallbang rounds, no 10 s wait</li><li>Unlimited money</li><li>Enemies shown through walls and on the radar</li></ul>
+        ${msg}<p class="note">${Accounts.guest ? 'As a guest, admin lasts until you sign in or reload.' : `Saved for ${escHTML(Accounts.cur.name)} on this device.`} ${rules}</p>
+        <div class="actions"><button type="button" class="btn danger" data-act="admin-remove">Remove admin</button></div>`;
+    this.adminMsg = '';
+  },
+
   // ---------------- home ----------------
   renderHome() {
     const v = Profile.v, lv = Profile.level(), rk = Profile.rank();
@@ -10506,7 +10892,7 @@ const Menu = {
       <div class="hc-foot">${ptsHTML(v.points)}<span class="sync">${escHTML(Profile.saveLabel())}</span></div>`;
     $('home-card').insertAdjacentHTML('afterbegin', Accounts.guest
       ? `<div class="hc-acct guest"><span class="hc-name">Guest</span><span class="hc-acts"><button type="button" class="link" data-act="acct-new" data-convert="1">Create account</button><button type="button" class="link" data-act="acct-switch">Switch</button></span></div>`
-      : `<div class="hc-acct"><span class="hc-name">${escHTML(Accounts.cur.name)}</span><span class="hc-acts"><button type="button" class="link" data-act="acct-settings">Account</button><button type="button" class="link" data-act="acct-switch">Switch</button></span></div>`);
+      : `<div class="hc-acct"><span class="hc-name">${escHTML(Accounts.cur.name)}${Admin.on ? '<i class="adm">ADMIN</i>' : ''}</span><span class="hc-acts"><button type="button" class="link" data-act="acct-settings">Account</button><button type="button" class="link" data-act="acct-switch">Switch</button></span></div>`);
     const n = Accounts.notice, nb = $('home-notice');
     if (n && n.res) {
       const r = n.res, c = r.cfg, what = { left: 'left early', none: 'left before it started', practice: 'practice' }[r.outcome] || r.outcome;
@@ -10714,10 +11100,10 @@ const Menu = {
           <div class="res-box"><h3 class="sect">Experience · ${xp.mults.map(escHTML).join(' · ')}</h3><ul class="lines">${xpLines}<li class="tot"><span>Total XP${xp.k !== 1 ? ` (×${xp.k.toFixed(2)})` : ''}</span><b>+${fmtN(xp.total)}</b></li></ul>
             <div class="res-level">${levelBadge(lv1.level)}<div><div class="hc-xpl"><span>Level ${lv1.level}</span><span>${fmtN(lv1.into)} / ${fmtN(lv1.need)} XP</span></div><div class="xpbar anim"><i style="--from:${lvl0Pct}%;width:${lvlPct}%"></i></div></div></div>
             ${upsHTML}<p class="note">Points: ${ptsHTML(R0.pointsNow)} · spend them in the shop.</p></div>
-          ${eloHTML || `<div class="res-box"><h3 class="sect">Rank</h3><p class="note">${cfg.mode === 'defuse' ? 'This match ended before it started, so your rating did not change.' : 'Skirmish is practice: it pays some XP but never changes your Elo. Play a defuse match to move your rank.'}</p></div>`}
+          ${R0.admin ? '<div class="res-box"><h3 class="sect">Admin match</h3><p class="note">Admin powers were on during this match, so it doesn’t change XP, points, rank or match history.</p></div>' : eloHTML || `<div class="res-box"><h3 class="sect">Rank</h3><p class="note">${cfg.mode === 'defuse' ? 'This match ended before it started, so your rating did not change.' : 'Skirmish is practice: it pays some XP but never changes your Elo. Play a defuse match to move your rank.'}</p></div>`}
         </div>
       </div>
-      <footer class="sheet-foot"><p class="summary">${Accounts.guest ? 'Guest: this progress isn’t saved. <button type="button" class="btn small" data-act="acct-new" data-convert="1">Create an account to keep it</button>' : `<span class="saved">✓ ${escHTML(Profile.saveLabel())} (${escHTML(Accounts.cur.name)})</span>`}${outcome === 'left' && cfg.ranked ? ' Leaving a ranked match counts as a loss.' : ''}</p><div class="actions"><button type="button" class="btn" data-go="shop">Shop</button><button type="button" class="btn" data-act="home">Main menu</button><button type="button" class="btn primary" data-act="again" data-autofocus>Play again</button></div></footer>
+      <footer class="sheet-foot"><p class="summary">${R0.admin ? 'Admin match: nothing recorded.' : Accounts.guest ? 'Guest: this progress isn’t saved. <button type="button" class="btn small" data-act="acct-new" data-convert="1">Create an account to keep it</button>' : `<span class="saved">✓ ${escHTML(Profile.saveLabel())} (${escHTML(Accounts.cur.name)})</span>`}${outcome === 'left' && cfg.ranked ? ' Leaving a ranked match counts as a loss.' : ''}</p><div class="actions"><button type="button" class="btn" data-go="shop">Shop</button><button type="button" class="btn" data-act="home">Main menu</button><button type="button" class="btn primary" data-act="again" data-autofocus>Play again</button></div></footer>
     </div>`;
   },
 
@@ -10840,7 +11226,13 @@ function fireShot(actor, w, e) {
   if (bodies.size && actor.isMe) HUD.hitmarker(head);
   const r0 = shot.results[0].res;
   const end = r0.end || [eye[0] + dir[0] * def.range, eye[1] + dir[1] * def.range, eye[2] + dir[2] * def.range];
-  if (e.tracer) FX.tracers.spawn(mz, end);
+  if (shot.wallbang) {
+    // a wallbang round: a hot streak along the whole line, sparks where it leaves each wall
+    FX.tracers.spawn(mz, end, 9500, 900); FX.tracers.spawn(mz, end, 9000, 600);
+    Snd.wallbang(actor.isMe ? null : mz);
+    DLights.add(mz[0], mz[1], mz[2], [1.0, 0.45, 0.2], 360, 0.09);
+    if (actor.isMe) HUD.note(`Wallbang · ${shot.results[0].res.pens} wall${shot.results[0].res.pens === 1 ? '' : 's'}`);
+  } else if (e.tracer) FX.tracers.spawn(mz, end);
   FX.muzzleSmoke(mz, dir, w.heat);
   if (actor.isMe) Game.lastHit = { what, damage, pens: r0.pens, dist: r0.dist, dealt: shot.dealt };
 }
@@ -10871,6 +11263,7 @@ function simTick(dt) {
     // freeze time: look and buy only; defusing pins you in place
     if (Match.frozen() || Bomb.defusing(a)) cmd = Object.assign({}, cmd, { fwd: 0, side: 0, jump: false, fire: false, alt: false, drop: false });
     Bomb.control(a, cmd, dt);
+    if (cmd.wallbang && a.isMe) HUD.wallbangNote(Wallbang.toggle(a));
     if (cmd.use && !Bomb.defusing(a) && !Items.use(a)) { const d = Ents.doorInReach(tickEye(a.player), viewDir(a.player)); if (d) d.toggle(a.player); }
     if (cmd.drop) Items.drop(a, a.loadout.active, true);
     a.player.tick(cmd, dt);
@@ -10909,7 +11302,10 @@ function simTick(dt) {
 
 function handleHotkeys() {
   const pl = Game.player;
-  if (Input.pressed('KeyV')) { pl.noclip = !pl.noclip; if (!pl.noclip) pl.vel = [0, 0, 0]; HUD.note(pl.noclip ? 'Noclip on · Space up, C down' : 'Noclip off'); }
+  if (Input.pressed('KeyV')) {
+    if (!Actors.me.admin) HUD.note('Noclip is an admin power');
+    else { pl.noclip = !pl.noclip; if (!pl.noclip) pl.vel = [0, 0, 0]; HUD.note(pl.noclip ? 'Noclip on · Space up, C down' : 'Noclip off'); }
+  }
   if (Input.pressed('F1') || Input.pressed('Backquote')) { HUD.debug = !HUD.debug; $('hud-debug').hidden = !HUD.debug; }
   if (Input.pressed('KeyH')) { const shown = !HUD.el['hud-hint'].hidden; HUD.hintPinned = !shown; Settings.set('showHints', !shown); }
   if (Input.pressed('KeyB') || Input.touch.buyEdge) { Input.touch.buyEdge = false; BuyMenu.toggle(); }
@@ -10959,7 +11355,7 @@ function frame(now) {
   Game.last = t;
   const t0 = performance.now();
   const me = Actors.me, pl = Game.player;
-  const held = Game.loadout.active, zoomFov = me.alive && !Game.spectate && held.kind === 'gun' ? held.scopeFov() : 0;
+  const held = Game.loadout.active, zoomFov = me.alive && !Game.spectate && held.kind === 'gun' ? held.scopeFov() || held.adsFov() : 0;
   if (Game.state === 'playing') {
     Input.takeLook(Game.look, dt);
     if (me.alive) {
@@ -11009,7 +11405,8 @@ function frame(now) {
     FX.lightAt(mq.st.x, mq.st.y + 40, mq.st.z, mq.pm.light); mq.pm.setLight(mq.pm.light[0], mq.pm.light[1], mq.pm.light[2]);
   }
   const zf = me.alive && !Game.spectate && w.kind === 'gun' ? w.scopeFov() : 0;   // after this frame's ticks
-  R.setZoom(zf); HUD.scope(zf);
+  const af = me.alive && !Game.spectate && w.kind === 'gun' ? w.adsFov() : 0;
+  R.setZoom(zf || af); HUD.scope(zf); HUD.ads(me.alive && w.kind === 'gun' ? w.ads : 0);
   Viewmodel.rig.visible = me.alive && !Game.spectate && !zf && !inMenu;
   if (!inMenu) $('sf-fade').style.opacity = '0';
   Viewmodel.update(dt, pl, w, Game.look, eye, Game.alpha);
@@ -11100,6 +11497,7 @@ async function loadMap(key, from = 0, to = 1) {
   } else Game.player.cw = L.cw;
   Actors.init();
   Actors.me.name = Accounts.name();
+  Admin.apply();
   Game.player.maxSpeed = Game.loadout.active.def.maxSpeed;
   MenuCam.reset(L);
   HUD.el['hud-tag'].textContent = L.name;
@@ -11133,6 +11531,7 @@ const Session = {
     if (cfg.mode !== 'defuse') { Actors.feed = []; Actors.score = [0, 0]; }
     me.name = Accounts.name();
     this.active = true; this.cfg = cfg; this.done = false; this.results = null; this.matchId = randomId(6) + Date.now().toString(36);
+    this.adminUsed = false; Admin.apply();
   },
   // What leaving now would record: practice XP in skirmish; in defuse a loss once the match has
   // started (nothing if you leave during the first buy time without a kill).
@@ -11143,13 +11542,14 @@ const Session = {
   // Fold the match into the profile (saved to the signed-in account on this device) exactly once.
   record(outcome) {
     this.done = true;
+    if (this.adminUsed) { this.results = Profile.adminResults(this.cfg, this.stats(Actors.me), outcome); Accounts.clearCheckpoint(); return this.results; }
     this.results = Profile.applyMatch(this.cfg, this.stats(Actors.me), outcome, this.matchId);
     Accounts.clearCheckpoint();
     return this.results;
   },
   // Kept up to date every round and when the tab is hidden, so an exit still counts if the page dies.
   checkpoint() {
-    if (!this.active || this.done || Accounts.guest) return;
+    if (!this.active || this.done || Accounts.guest || this.adminUsed) return;
     const st = this.stats(Actors.me);
     Accounts.checkpoint({ matchId: this.matchId, cfg: this.cfg, st, outcome: this.exitOutcome(st), at: Date.now() });
   },
@@ -11263,7 +11663,7 @@ async function boot(hot) {
   // Test/debug hooks (harmless in normal play).
   window.__SF = {
     Game, R, Ents, FX, Input, Ballistics, Grenades, Settings, Viewmodel, Snd, Actors, Nav, Bots, Items, Bomb, Match, SHOP, Tactics, BuyMenu, Radar, MAPS,
-    Profile, Arsenal, Session, Menu, Rewards, ArmoryView, Accounts, launch, loadMap,
+    Profile, Arsenal, Session, Menu, Rewards, ArmoryView, Accounts, Admin, Wallbang, WALLBANG, launch, loadMap,
     setView(x, y, z, yawDeg, pitchDeg) {
       const p = Game.player; p.spawn([x, y, z], yawDeg * DEG); p.pitch = (pitchDeg || 0) * DEG;
       const w = Game.loadout.active; if (w.state === 'draw') { w.state = 'idle'; w.anim = 'idle'; }

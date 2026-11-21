@@ -27,7 +27,7 @@ const EMBLEM_GLYPH = [
   '<path d="M35 14 L23 34 L31 34 L28 50 L42 28 L34 28 Z" fill="#f2fffc"/>',
   '<path d="M32 13 L35.5 25 L47 19 L40 30 L51 34 L39 37 L44 49 L33 41 L27 51 L26 39 L14 41 L23 32 L14 23 L27 26 Z" fill="#fff1ea"/>',
   '<circle cx="32" cy="32" r="5" fill="#fff"/><circle cx="32" cy="32" r="11" fill="none" stroke="#f3eeff" stroke-width="2.4"/><circle cx="32" cy="32" r="17" fill="none" stroke="#f3eeff" stroke-width="1.6" opacity=".7"/>',
-  '<path d="M32 12 C38 20 44 24 42 34 C41 41 36 46 32 47 C27 46 22 42 22 35 C22 29 26 27 27 22 C30 26 30 29 31 31 C33 26 33 18 32 12 Z" fill="#fff6d8"/><path d="M32 30 C35 34 37 37 35 41 C34 43 31 44 29 42 C28 39 30 36 32 30 Z" fill="#e5573f"/>',
+  '<g fill="#fff6d8"><rect x="16" y="19" width="14" height="6"/><rect x="33" y="19" width="15" height="6"/><rect x="16" y="28" width="7" height="6"/><rect x="41" y="28" width="7" height="6"/><rect x="16" y="37" width="14" height="6"/><rect x="33" y="37" width="15" height="6"/></g><path d="M25 27 L31 24 L35 28 L40 26 L38 32 L42 37 L35 37 L31 42 L28 36 L22 36 L26 31 Z" fill="#e5573f"/>',
 ];
 function emblemSVG(rk, px = 56) {
   const id = `eg${++emblemSeq}`;
@@ -125,7 +125,10 @@ const Menu = {
 
   init() {
     $('sf-overlay').addEventListener('click', (e) => this.onClick(e));
-    $('sf-overlay').addEventListener('change', (e) => { if (e.target.id === 'cfg-ff') { this.cfg.ff = e.target.checked; this.renderCreate(); } });
+    $('sf-overlay').addEventListener('change', (e) => {
+      if (e.target.id === 'cfg-ff') { this.cfg.ff = e.target.checked; this.renderCreate(); }
+      if (e.target.id === 'admin-on') { Admin.set(e.target.checked); this.adminMsg = Admin.on ? 'Admin powers on' : 'Admin powers off: this account plays normally'; this.adminOk = true; this.renderAdmin(); }
+    });
     $('sf-overlay').addEventListener('submit', (e) => { const f = e.target.closest('form[data-form]'); if (!f) return; e.preventDefault(); Snd.init(); this.act('form-' + f.dataset.form, f.dataset, f); });
     this.bindSettings();
     const rerender = () => {
@@ -156,7 +159,7 @@ const Menu = {
     $('sf-overlay').hidden = false;
     $('sf-overlay').dataset.scr = name;
     for (const s of SCREENS) { const el = $('scr-' + s); if (el) el.hidden = s !== name; }
-    const r = { home: 'renderHome', create: 'renderCreate', armory: 'renderArmory', career: 'renderCareer', pause: 'renderPause', results: 'renderResults', ready: 'renderReady', account: 'renderAccount', newacct: 'renderNewAcct', acctset: 'renderAcctSet' }[name];
+    const r = { home: 'renderHome', create: 'renderCreate', armory: 'renderArmory', career: 'renderCareer', pause: 'renderPause', results: 'renderResults', ready: 'renderReady', account: 'renderAccount', newacct: 'renderNewAcct', acctset: 'renderAcctSet', settings: 'renderAdmin' }[name];
     if (r) this[r]();
     if (name !== 'armory') ArmoryView.stop();
     const focus = $('scr-' + name) && $('scr-' + name).querySelector('[data-autofocus]');
@@ -276,6 +279,14 @@ const Menu = {
         break;
       }
       case 'notice-close': Accounts.notice = null; this.welcome = ''; this.renderHome(); break;
+      // ---- admin ----
+      case 'form-admin': {
+        if (this.busy) break;
+        this.busy = true;
+        Admin.tryCode($('admin-code').value).then((r) => { this.busy = false; this.adminMsg = r.msg; this.adminOk = r.ok; if (r.ok) Snd.buy(); else Snd.dry(); this.renderAdmin(); });
+        break;
+      }
+      case 'admin-remove': Snd.ui(); Admin.remove(); this.adminMsg = 'Admin removed'; this.adminOk = true; this.renderAdmin(); break;
     }
   },
 
@@ -298,7 +309,7 @@ const Menu = {
       return `<div class="acard${open ? ' open' : ''}"><button type="button" class="acard-main" data-act="acct-pick" data-id="${a.id}">${emblemSVG(rk, 48)}<span class="acard-t"><b>${escHTML(a.name)}</b><small>Level ${lv.level} · ${escHTML(rk < 0 ? 'Unranked' : RANKS[rk].name)} · ${fmtN(p.points)} pts</small><small>${when}</small></span>${a.pin ? '<i class="lock" title="Protected by a PIN">PIN</i>' : ''}</button>${pinForm}</div>`;
     }).join('');
     el.innerHTML = `<div class="sheet acct-sheet">
-      <header class="sheet-head brandhead"><div class="brand">Short<span>·</span>Fuse</div><div class="stagecode"><b>Accounts</b>on this device</div></header>
+      <header class="sheet-head brandhead"><div class="brand">wall<span>r</span></div><div class="stagecode"><b>Accounts</b>on this device</div></header>
       <div class="sheet-body">
         <h2 class="acct-title">Who’s playing?</h2>
         ${this.welcome ? `<p class="msg">${escHTML(this.welcome)}</p>` : ''}
@@ -362,6 +373,24 @@ const Menu = {
     </div>`;
   },
 
+  // ---------------- admin (bottom of Settings) ----------------
+  renderAdmin() {
+    const el = $('admin-box');
+    if (!el) return;
+    const msg = this.adminMsg ? `<p class="${this.adminOk ? 'msg' : 'err'}">${escHTML(this.adminMsg)}</p>` : '';
+    const rules = 'Matches played with admin powers on don’t count toward XP, points, rank or match history.';
+    el.innerHTML = !Admin.unlocked
+      ? `<h3 class="sect">Admin</h3>
+        <form class="acct-form inline" data-form="admin" autocomplete="off"><label class="field"><span>Admin passcode</span><input id="admin-code" class="field-in" type="password" autocomplete="off" spellcheck="false"></label><button type="submit" class="btn">Unlock admin</button></form>
+        ${msg}<p class="note">An admin can fly through walls (noclip), has unlimited wallbang rounds with no wait, unlimited money, and sees enemies through walls. ${rules}</p>`
+      : `<h3 class="sect">Admin <i class="adm">${Admin.on ? 'ON' : 'OFF'}</i></h3>
+        <label class="check"><input type="checkbox" id="admin-on"${Admin.on ? ' checked' : ''}> Admin powers on</label>
+        <ul class="admin-list"><li>Noclip: <kbd>V</kbd> to fly through walls</li><li>Unlimited wallbang rounds, no 10 s wait</li><li>Unlimited money</li><li>Enemies shown through walls and on the radar</li></ul>
+        ${msg}<p class="note">${Accounts.guest ? 'As a guest, admin lasts until you sign in or reload.' : `Saved for ${escHTML(Accounts.cur.name)} on this device.`} ${rules}</p>
+        <div class="actions"><button type="button" class="btn danger" data-act="admin-remove">Remove admin</button></div>`;
+    this.adminMsg = '';
+  },
+
   // ---------------- home ----------------
   renderHome() {
     const v = Profile.v, lv = Profile.level(), rk = Profile.rank();
@@ -371,7 +400,7 @@ const Menu = {
       <div class="hc-foot">${ptsHTML(v.points)}<span class="sync">${escHTML(Profile.saveLabel())}</span></div>`;
     $('home-card').insertAdjacentHTML('afterbegin', Accounts.guest
       ? `<div class="hc-acct guest"><span class="hc-name">Guest</span><span class="hc-acts"><button type="button" class="link" data-act="acct-new" data-convert="1">Create account</button><button type="button" class="link" data-act="acct-switch">Switch</button></span></div>`
-      : `<div class="hc-acct"><span class="hc-name">${escHTML(Accounts.cur.name)}</span><span class="hc-acts"><button type="button" class="link" data-act="acct-settings">Account</button><button type="button" class="link" data-act="acct-switch">Switch</button></span></div>`);
+      : `<div class="hc-acct"><span class="hc-name">${escHTML(Accounts.cur.name)}${Admin.on ? '<i class="adm">ADMIN</i>' : ''}</span><span class="hc-acts"><button type="button" class="link" data-act="acct-settings">Account</button><button type="button" class="link" data-act="acct-switch">Switch</button></span></div>`);
     const n = Accounts.notice, nb = $('home-notice');
     if (n && n.res) {
       const r = n.res, c = r.cfg, what = { left: 'left early', none: 'left before it started', practice: 'practice' }[r.outcome] || r.outcome;
@@ -579,10 +608,10 @@ const Menu = {
           <div class="res-box"><h3 class="sect">Experience · ${xp.mults.map(escHTML).join(' · ')}</h3><ul class="lines">${xpLines}<li class="tot"><span>Total XP${xp.k !== 1 ? ` (×${xp.k.toFixed(2)})` : ''}</span><b>+${fmtN(xp.total)}</b></li></ul>
             <div class="res-level">${levelBadge(lv1.level)}<div><div class="hc-xpl"><span>Level ${lv1.level}</span><span>${fmtN(lv1.into)} / ${fmtN(lv1.need)} XP</span></div><div class="xpbar anim"><i style="--from:${lvl0Pct}%;width:${lvlPct}%"></i></div></div></div>
             ${upsHTML}<p class="note">Points: ${ptsHTML(R0.pointsNow)} · spend them in the shop.</p></div>
-          ${eloHTML || `<div class="res-box"><h3 class="sect">Rank</h3><p class="note">${cfg.mode === 'defuse' ? 'This match ended before it started, so your rating did not change.' : 'Skirmish is practice: it pays some XP but never changes your Elo. Play a defuse match to move your rank.'}</p></div>`}
+          ${R0.admin ? '<div class="res-box"><h3 class="sect">Admin match</h3><p class="note">Admin powers were on during this match, so it doesn’t change XP, points, rank or match history.</p></div>' : eloHTML || `<div class="res-box"><h3 class="sect">Rank</h3><p class="note">${cfg.mode === 'defuse' ? 'This match ended before it started, so your rating did not change.' : 'Skirmish is practice: it pays some XP but never changes your Elo. Play a defuse match to move your rank.'}</p></div>`}
         </div>
       </div>
-      <footer class="sheet-foot"><p class="summary">${Accounts.guest ? 'Guest: this progress isn’t saved. <button type="button" class="btn small" data-act="acct-new" data-convert="1">Create an account to keep it</button>' : `<span class="saved">✓ ${escHTML(Profile.saveLabel())} (${escHTML(Accounts.cur.name)})</span>`}${outcome === 'left' && cfg.ranked ? ' Leaving a ranked match counts as a loss.' : ''}</p><div class="actions"><button type="button" class="btn" data-go="shop">Shop</button><button type="button" class="btn" data-act="home">Main menu</button><button type="button" class="btn primary" data-act="again" data-autofocus>Play again</button></div></footer>
+      <footer class="sheet-foot"><p class="summary">${R0.admin ? 'Admin match: nothing recorded.' : Accounts.guest ? 'Guest: this progress isn’t saved. <button type="button" class="btn small" data-act="acct-new" data-convert="1">Create an account to keep it</button>' : `<span class="saved">✓ ${escHTML(Profile.saveLabel())} (${escHTML(Accounts.cur.name)})</span>`}${outcome === 'left' && cfg.ranked ? ' Leaving a ranked match counts as a loss.' : ''}</p><div class="actions"><button type="button" class="btn" data-go="shop">Shop</button><button type="button" class="btn" data-act="home">Main menu</button><button type="button" class="btn primary" data-act="again" data-autofocus>Play again</button></div></footer>
     </div>`;
   },
 

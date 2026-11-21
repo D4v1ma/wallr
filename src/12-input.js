@@ -1,6 +1,6 @@
 // Keyboard / mouse / touch input. Edge-triggered presses are latched until a tick consumes them.
 
-const GAME_KEYS = new Set(['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyC', 'KeyE', 'KeyR', 'KeyV', 'KeyH', 'KeyF', 'KeyQ', 'Digit1', 'Digit2', 'Digit3', 'Digit4',
+const GAME_KEYS = new Set(['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyC', 'KeyE', 'KeyR', 'KeyV', 'KeyH', 'KeyF', 'KeyQ', 'KeyX', 'Digit1', 'Digit2', 'Digit3', 'Digit4',
   'F1', 'Backquote', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight']);
 
 const Input = {
@@ -111,6 +111,7 @@ const Input = {
         else if (act === 'use') { t.useEdge = true; t.useDown = true; }
         else if (act === 'switch') t.switchEdge = true;
         else if (act === 'buy') t.buyEdge = true;
+        else if (act === 'wallbang') t.wbEdge = true;
         e.preventDefault();
       }, { passive: false });
       b.addEventListener('touchend', (e) => { if (act === 'fire') t.fire = false; if (act === 'use') t.useDown = false; e.preventDefault(); }, { passive: false });
@@ -136,6 +137,7 @@ const Input = {
     cmd.drop = this.pressed('KeyG');
     cmd.alt = !ui && this.mouse[2];
     cmd.inspect = this.pressed('KeyF');
+    cmd.wallbang = (!ui && this.pressed('KeyX')) || t.wbEdge; t.wbEdge = false;
     cmd.slot = ui ? 0 : this.pressed('Digit1') ? 1 : this.pressed('Digit2') ? 2 : this.pressed('Digit3') ? 3 : this.pressed('Digit4') ? 4 : this.pressed('Digit5') ? 5 : 0;
     cmd.last = this.pressed('KeyQ');
     cmd.cycle = this.wheel > 0 ? 1 : this.wheel < 0 ? -1 : t.switchEdge ? 1 : 0;

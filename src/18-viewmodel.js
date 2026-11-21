@@ -198,6 +198,9 @@ function vmPrepareKit(m, Mg) {
   m.flashBase = m.flash ? m.flash.position.z : 0;
   m.flashBaseScale = m.flashScale || 1;
   m.kitSig = '';
+  // scoped in: the sight line on the screen's centre, gun straight ahead and a little closer
+  m.ironY = { rifle: 2.0, pistol: 1.82, smg: 1.88, shotgun: 1.52, sniper: 3.0 }[m.id] || 2;
+  m.adsPose = { x: 0, y: -m.ironY, z: m.base.z * 0.94, rx: 0, ry: 0, rz: 0 };
 }
 function vmMatsFor(M) {
   return Object.assign({}, M, { metal: M.metal.clone(), poly: M.poly.clone(), tan: M.tan.clone(), wood: M.wood.clone() });
@@ -216,6 +219,9 @@ function vmApplyKit(m, def) {
   if (m.flash) m.flash.position.z = m.flashBase - ext;
   const stock = WEAPONS[m.id];
   m.flashScale = m.flashBaseScale * (stock && stock.flash ? def.flash / stock.flash : 1);
+  // a red dot or holo sight sits higher than the iron sights
+  const rail = { rifle: 1.46, pistol: 1.525, smg: 1.425, shotgun: 1.5 }[m.id], optic = kit && kit.optic;
+  if (m.adsPose) m.adsPose.y = -(optic === 'pip' && rail ? rail + 0.58 * (m.id === 'pistol' ? 0.78 : 1) : optic === 'halo' && rail ? rail + 0.78 : m.ironY);
   const camo = kit && kit.camo ? CAMOS[kit.camo] : null, tex = camo ? Arsenal.camoTexture(kit.camo) : null;
   for (const mesh of m.bodyMeshes) {
     const g = mesh.geometry;
@@ -305,11 +311,13 @@ const Viewmodel = {
     x += this.swayX * 0.45; y += this.swayY * 0.35; ry += this.swayX * 0.035; rx -= this.swayY * 0.03; rz += this.swayX * 0.05;
     y += pl.duckAmt * 0.35 - pl.landKick * 0.08 + (!pl.onGround && !pl.noclip ? 0.25 : 0);
     rz -= pl.duckAmt * 0.04;
-    this.rig.position.set(x, y, 0);
-    this.rig.rotation.set(rx, ry, rz);
+    const ak = w.kind === 'gun' && m.adsPose ? smoothstep(0, 1, w.ads || 0) : 0, calm = 1 - 0.8 * ak;
+    this.rig.position.set(x * calm, y * calm, 0);
+    this.rig.rotation.set(rx * calm, ry * calm, rz * calm);
     // --- weapon pose: base + clip + kick
     const rate = (w.anim.startsWith('reload') && w.def.reloadRate) || (w.anim === 'draw' && w.def.drawRate) || 1;
-    const t = (w.animTime() + alpha * TICK) * rate, clips = VM_CLIPS[m.id], clip = clips[w.anim], s = this.s6, b = m.base;
+    const t = (w.animTime() + alpha * TICK) * rate, clips = VM_CLIPS[m.id], clip = clips[w.anim], s = this.s6, b0 = m.base, ap = m.adsPose || b0;
+    const b = ak > 0 ? { x: lerp(b0.x, ap.x, ak), y: lerp(b0.y, ap.y, ak), z: lerp(b0.z, ap.z, ak), rx: lerp(b0.rx, ap.rx, ak), ry: lerp(b0.ry, ap.ry, ak), rz: lerp(b0.rz, ap.rz, ak) } : b0;
     sampleKeys(clip ? clip.root : null, t, s);
     this.kick = damp(this.kick, 0, 15, dt);
     m.root.position.set(b.x + s[0], b.y + s[1] + this.kick * 0.12, b.z + s[2] + this.kick * 1.15);

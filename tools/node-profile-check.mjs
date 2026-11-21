@@ -28,7 +28,7 @@ check('a new profile starts at level 1 with 600 points, 1000 Elo, unranked', Pro
 check('levels: 800 XP to level 2, the need grows, every level pays points (+500 every 10th)',
   LEVELS.of(799).level === 1 && LEVELS.of(800).level === 2 && LEVELS.need(5) > LEVELS.need(2) && LEVELS.points(2) === 160 && LEVELS.points(10) === LEVELS.points(9) + 10 + 500,
   `need(1..5)=${[1, 2, 3, 4, 5].map((l) => LEVELS.need(l))}`);
-check('ranks: Spark I below 700, Flint II at 1000, Short Fuse at 2400', RANKS[rankFor(500)].name === 'Spark I' && RANKS[rankFor(1000)].name === 'Flint II' && RANKS[rankFor(2400)].name === 'Short Fuse', `${RANKS.length} ranks`);
+check('ranks: Spark I below 700, Flint II at 1000, Wallbreaker at 2400', RANKS[rankFor(500)].name === 'Spark I' && RANKS[rankFor(1000)].name === 'Flint II' && RANKS[rankFor(2400)].name === 'Wallbreaker', `${RANKS.length} ranks`);
 check('four bot difficulties, expert included', ['easy', 'normal', 'hard', 'expert'].every((d) => DIFFS[d] && api.BOT_SKILL[d]));
 
 // --- the shop: attachments per gun, camos for every gun

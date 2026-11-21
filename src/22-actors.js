@@ -30,6 +30,7 @@ class Actor {
     this.kills = 0; this.deaths = 0; this.hurtT = 0; this.hurtFrom = null; this.killer = null;
     this.money = 800; this.kit = false; this.squad = 0;
     this.dmg = 0; this.hs = 0; this.plants = 0; this.defuses = 0;
+    this.wbCharges = 3; this.wbArmed = false; this.aliveT = 0; this.lastShotT = -9; this.admin = false;
     this.cmd = Object.assign({}, IDLE_CMD);
     this.brain = isBot ? new BotBrain(this) : null;
     this.prevPos = [0, 0, 0];
@@ -40,12 +41,14 @@ class Actor {
     this.player.spawn(sp.pos, sp.yaw);
     this.health = 100; this.armor = 100; this.helmet = true; this.alive = true; this.deadT = 0; this.killer = null;
     this.loadout.refill();
-    this.model.dead = 0;
+    this.model.dead = 0; this.aliveT = 0;
+    if (typeof Wallbang !== 'undefined') Wallbang.reset(this);
     if (this.brain) this.brain.reset();
   }
 
-  damage(amount, group, attacker, def, from) {
+  damage(amount, group, attacker, def, from, wallbang = false) {
     if (!this.alive) return 0;
+    this.lastHitWB = wallbang;
     let dmg = amount * (GROUP_MUL[group] || 1);
     if (this.armor > 0 && group !== 'leg' && (group !== 'head' || this.helmet)) {
       let toHealth = dmg * (def.armorPen ?? 0.5), toArmor = (dmg - toHealth) * 0.5;
@@ -64,13 +67,13 @@ class Actor {
   }
 
   die(attacker, def, headshot) {
-    this.alive = false; this.deadT = 0; this.deaths++; this.killer = attacker || null;
+    this.alive = false; this.deadT = 0; this.deaths++; this.killer = attacker || null; this.wbArmed = false;
     this.killInfo = { weapon: def ? def.name : '', headshot };
     if (attacker && attacker !== this) {
       if (attacker.team !== this.team) { attacker.kills++; if (headshot) attacker.hs++; Actors.score[attacker.team]++; } else attacker.kills--;
     }
     Actors.feed.push({ killer: attacker ? attacker.name : '', kTeam: attacker ? attacker.team : this.team, victim: this.name, vTeam: this.team,
-      weapon: def ? def.name : '', wid: def ? def.id : '', hs: headshot, age: 0, me: !!(attacker && attacker.isMe) || this.isMe });
+      weapon: def ? def.name : '', wid: def ? def.id : '', hs: headshot, wb: !!this.lastHitWB, age: 0, me: !!(attacker && attacker.isMe) || this.isMe });
     if (Actors.feed.length > 6) Actors.feed.shift();
     this.model.deathDir = headshot ? 1 : (Math.random() < 0.5 ? 1 : -1);
     if (typeof Snd !== 'undefined' && Snd.death) Snd.death(this.player.pos.slice());
@@ -148,6 +151,7 @@ const Actors = {
   tick(dt) {
     for (const a of this.list) {
       a.hurtT = Math.max(0, a.hurtT - dt * 1.6);
+      if (a.alive) a.aliveT += dt;
       if (!a.alive && (a.deadT += dt) >= RESPAWN_TIME && !(typeof Match !== 'undefined' && Match.active)) a.spawn();
     }
     for (const f of this.feed) f.age += dt;
@@ -161,6 +165,7 @@ const Actors = {
       const p = a.player, m = a.model;
       m.setWeapon(a.loadout.active.def.id, !!a.loadout.byId('charge'));
       m.mesh.visible = !a.isMe && !this.hidden;
+      if (m.setXray && R.scene) m.setXray(!!(this.me && this.me.admin && !a.isMe && a.team !== this.me.team && a.alive && !this.hidden));
       m.update(dt, { x: lerp(p.prev[0], p.pos[0], alpha), y: lerp(p.prev[1], p.pos[1], alpha), z: lerp(p.prev[2], p.pos[2], alpha),
         yaw: p.yaw, pitch: p.pitch, vx: p.vel[0], vz: p.vel[2], ducked: p.ducked, onGround: p.onGround || p.noclip, alive: a.alive });
       if (FX.L) { FX.lightAt(p.pos[0], p.pos[1] + 40, p.pos[2], tmp); m.setLight(tmp[0], tmp[1], tmp[2]); }
@@ -173,17 +178,19 @@ const Combat = {
   // One trace per pellet (1 for bullets). Every pellet is its own hit, like separate bullets.
   shot(actor, w, e) {
     const pl = actor.player, eye = tickEye(pl), def = w.def, n = e.pellets || 1;
-    const base = Ballistics.aimDir(pl, e.off, e.inacc, def.spread, [0, 0, 0]);
+    const wb = Wallbang.take(actor, w);
+    const base = Ballistics.aimDir(pl, e.off, e.inacc, w.spreadBase ? w.spreadBase() : def.spread, [0, 0, 0]);
     const results = [];
     let dealt = 0;
     for (let i = 0; i < n; i++) {
       const dir = n > 1 ? Ballistics.pellet(base, i, def.pelletSpread, [0, 0, 0]) : base;
-      const res = Ballistics.bullet(Game.L, eye, dir, def, actor);
-      if (res.actor) dealt += res.actor.target.damage(res.actor.damage, res.actor.group, actor, def, eye);
+      const res = wb ? Ballistics.wallbang(Game.L, eye, dir, def, actor) : Ballistics.bullet(Game.L, eye, dir, def, actor);
+      if (res.actor) dealt += res.actor.target.damage(res.actor.damage, res.actor.group, actor, def, eye, wb);
       results.push({ res, dir });
     }
-    Bots.noise(eye, actor, def.noise || 1700);
-    return { res: results[0].res, dir: base, results, eye, dealt };
+    actor.lastShotT = Game.time;
+    Bots.noise(eye, actor, (def.noise || 1700) * (wb ? 1.25 : 1));
+    return { res: results[0].res, dir: base, results, eye, dealt, wallbang: wb };
   },
   knife(actor, e) {
     const pl = actor.player, eye = tickEye(pl), dir = viewDir(pl);

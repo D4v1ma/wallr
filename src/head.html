@@ -1,4 +1,4 @@
-<title>Short Fuse</title>
+<title>wallr</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -551,4 +551,27 @@ button.link:hover, button.link:focus-visible { color: #ffc565; text-decoration: 
 .car-acct { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 12px; background: var(--field); border: 1px solid var(--panel-edge); font-size: 14px; }
 .saved { color: var(--ok); }
 @media (max-width: 700px) { .home-notice { position: static; transform: none; max-width: none; } }
+
+/* ---------- wallbang rounds ---------- */
+.wbx { display: flex; align-items: center; gap: 8px; padding: 3px 8px; font-size: 11px; letter-spacing: 0.14em; color: var(--hud-dim); background: rgba(8, 10, 9, 0.45); border-left: 2px solid rgba(255, 122, 61, 0.6); }
+.wbx:empty { display: none; }
+.wbx .wb-l { font-weight: 600; color: #ff9a6a; }
+.wbx .wb-p { display: flex; gap: 3px; align-items: center; }
+.wbx .wb-p i { width: 9px; height: 9px; border: 1px solid #ff9a6a; transform: rotate(45deg); }
+.wbx .wb-p i.on { background: #ff7a3d; border-color: #ff7a3d; box-shadow: 0 0 6px rgba(255, 122, 61, 0.7); }
+.wbx .wb-p .inf { font-size: 15px; color: #ff9a6a; }
+.wbx em { font-style: normal; letter-spacing: 0.06em; text-transform: none; font-family: var(--font-body); font-size: 12px; }
+.wbx.locked { opacity: 0.6; }
+.wbx.armed { color: var(--hud); background: rgba(120, 36, 10, 0.55); border-left-color: #ff7a3d; animation: sf-pulse 0.9s ease-in-out infinite; }
+.xh.wb { --xc: #ff7a3d; }
+.xh.wb::after { content: ""; position: absolute; left: -11px; top: -11px; width: 18px; height: 18px; border: 2px solid #ff7a3d; border-radius: 50%; box-shadow: 0 0 6px rgba(255, 122, 61, 0.6); }
+.hud-feed .wbk { font-style: normal; font-family: var(--font-display); font-size: 10px; letter-spacing: 0.08em; padding: 0 3px; color: #1b1306; background: #ff7a3d; }
+#sf-touch .btns button.wbt { background: rgba(255, 122, 61, 0.35); }
+
+/* the wallr wordmark: lowercase, the r in the accent colour */
+.brand { text-transform: none; letter-spacing: 0.01em; }
+.home-card .hc-acct .adm, .adm { font-style: normal; font-family: var(--font-display); font-size: 10px; letter-spacing: 0.14em; padding: 1px 5px; margin-left: 6px; color: #1b1306; background: #ff7a3d; vertical-align: 2px; }
+.admin-box { display: flex; flex-direction: column; gap: 10px; padding-top: 8px; border-top: 1px solid var(--panel-edge); }
+.admin-box .sect { margin: 0; }
+.admin-list { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.6; }
 </style>

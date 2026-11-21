@@ -7,7 +7,7 @@ const HUD = {
   init() {
     for (const id of ['sf-hud', 'xh', 'hitmark', 'hud-hint', 'hud-fps', 'hud-hp', 'hud-ar', 'hud-prompt', 'hud-speed', 'hud-wname', 'hud-reload', 'hud-ammo', 'hud-mag', 'hud-res',
       'hud-debug', 'hud-note', 'r-hits', 'r-shots', 'r-acc', 'hud-wlist', 'sf-smoke', 'hud-feed', 'hud-score', 'hud-dmg', 'hud-hurt', 'hud-dead', 'hud-board', 'hud-target', 'hud-scope', 'hud-tag', 'hud-alive', 'hud-range', 'hud-money', 'hud-cash', 'hud-cashd',
-      'hud-buyzone', 'hud-carry', 'hud-banner', 'hud-progress', 'hud-progress-label', 'hud-progress-bar', 'buy-menu', 'hud-place'])
+      'hud-buyzone', 'hud-carry', 'hud-banner', 'hud-progress', 'hud-progress-label', 'hud-progress-bar', 'buy-menu', 'hud-place', 'hud-wb'])
       this.el[id] = $(id);
     this.applyCrosshairStyle();
     this.applyToggles();
@@ -28,6 +28,35 @@ const HUD = {
   },
   note(text) { this.el['hud-note'].textContent = text; this.el['hud-note'].classList.add('on'); this.noteT = 2.2; },
   hitmarker(head) { this.el.hitmark.classList.add('on'); this.el.hitmark.classList.toggle('hs', !!head); this.hitT = head ? 0.16 : 0.1; },
+  // Wallbang rounds by the ammo counter: pips for what's left, locked/ready/armed state.
+  wallbang(me) {
+    const el = this.el['hud-wb'];
+    if (!el) return;
+    const inf = me.admin, left = Wallbang.charges(me), unlock = Wallbang.unlockIn(me), armed = Wallbang.armed(me);
+    const state = !me.alive ? '' : armed ? 'ARMED · next shot pierces every wall' : unlock === Infinity ? 'round over' : unlock > 0 ? `unlocks in ${Math.ceil(unlock)} s` : left <= 0 ? 'none left this round' : 'X to load';
+    const pips = inf ? '<b class="inf">∞</b>' : Array.from({ length: WALLBANG.perRound }, (_, i) => `<i class="${i < left ? 'on' : ''}"></i>`).join('');
+    const sig = `${pips}|${state}|${armed}|${unlock > 0}`;
+    if (this.last.wb !== sig) {
+      this.last.wb = sig;
+      el.innerHTML = `<span class="wb-l">WALLBANG</span><span class="wb-p">${pips}</span><em>${state}</em>`;
+      el.classList.toggle('armed', armed); el.classList.toggle('locked', unlock > 0 && !armed);
+      this.el.xh.classList.toggle('wb', armed);
+    }
+  },
+  wallbangNote(r) {
+    const me = Actors.me;
+    if (r === 'armed') { Snd.sfx('wbArm'); this.note('Wallbang round loaded: your next shot goes through every wall'); }
+    else if (r === 'off') { Snd.sfx('wbOff'); this.note('Wallbang round unloaded'); }
+    else if (r === 'locked') this.note(Wallbang.unlockIn(me) === Infinity ? 'Wallbang rounds come back next round' : `Wallbang rounds unlock in ${Math.ceil(Wallbang.unlockIn(me))} s`);
+    else if (r === 'empty') this.note('No wallbang rounds left this round');
+    else if (r === 'nogun') this.note('Hold a gun to load a wallbang round');
+  },
+  // Scoped in: the crosshair fades out.
+  ads(k) {
+    const q = Math.round((1 - k) * 20) / 20;
+    if (this.last.ads === q) return;
+    this.last.ads = q; this.el.xh.style.opacity = String(q);
+  },
   scope(fov) {
     const on = fov > 0;
     if (this.last.scope === on) return;
@@ -47,7 +76,7 @@ const HUD = {
     if (Game.state === 'playing') this.hintAge += dt;
     const hints = Settings.v.showHints && !Input.touch.enabled && (this.hintAge < 30 || this.hintPinned);
     if (this.last.hints !== hints) { this.last.hints = hints; el['hud-hint'].hidden = !hints; }
-    this.set('hud-tag', on ? `${Game.L.name} · Round ${M.round}` : `${Game.L.name} · Skirmish`);
+    this.set('hud-tag', (me.admin ? 'ADMIN · ' : '') + (on ? `${Game.L.name} · Round ${M.round}` : `${Game.L.name} · Skirmish`));
     if (this.last.defuse !== on) { this.last.defuse = on; el['hud-range'].hidden = on; el['hud-money'].hidden = !on; el['hud-alive'].hidden = !on; }
     let clock = '<i>:</i>';
     if (on) {
@@ -62,7 +91,7 @@ const HUD = {
       this.set('hud-alive', `<span class="t0">${pips(0)}</span><span class="t1">${pips(1)}</span>`, 'innerHTML');
       if (this.last.money !== undefined && me.money !== this.last.money) { this.cashD = me.money - this.last.money; this.cashT = 2.4; }
       this.last.money = me.money;
-      this.set('hud-cash', me.money.toLocaleString('en-US'));
+      this.set('hud-cash', me.admin ? '∞' : me.money.toLocaleString('en-US'));
       this.cashT = Math.max(0, (this.cashT || 0) - dt);
       const dtxt = this.cashD ? `${this.cashD > 0 ? '+' : '−'}$${Math.abs(this.cashD).toLocaleString('en-US')}` : '';
       this.set('hud-cashd', dtxt);
@@ -116,7 +145,7 @@ const HUD = {
     const sig = Actors.feed.map((f) => f.victim + f.age.toFixed(0)).join('|') + Actors.feed.length;
     if (this.last.feed !== sig) {
       this.last.feed = sig;
-      el['hud-feed'].innerHTML = Actors.feed.map((f) => `<div class="${f.me ? 'mine' : ''}" style="opacity:${f.age > 5.5 ? (7 - f.age) / 1.5 : 1}"><b class="t${f.kTeam}">${this.esc(f.killer)}</b><span title="${this.esc(f.weapon)}">${WeaponIcons.img(f.wid) || this.esc(f.weapon)}${f.hs ? ' <i class="hs">◉</i>' : ''}</span><b class="t${f.vTeam}">${this.esc(f.victim)}</b></div>`).join('');
+      el['hud-feed'].innerHTML = Actors.feed.map((f) => `<div class="${f.me ? 'mine' : ''}" style="opacity:${f.age > 5.5 ? (7 - f.age) / 1.5 : 1}"><b class="t${f.kTeam}">${this.esc(f.killer)}</b><span title="${this.esc(f.weapon)}">${WeaponIcons.img(f.wid) || this.esc(f.weapon)}${f.hs ? ' <i class="hs">◉</i>' : ''}${f.wb ? ' <i class="wbk" title="wallbang">WB</i>' : ''}</span><b class="t${f.vTeam}">${this.esc(f.victim)}</b></div>`).join('');
     }
     const by = me.killer && me.killer !== me ? `Killed by <b class="t${me.killer.team}">${this.esc(me.killer.name)}</b> · ${this.esc(me.killInfo.weapon)}${me.killInfo.headshot ? ' · headshot' : ''}`
       : me.killInfo && me.killInfo.weapon === BLAST.name ? 'Caught in the blast' : 'You died';
@@ -198,6 +227,7 @@ const HUD = {
     this.set('r-hits', String(Ents.stats.hits)); this.set('r-shots', String(Ents.stats.shots));
     this.set('r-acc', `${Ents.plateCount() - Ents.platesUp()}/${Ents.plateCount()}`);
     this.updateRound(dt);
+    this.wallbang(Actors.me);
     this.updateCombat(dt, pl, cam);
     // inside a smoke cloud: wash the screen out
     const k = Grenades.insideAt(cam.position.x, cam.position.y, cam.position.z, this.smokeCol);

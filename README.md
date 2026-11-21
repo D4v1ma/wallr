@@ -1,12 +1,54 @@
-# Short Fuse — Stage 6: menus, progression, three maps
+# wallr — Stage 7: wallbangs
 
-An original round-based tactical shooter for the browser, built in six stages: movement and
-shooting (1), weapons, viewmodels and effects (2), player models and bots (3), rounds, money and
-the charge (4), Saltpan Depot and the radar (5), and now (6) a **main menu** with a
-**Create Game** screen, **two new maps**, **levels and shop points**, a **shop** of attachments
-and camos, a per-gun **loadout** chosen before each match, and **ranks** with an Elo rating.
+An original round-based tactical shooter for the browser where **wallbanging** is the point:
+load a wallbang round and your next shot goes through every wall in its way. Built in stages:
+movement and shooting (1), weapons, viewmodels and effects (2), player models and bots (3),
+rounds, money and the charge (4), the first map and the radar (5), menus, progression, the shop,
+ranks, two more maps and accounts (6), and now (7) the rename to **wallr**, **wallbang rounds**,
+**scoping in**, an **admin passcode**, and **bots that only know what they see and hear**.
 Everything is original: procedural canvas textures, synthesized WebAudio sound, brush
 geometry, models and code. three.js r128 is the only dependency, loaded from cdnjs.
+
+## Wallbang rounds
+
+- Press **X** to load a wallbang round (the touch layout has a WALL button). Your **next gun
+  shot** goes straight through every wall, door and crate in its way, at full damage (only the
+  normal range falloff), and hits the first enemy on the line. Every wall it crosses gets entry
+  and exit marks, and the shot leaves a bright streak along its whole path. With the Bison 12
+  every pellet pierces. Press X again to take the round out unused.
+- **3 per round** each. They **unlock 10 seconds after the round goes live** (after the buy
+  time), or 10 s after spawning in skirmish. The panel above your weapon name shows the
+  rounds left as diamonds and the state: *unlocks in 7 s*, *X to load*, *ARMED*, *none left
+  this round*. The crosshair turns orange with a ring while a round is loaded.
+- Kills with a wallbang round get a **WB** mark in the kill feed.
+- Bots use them too, fairly: right after losing sight of someone, a bot sometimes fires one
+  through the cover where it **last saw** them (never through walls at someone it hasn't seen).
+  Normal bots do it about 30% of the time, Hard 50%, Expert 70%, Easy never.
+- The numbers live in `WALLBANG` in `src/22-wallbang.js` (`perRound`, `unlock`).
+
+## Scoping in
+
+Hold **Mouse 2** with any gun except the Osprey LR (which keeps its own scope): the view zooms a
+little (about 18%), the gun comes up to the sights, the crosshair fades, and you are **a little
+more accurate** (22% less inaccuracy, 15% less base spread) but move 20% slower. Reloading drops
+you out of it. Red dot and holo sights line up with the screen centre.
+
+## Admin
+
+Settings → **Admin**: enter the admin passcode to make the signed-in account an admin (a guest
+stays admin until reload). An admin has:
+
+- **noclip**: V flies through walls (noclip is no longer available to everyone);
+- **unlimited wallbang rounds** with no 10 s wait;
+- **unlimited money** (buying costs nothing; the HUD shows ∞);
+- **enemies visible through walls**: orange or blue silhouettes wherever a wall hides them, and
+  every enemy on the radar.
+
+Admin powers can be switched off or removed in the same place, and the HUD tag says ADMIN while
+they are on. **Matches played with admin powers on don't change XP, points, rank or match
+history.** Only hashes of the passcode are in the code; to change it, run
+`node tools/admin-hash.mjs "new passcode"` and paste the two hashes into `ADMIN_HASHES` in
+`src/26-admin.js`. It's a game setting rather than security: everything runs in the browser.
 
 ## Run it
 
@@ -23,7 +65,8 @@ first.
 | --- | --- |
 | Move / jump / crouch / walk | W A S D / Space / C (Ctrl in fullscreen) / Shift |
 | Fire, slash, throw overhand, plant (hold, in a site) | Mouse 1 |
-| Scope zoom (Osprey LR), stab, lob underhand | Mouse 2 |
+| Scope in (hold), Osprey LR scope zoom, stab, lob underhand | Mouse 2 |
+| Load or unload a wallbang round | X |
 | Reload / inspect | R / F |
 | Primary, pistol, knife, smoke, the charge | 1, 2, 3, 4, 5 |
 | Last weapon / cycle | Q / mouse wheel |
@@ -32,10 +75,10 @@ first.
 | Door, pick up or swap a weapon / defuse (hold) | E |
 | Scoreboard (hold) | Tab |
 | Pause menu | Esc |
-| Noclip fly / debug readout / hints | V / F1 or ` / H |
+| Noclip fly (admins) / debug readout / hints | V / F1 or ` / H |
 
 Touch devices get an on-screen stick, look pad and buttons (JUMP, DUCK, RELOAD, USE, SWAP, BUY,
-FIRE); the menus fit a phone held sideways.
+WALL, FIRE); the menus fit a phone held sideways.
 
 ## The front end
 
@@ -97,7 +140,7 @@ Every defuse match moves your rating:
   Skirmish never changes Elo.
 
 Ranks: Spark I–III (from 0, 700, 800), Flint I–III (900–1100), Fuse I–III (1200–1400),
-Charge I–III (1500–1700), Blast I–III (1800–2000), Shockwave (2200) and Short Fuse (2400). A new
+Charge I–III (1500–1700), Blast I–III (1800–2000), Shockwave (2200) and Wallbreaker (2400). A new
 profile starts at 1000.
 
 ## Accounts and saving
@@ -122,7 +165,8 @@ the device.
   account signs in, and a note on the home screen says so. A match is never counted twice.
   Purchases and loadout changes save immediately. The home card, career and results screens
   show when the account was last saved.
-- **What's stored:** `shortfuse.accounts.v1` (the accounts and who played last; PINs only as
+- **What's stored** (the keys keep their pre-rename `shortfuse.` prefix so existing saves carry
+  over): `shortfuse.accounts.v1` (the accounts and who played last; PINs only as
   salted SHA-256 hashes), and per account `shortfuse.profile.v1.<id>` (XP, points, purchases,
   loadout, Elo, stats, recent matches) and, during a match, `shortfuse.pending.v1.<id>`.
   Progress from before accounts existed moves into the first account created on the device.
@@ -236,11 +280,29 @@ hitboxes with head ×4 / stomach ×1.25 / legs ×0.75, armor and helmets: see St
 
 They buy by economy (armor or smoke on pistol rounds, rifles from $3,350, the sniper now and
 then, force buys after losses, kits for Wardens). Each round the Raiders pick a site and its
-two routes from the map's tactical data. They gather out of sight beside the spawn exits,
-push together (one in three flanks by the other route) with smokes, plant, then guard the
-charge. Wardens split between A and B on posts facing the approaches, converge after a plant
-and defuse. Vision cones, walls and smoke block sight, they hear gunfire and running, and
-there are four difficulty levels (Easy, Normal, Hard and, new in Stage 6, Expert).
+two routes from the map's tactical data, gather out of sight, push together (one in three flanks)
+with smokes, plant, then guard the charge. Wardens split between A and B on posts facing the
+approaches, converge after a plant and defuse.
+
+**What a bot knows** (Stage 7 rework: before, bots heard every footstep and shot at its exact
+spot, knew exactly who had shot them, and kept seeing their current target in every
+direction):
+
+- **Sight:** only inside its view cone (100–126° depending on difficulty) with a clear line
+  (walls, doors and smoke block it). Someone straight ahead and close is noticed almost at once;
+  someone at the edge of view, far away, crouched and still takes a second or more; muzzle flash
+  and running make you easier to spot. The reaction delay then runs before the first shot.
+- **Hearing:** gunfire (suppressed shots carry a third as far) and running footsteps (walking is
+  silent) give a **rough** position, off by more the farther away it is, and sounds through
+  walls carry half as far and are vaguer still. A bot turns toward close sounds and goes to check.
+- **Getting shot:** only the rough direction it came from, not where you are.
+- **Teammates:** a bot that spots you calls it out; teammates hear about where you were about a
+  second later.
+- **Memory:** after losing sight it heads to where it last saw you, and gives up after a while.
+
+Four difficulty levels (Easy, Normal, Hard, Expert) set reaction time, aim error, turn speed,
+recoil control, headshot chance, view cone, how fast they notice you, and how often they use
+wallbang rounds.
 
 ## Project layout
 
@@ -268,7 +330,7 @@ src/12-input.js       keyboard / pointer lock / free cursor / wheel / touch
 src/13-player.js      movement physics (shared by you and bots)
 src/14-weapons.js     weapon definitions, spray patterns, guns/knife/grenade/charge, loadout
 src/15-arsenal.js     attachments (stat changes), camo painters, the player's modified weapon defs
-src/15-ballistics.js  bullets and pellets with penetration, knife traces, range plates
+src/15-ballistics.js  bullets and pellets with penetration, wallbang rays through every wall, knife traces
 src/16-grenades.js    grenade physics, smoke clouds, smoke line-of-sight test
 src/17-vm-models.js   viewmodel geometry: guns, knife, smoke, the charge, hands, attachment meshes
 src/18-viewmodel.js   keyframed clips + procedural motion, per-gun materials, camo UVs, kits
@@ -276,10 +338,12 @@ src/19-entities.js    hinged doors and knock-down plates
 src/20-models.js      faction textures, skinned player models, procedural animation, hitboxes
 src/21-nav.js         waypoint graph builder, walkability tests, A*
 src/22-actors.js      players and bots: spawn, damage (and damage dealt), death, money, sides
-src/23-bots.js        bot perception, aiming, combat, navigation, orders; four skill levels
+src/22-wallbang.js    wallbang rounds: the count per round, the 10 s unlock, loading and using one
+src/23-bots.js        bot sight, hearing, callouts and memory; aiming, combat, wallbangs, navigation
 src/24-items.js       weapons on the ground: drops, physics, pickups and swaps
 src/25-bomb.js        the charge: sites, carrier, planting, fuse, defusing, the blast
 src/26-accounts.js    accounts on this device: callsigns, PINs, per-account saves, exit checkpoints
+src/26-admin.js       the admin passcode and powers
 src/26-match.js       defuse rounds, economy, buying, halftime, match end
 src/26-profile.js     career profile: XP, levels, points, shop, kit, Elo and ranks
 src/27-tactics.js     bot team play from the map's tactical data
@@ -334,6 +398,10 @@ Browser checks need Playwright and a local copy of three.js r128 (the file cdnjs
 from `npm pack three@0.128.0`, `package/build/three.min.js`):
 
 ```bash
+node tools/gameplay7-check.mjs path/to/three.min.js shots
+```
+
+```bash
 node tools/gameplay6-check.mjs path/to/three.min.js shots
 ```
 
@@ -355,6 +423,17 @@ node tools/gameplay5-check.mjs path/to/three.min.js shots
   spawns; plant spots inside their sites; route timings; no spawn-to-spawn or mid-to-spawn
   sightlines; a bot walks every route, every Warden post and the rotation; bots play full rounds
   with plants.
+- `gameplay7-check`: the name; wallbang rounds locked for the first 10 s (the HUD counts down),
+  then X loads one (ARMED, 3 left, the crosshair changes) and unloads it; a normal shot stops in
+  a wall while a wallbang round goes through and kills, with the WB kill-feed mark; none left
+  means no more; scoping in zooms, tightens accuracy, slows you and hides the crosshair, and
+  scoping out restores it; noclip refused without admin; a wrong passcode refused, the right one
+  (any letter case) accepted; admin flies, has unlimited rounds with no wait, sees an enemy
+  behind a wall (x-ray and radar), has unlimited money; an admin match records nothing.
+- `node-bot-check` (bots): a bot facing you reacts after a human-like delay; no sight through
+  walls or smoke; a bot doesn't see you standing behind it; a shot heard through a wall gives
+  only a rough position; getting shot gives only the rough direction; a callout reaches
+  teammates a moment later; bots duel in the open.
 - `gameplay6-check`: first launch creates an account (bad callsigns refused, typing doesn't
   reach the game), the results are saved to it, reloading the page mid-match saves that match,
   the PIN prompt on reopening (wrong PIN refused), switching accounts and guests; then the main

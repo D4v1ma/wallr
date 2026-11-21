@@ -407,6 +407,18 @@ class PlayerModel {
   }
 
   setLight(r, g, b) { this.light[0] = r; this.light[1] = g; this.light[2] = b; this.mat.color.setRGB(r, g, b); this.wmat.color.setRGB(r, g, b); }
+  // Admin x-ray: the body drawn in a flat colour wherever a wall is in front of it.
+  setXray(on) {
+    if (!on && !this.xray) return;
+    if (!this.xray) {
+      const mat = new THREE.MeshBasicMaterial({ color: this.team === 0 ? 0xff8a3d : 0x5fb4ff, skinning: true, transparent: true, opacity: 0.6, depthWrite: false, depthFunc: THREE.GreaterDepth });
+      this.xray = new THREE.SkinnedMesh(this.mesh.geometry, mat);
+      this.xray.bind(this.mesh.skeleton, this.mesh.bindMatrix);
+      this.xray.frustumCulled = false; this.xray.renderOrder = 20;
+      this.mesh.add(this.xray);
+    }
+    this.xray.visible = on;
+  }
 
   muzzleWorld(out) {
     const a = this.muzzles[this.weaponId];

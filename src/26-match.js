@@ -75,7 +75,9 @@ const Match = {
       }
       const sp = Actors.spawnPoint(a);
       a.player.spawn(sp.pos, sp.yaw);
-      a.health = 100; a.alive = true; a.deadT = 0; a.killer = null; a.hurtT = 0; a.model.dead = 0;
+      a.health = 100; a.alive = true; a.deadT = 0; a.killer = null; a.hurtT = 0; a.model.dead = 0; a.aliveT = 0;
+      Wallbang.reset(a);
+      if (a.admin) a.money = MATCH.max;
       if (lo.active.state === 'holstered') lo.active.draw();
       lo.select(lo.best());
       if (a.brain) a.brain.reset();
@@ -121,7 +123,7 @@ const Match = {
     const q = this.quote(a, e);
     if (q.no) return { ok: false, msg: q.no };
     if (a.money < q.price) return { ok: false, msg: 'Not enough money' };
-    a.money -= q.price;
+    if (!a.admin) a.money -= q.price;
     if (e.kind === 'weapon') {
       const old = a.loadout.give(e.id, true);
       if (old) Items.drop(a, old, false);

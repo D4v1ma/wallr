@@ -15,14 +15,14 @@ const RANK_FAMILIES = [
   { name: 'Spark', col: '#c07a4a', col2: '#6e3d22' }, { name: 'Flint', col: '#aeb6bb', col2: '#535b61' },
   { name: 'Fuse', col: '#f0a53a', col2: '#8a5310' }, { name: 'Charge', col: '#4fc6b8', col2: '#1b5f58' },
   { name: 'Blast', col: '#e5573f', col2: '#7a1f13' }, { name: 'Shockwave', col: '#a688f0', col2: '#4b3290' },
-  { name: 'Short Fuse', col: '#ffd76a', col2: '#9a6a00' },
+  { name: 'Wallbreaker', col: '#ffd76a', col2: '#9a6a00' },
 ];
 const RANKS = (() => {
   const list = [], roman = ['I', 'II', 'III'];
   let r = 0;
   for (let f = 0; f < 5; f++) for (let t = 0; t < 3; t++) { list.push({ name: `${RANK_FAMILIES[f].name} ${roman[t]}`, fam: f, tier: t + 1, min: r }); r = r === 0 ? 700 : r + 100; }
   list.push({ name: 'Shockwave', fam: 5, tier: 0, min: 2200 });
-  list.push({ name: 'Short Fuse', fam: 6, tier: 0, min: 2400 });
+  list.push({ name: 'Wallbreaker', fam: 6, tier: 0, min: 2400 });
   return list;
 })();
 const PLACEMENTS = 3;
@@ -123,6 +123,13 @@ const Profile = {
     Arsenal.cache.clear();
     this.save();
     return true;
+  },
+
+  // An admin match: what the results screen shows, with nothing earned and nothing recorded.
+  adminResults(cfg, st, outcome) {
+    const lv = this.level(), rk = this.rank(), v = this.v;
+    return { outcome, cfg, st, xp: { lines: [], base: 0, k: 1, mults: ['Admin match'], total: 0 }, ups: [], lv0: lv, lv1: lv, elo: null, elo0: v.elo, elo1: v.elo,
+      rank0: rk, rank1: rk, placed0: v.placed, placed1: v.placed, pointsNow: v.points, admin: true };
   },
 
   // Fold a finished (or abandoned) match into the career; returns everything the results screen shows.

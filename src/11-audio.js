@@ -237,6 +237,16 @@ const Snd = {
     else if (kind === 'shotgun') this.shotgunShot(pos); else if (kind === 'sniper') this.sniperShot(pos); else this.rifleShot(pos);
   },
 
+  // A wallbang round: a hard supersonic crack with a ringing tail over the gun's own report.
+  wallbang(pos) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime, o = this.dest(pos || null, 1.1), dry = pos ? o : [this.master];
+    this.nz(t, dry, { type: 'highpass', f: 4200, q: 0.7, g: 0.5, a: 0.0004, d: 0.03 });
+    this.tone(t, o, { f0: 2400, f1: 900, dur: 0.22, g: 0.12 });
+    this.tone(t, o, { f0: 70, f1: 38, dur: 0.3, g: 0.6 });
+    this.nz(t + 0.02, [this.revSend], { type: 'bandpass', f: 1300, q: 0.8, g: 0.5, a: 0.01, d: 0.7 });
+  },
+
   // Suppressed: a dull cough and the action cycling, little echo.
   suppShot(pos, kind) {
     if (!this.ready) return;
@@ -285,6 +295,12 @@ const Snd = {
     if (!this.ready) return;
     const t = this.ctx.currentTime, o = [this.master];
     switch (part) {
+      case 'wbArm':
+        this.nz(t, o, { type: 'bandpass', f: 3000, q: 3, g: 0.5, d: 0.025 });
+        this.tone(t + 0.03, o, { f0: 600, f1: 1500, dur: 0.16, g: 0.07 });
+        this.nz(t + 0.09, o, { type: 'bandpass', f: 1900, q: 2.5, g: 0.45, d: 0.03 });
+        break;
+      case 'wbOff': this.nz(t, o, { type: 'bandpass', f: 1700, q: 2.5, g: 0.35, d: 0.03 }); break;
       case 'magout': this.reload('out'); break;
       case 'magin': this.reload('in'); break;
       case 'bolt': this.reload('bolt'); break;

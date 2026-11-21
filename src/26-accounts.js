@@ -117,6 +117,7 @@ const Accounts = {
     this.saveIndex();
     this.applyPending();
     if (typeof Actors !== 'undefined' && Actors.me) Actors.me.name = a.name;
+    if (typeof Admin !== 'undefined') Admin.load();
     this.emit(); Profile.emit();
   },
   signOut() {
@@ -126,6 +127,7 @@ const Accounts = {
     Profile.v = Profile.blank();
     if (typeof Arsenal !== 'undefined') Arsenal.cache.clear();
     if (typeof Actors !== 'undefined' && Actors.me) Actors.me.name = 'You';
+    if (typeof Admin !== 'undefined') Admin.load();
     this.emit(); Profile.emit();
   },
   playAsGuest() { if (this.cur) this.signOut(); else { Profile.v = Profile.blank(); this.emit(); Profile.emit(); } },
