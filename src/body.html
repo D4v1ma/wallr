@@ -1,0 +1,190 @@
+<div id="sf-root">
+  <div id="sf-stage"><canvas id="sf-canvas" tabindex="-1" aria-label="Game view"></canvas></div>
+  <div id="sf-smoke" aria-hidden="true"></div>
+
+  <div id="sf-hud" hidden>
+    <div id="hud-scope" class="scope" hidden aria-hidden="true"><i class="sh"></i><i class="sv"></i></div>
+    <div id="xh" class="xh" aria-hidden="true"><i class="xh-t"></i><i class="xh-b"></i><i class="xh-l"></i><i class="xh-r"></i><i class="xh-d"></i></div>
+    <div id="hitmark" class="hitmark" aria-hidden="true"></div>
+    <div class="hud-corner hud-tl">
+      <div class="tag" id="hud-tag">Hall B · Defuse</div>
+      <div class="hint" id="hud-hint"><kbd>WASD</kbd> move <kbd>Space</kbd> jump <kbd>C</kbd> crouch <kbd>Shift</kbd> walk<br><kbd>1</kbd>–<kbd>5</kbd> weapons <kbd>B</kbd> buy <kbd>G</kbd> drop <kbd>E</kbd> use / defuse<br><kbd>R</kbd> reload <kbd>Tab</kbd> scores <kbd>F1</kbd> debug <kbd>H</kbd> hide hints</div>
+    </div>
+    <div class="hud-top">
+      <div class="hud-score" id="hud-score"></div>
+      <div class="hud-alive" id="hud-alive"></div>
+      <div class="hud-tc" id="hud-range"><span>Range</span><span>Hits <b id="r-hits">0</b></span><span>Shots <b id="r-shots">0</b></span><span>Plates <b id="r-acc">0/9</b></span></div>
+    </div>
+    <div class="hud-corner hud-tr"><span id="hud-fps"></span><div class="hud-feed" id="hud-feed"></div></div>
+    <div id="hud-hurt" aria-hidden="true"></div>
+    <div id="hud-dmg" class="dmgarc" aria-hidden="true"></div>
+    <div id="hud-target" class="hud-target"></div>
+    <div id="hud-dead" class="hud-dead" hidden></div>
+    <div id="hud-board" class="hud-board" hidden></div>
+    <div id="hud-banner" class="hud-banner" hidden></div>
+    <div id="hud-progress" class="hud-progress" hidden><span id="hud-progress-label"></span><i><b id="hud-progress-bar"></b></i></div>
+    <div id="buy-menu" class="buy-menu" hidden role="dialog" aria-label="Buy menu"></div>
+    <div class="hud-corner hud-bl">
+      <div class="money" id="hud-money"><b>$</b><span id="hud-cash">800</span><em id="hud-cashd"></em><i class="buyzone" id="hud-buyzone" hidden>B · BUY</i><i class="carry" id="hud-carry" hidden>CHARGE</i></div>
+      <div class="vitals">
+        <div class="stat"><i class="icon-cross"></i><span class="big" id="hud-hp">100</span></div>
+        <div class="stat"><i class="icon-shield"></i><span class="big" id="hud-ar">0</span></div>
+      </div>
+    </div>
+    <div class="hud-bc"><div id="hud-prompt"></div><div id="hud-speed"></div></div>
+    <div class="hud-corner hud-br">
+      <div class="wname" id="hud-wname">KESTREL AR</div>
+      <div class="reloadbar" id="hud-reload"><i></i></div>
+      <div class="stat ammo" id="hud-ammo"><span class="big" id="hud-mag">30</span><span class="res" id="hud-res">/ 90</span></div>
+    </div>
+    <div class="wlist" id="hud-wlist" hidden></div>
+    <pre id="hud-debug" hidden></pre>
+    <div id="hud-note"></div>
+  </div>
+
+  <div id="sf-touch" hidden>
+    <div class="zone move" id="t-move"><div class="stick" id="t-stick"><i></i></div></div>
+    <div class="zone look" id="t-look"></div>
+    <div class="btns">
+      <button type="button" data-act="jump">JUMP</button>
+      <button type="button" data-act="duck">DUCK</button>
+      <button type="button" class="fire" data-act="fire">FIRE</button>
+      <button type="button" data-act="reload">RELOAD</button>
+      <button type="button" data-act="use">USE</button>
+      <button type="button" data-act="switch">SWAP</button>
+      <button type="button" data-act="buy">BUY</button>
+    </div>
+    <button type="button" class="btn tmenu" id="t-menu">Menu</button>
+  </div>
+
+  <div id="sf-overlay">
+    <section class="panel" aria-labelledby="sf-title">
+      <header class="panel-head">
+        <div class="brand" id="sf-title">Short<span>·</span>Fuse</div>
+        <div class="stagecode"><b>Stage 4</b>Rounds, money &amp; the charge</div>
+      </header>
+      <div class="panel-body">
+        <div id="sf-loading">
+          <div class="load-line"><span id="load-label">Preparing</span><b id="load-pct">0%</b></div>
+          <div class="bar"><i id="load-bar"></i></div>
+          <p class="note" id="load-note">Generating textures and compiling lighting for the test range.</p>
+        </div>
+
+        <div id="sf-menu" hidden>
+          <div class="actions">
+            <button type="button" class="btn primary" id="btn-play">Play</button>
+            <button type="button" class="btn" id="btn-full">Fullscreen</button>
+          </div>
+          <p class="note" id="menu-note">Click Play to capture the mouse; <b>Esc</b> brings you back here. Crouch is on <b>C</b>. <b>Ctrl</b> also crouches in fullscreen, where the browser can't close the tab on Ctrl+W.</p>
+          <div class="tabs" role="tablist">
+            <button type="button" role="tab" aria-selected="true" data-tab="controls" id="tab-controls">Controls</button>
+            <button type="button" role="tab" aria-selected="false" data-tab="settings" id="tab-settings">Settings</button>
+            <button type="button" role="tab" aria-selected="false" data-tab="bots" id="tab-bots">Match</button>
+          </div>
+
+          <div id="pane-controls" role="tabpanel" aria-labelledby="tab-controls">
+            <div class="keys">
+              <div><span>Move</span><span><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></span></div>
+              <div><span>Jump</span><span><kbd>Space</kbd></span></div>
+              <div><span>Crouch</span><span><kbd>C</kbd> / <kbd>Ctrl</kbd></span></div>
+              <div><span>Walk (silent)</span><span><kbd>Shift</kbd></span></div>
+              <div><span>Fire / slash / throw</span><span><kbd>Mouse 1</kbd></span></div>
+              <div><span>Stab / underhand lob</span><span><kbd>Mouse 2</kbd></span></div>
+              <div><span>Reload</span><span><kbd>R</kbd></span></div>
+              <div><span>Weapon slots (5 = the charge)</span><span><kbd>1</kbd> – <kbd>5</kbd></span></div>
+              <div><span>Buy menu (buy time, near spawn)</span><span><kbd>B</kbd>, then <kbd>1</kbd> – <kbd>9</kbd></span></div>
+              <div><span>Drop weapon</span><span><kbd>G</kbd></span></div>
+              <div><span>Plant the charge (in A or B)</span><span>hold <kbd>Mouse 1</kbd></span></div>
+              <div><span>Defuse the charge</span><span>hold <kbd>E</kbd></span></div>
+              <div><span>Scoped zoom</span><span><kbd>Mouse 2</kbd></span></div>
+              <div><span>Last weapon / cycle</span><span><kbd>Q</kbd> / <kbd>Wheel</kbd></span></div>
+              <div><span>Inspect weapon</span><span><kbd>F</kbd></span></div>
+              <div><span>Open door / pick up weapon</span><span><kbd>E</kbd></span></div>
+              <div><span>Noclip fly</span><span><kbd>V</kbd></span></div>
+              <div><span>Debug readout</span><span><kbd>F1</kbd> / <kbd>`</kbd></span></div>
+              <div><span>Hide hints</span><span><kbd>H</kbd></span></div>
+              <div><span>Scoreboard</span><span><kbd>Tab</kbd></span></div>
+            </div>
+            <p class="note">Stop before you shoot: standing still is accurate, running is not. Hold Mouse 1 on the paper board 256 units downrange to see the rifle's spray pattern (up, then left, then right); pull down against it. Shoot the red plate beside the board to wipe it. Doors, the board and the shed's thin walls can be shot through. Jump boxes in the hall: 48 clears with a jump, 64 needs a crouch-jump, 72 is out of reach.</p>
+          </div>
+
+          <div id="pane-bots" role="tabpanel" aria-labelledby="tab-bots" hidden>
+            <div class="sets">
+              <div class="set"><label for="set-mode">Mode</label>
+                <select id="set-mode"><option value="defuse">Defuse (rounds, money, the charge)</option><option value="skirmish">Skirmish (respawns, practice)</option></select>
+              </div>
+              <div class="set"><label for="set-matchlen">Match length</label>
+                <select id="set-matchlen"><option value="standard">Standard: first to 16</option><option value="short">Short: first to 9</option></select>
+              </div>
+            </div>
+            <div class="actions">
+              <button type="button" class="btn" id="match-restart">Restart match</button>
+              <button type="button" class="btn" id="bot-add-0">Add Raider</button>
+              <button type="button" class="btn" id="bot-add-1">Add Warden</button>
+              <button type="button" class="btn" id="bot-clear">Remove all bots</button>
+            </div>
+            <div class="sets">
+              <div class="set"><label for="set-botskill">Bot difficulty</label>
+                <select id="set-botskill"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select>
+              </div>
+              <div class="set"><label for="set-team">Your team</label>
+                <select id="set-team"><option value="1">Wardens (defenders)</option><option value="0">Raiders (attackers)</option></select>
+              </div>
+              <div class="set check"><input type="checkbox" id="set-ff"><label for="set-ff">Friendly fire</label></div>
+            </div>
+            <p class="note" id="bot-status"></p>
+            <p class="note">Defuse: Raiders carry the charge to site A (the range) or B (the container yard) and plant it; Wardens stop them or defuse it (5 s with a kit, 10 s without). Rounds last 1:55 after 10 s of buy time; the charge burns 40 s. Money comes from kills and rounds; the dead lose their gear. Sides swap at halftime. Changing team, mode or bots restarts the match. Hold <b>Tab</b> for the scoreboard.</p>
+          </div>
+
+          <div id="pane-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+            <div class="sets">
+              <div class="sect">Mouse</div>
+              <div class="set"><label for="set-sens">Sensitivity <output id="out-sens"></output></label><input type="range" id="set-sens" min="0.2" max="8" step="0.05"></div>
+              <div class="set check"><input type="checkbox" id="set-invert"><label for="set-invert">Invert vertical look</label></div>
+              <div class="set check"><input type="checkbox" id="set-raw"><label for="set-raw">Raw input (no OS acceleration)</label></div>
+
+              <div class="sect">View</div>
+              <div class="set"><label for="set-fov">Field of view (4:3 equiv.) <output id="out-fov"></output></label><input type="range" id="set-fov" min="75" max="110" step="1"></div>
+              <div class="set"><label for="set-aspect">Aspect</label>
+                <select id="set-aspect">
+                  <option value="wide">Widescreen (Hor+)</option>
+                  <option value="box">4:3 with black bars</option>
+                  <option value="stretch">4:3 stretched</option>
+                </select>
+              </div>
+              <div class="set"><label for="set-vmfov">Weapon FOV <output id="out-vmfov"></output></label><input type="range" id="set-vmfov" min="50" max="74" step="1"></div>
+              <div class="set"><label for="set-rscale">Render scale <output id="out-rscale"></output></label><input type="range" id="set-rscale" min="50" max="100" step="5"></div>
+              <div class="set"><label for="set-dpr">Max pixel ratio</label>
+                <select id="set-dpr"><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>
+              </div>
+
+              <div class="sect">Crosshair</div>
+              <div class="set"><label for="set-xhstyle">Style</label>
+                <select id="set-xhstyle"><option value="dynamic">Dynamic (shows spread)</option><option value="static">Static</option></select>
+              </div>
+              <div class="set"><label for="set-xhcolor">Color</label>
+                <select id="set-xhcolor">
+                  <option value="#4cff6a">Green</option><option value="#ffe14a">Yellow</option><option value="#4ae8ff">Cyan</option>
+                  <option value="#ffffff">White</option><option value="#ff5ad1">Magenta</option><option value="#ff4a4a">Red</option>
+                </select>
+              </div>
+              <div class="set"><label for="set-xhsize">Length <output id="out-xhsize"></output></label><input type="range" id="set-xhsize" min="2" max="16" step="1"></div>
+              <div class="set"><label for="set-xhgap">Gap <output id="out-xhgap"></output></label><input type="range" id="set-xhgap" min="0" max="12" step="1"></div>
+              <div class="set"><label for="set-xhthick">Thickness <output id="out-xhthick"></output></label><input type="range" id="set-xhthick" min="1" max="4" step="1"></div>
+              <div class="set check"><input type="checkbox" id="set-xhdot"><label for="set-xhdot">Center dot</label></div>
+              <div class="set check"><input type="checkbox" id="set-xhoutline"><label for="set-xhoutline">Outline</label></div>
+              <div class="set check"><input type="checkbox" id="set-xhrecoil"><label for="set-xhrecoil">Crosshair follows recoil</label></div>
+
+              <div class="sect">Audio &amp; HUD</div>
+              <div class="set"><label for="set-vol">Volume <output id="out-vol"></output></label><input type="range" id="set-vol" min="0" max="100" step="1"></div>
+              <div class="set check"><input type="checkbox" id="set-fps"><label for="set-fps">Show frame rate</label></div>
+              <div class="set check"><input type="checkbox" id="set-speed"><label for="set-speed">Show speed (units/s)</label></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- @GAME_SCRIPT -->
