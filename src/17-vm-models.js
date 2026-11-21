@@ -75,6 +75,8 @@ function vmMaterials() {
     tape: new THREE.MeshLambertMaterial({ color: 0x3a3a38 }),
     wireR: new THREE.MeshLambertMaterial({ color: 0xa8281c }), wireB: new THREE.MeshLambertMaterial({ color: 0x24509c }),
     screen: new THREE.MeshBasicMaterial({ color: 0x6ee88a }), led: new THREE.MeshBasicMaterial({ color: 0xff3020 }),
+    lens: new THREE.MeshPhongMaterial({ color: 0x3a6a78, shininess: 120, specular: new THREE.Color(0.7, 0.75, 0.8), transparent: true, opacity: 0.55 }),
+    band: new THREE.MeshLambertMaterial({ color: 0x3f9a4c }),
   };
 }
 
@@ -357,4 +359,104 @@ function buildChargeVM(M) {
   vmPart(m, 'left', left);
   vmCount(m);
   return m;
+}
+
+// ---------------------------------------------------------------------------
+// Attachments on the viewmodels. Gun-space mount points per gun: bore end (muzzle devices), top rail
+// (optics), under the handguard (grips, lasers). Magazine additions ride on the 'mag' part so they
+// move with the reload animation. `ext` is how far a muzzle device pushes the muzzle forward.
+const VM_MOUNTS = {
+  rifle: { bore: [0, 0.5, -20.45], r: 0.47, rail: [0, 1.46, -1.4], under: [0, -0.5, -12.2], laser: [0, -0.62, -6.4], supp: 6.6 },
+  pistol: { bore: [0, 0.83, -5.1], r: 0.3, rail: [0, 1.525, 0.0], railPart: 'slide', under: [0, -0.18, -3.3], laser: [0, -0.2, -3.25], supp: 4.4 },
+  smg: { bore: [0, 0.5, -10.65], r: 0.36, rail: [0, 1.425, -0.7], under: [0, -0.15, -7.9], laser: [0, -0.92, -3.6], supp: 5.6 },
+  shotgun: { bore: [0, 0.85, -19.9], r: 0.42, rail: [0, 1.5, 0.6], laser: [0.62, 0.85, -14.2] },
+  sniper: { bore: [0, 0.55, -26.8], r: 0.52, supp: 7.6 },
+};
+
+function vmBuildAttachments(m, M) {
+  const mt = VM_MOUNTS[m.id];
+  if (!mt) return;
+  m.att = {}; m.attExt = {};
+  const add = (id, group, parent) => { group.visible = false; (parent || m.root).add(group); m.att[id] = group; return group; };
+  const [bx, by, bz] = mt.bore, r = mt.r;
+  if (mt.supp) {
+    const L = mt.supp, rr = Math.max(0.5, r + 0.2), g = new THREE.Group();
+    g.add(vmMesh([vmCyl(rr, L, 14, bx, by, bz - L / 2 + 0.7)], M.poly),
+      vmMesh([vmCyl(rr + 0.04, 0.35, 14, bx, by, bz + 0.55), vmCyl(rr + 0.03, 0.3, 14, bx, by, bz - L + 0.85), vmCyl(r * 0.55, 0.08, 10, bx, by, bz - L + 0.67)], M.metal));
+    add('hush', g); m.attExt.hush = L - 0.7;
+  }
+  {
+    const g = new THREE.Group(), rr = r + 0.1, z0 = bz - 0.55;
+    g.add(vmMesh([vmCyl(rr, 1.6, 10, bx, by, z0)], M.metal),
+      vmMesh([vmBox(0.06, rr * 0.9, 0.3, rr - 0.02, by + rr * 0.15, z0 - 0.35), vmBox(0.06, rr * 0.9, 0.3, rr - 0.02, by + rr * 0.15, z0 + 0.25),
+        vmBox(0.06, rr * 0.9, 0.3, -rr + 0.02, by + rr * 0.15, z0 - 0.35), vmBox(0.06, rr * 0.9, 0.3, -rr + 0.02, by + rr * 0.15, z0 + 0.25),
+        vmBox(rr * 1.2, 0.06, 0.32, 0, by + rr - 0.02, z0 - 0.05)], M.tape));
+    add('brake', g); m.attExt.brake = 1.1;
+  }
+  if (m.id === 'shotgun') {
+    const g = new THREE.Group();
+    g.add(vmMesh([vmCyl(r + 0.08, 1.0, 12, bx, by, bz - 0.25)], M.metal), vmMesh([vmCyl(r + 0.1, 0.12, 12, bx, by, bz - 0.55)], M.tape));
+    add('choke', g); m.attExt.choke = 0.65;
+  }
+  if (mt.rail) {
+    const parent = mt.railPart ? m.parts[mt.railPart] : null, off = parent ? parent.position : null;
+    const [rx, ry, rz] = off ? [mt.rail[0] - off.x, mt.rail[1] - off.y, mt.rail[2] - off.z] : mt.rail, k = m.id === 'pistol' ? 0.78 : 1;
+    // reflex: a low mount, a hood over a tilted lens, the dot on the lens
+    const pip = new THREE.Group();
+    pip.add(vmMesh([vmBox(0.62 * k, 0.28 * k, 1.5 * k, rx, ry + 0.14 * k, rz), vmBox(0.1, 0.62 * k, 0.55 * k, rx + 0.3 * k, ry + 0.55 * k, rz - 0.25 * k),
+      vmBox(0.1, 0.62 * k, 0.55 * k, rx - 0.3 * k, ry + 0.55 * k, rz - 0.25 * k), vmBox(0.7 * k, 0.12 * k, 0.75 * k, rx, ry + 0.9 * k, rz - 0.25 * k)], M.poly),
+      vmMesh([vmBox(0.5 * k, 0.5 * k, 0.04, rx, ry + 0.58 * k, rz - 0.42 * k, -0.12)], M.lens),
+      vmMesh([vmBox(0.07, 0.07, 0.05, rx, ry + 0.58 * k, rz - 0.39 * k)], M.led));
+    add('pip', pip, parent);
+    if (m.id !== 'pistol') {
+      const holo = new THREE.Group();
+      holo.add(vmMesh([vmBox(0.8, 0.34, 2.3, rx, ry + 0.17, rz + 0.1), vmBox(0.12, 1.0, 1.2, rx + 0.4, ry + 0.75, rz - 0.4), vmBox(0.12, 1.0, 1.2, rx - 0.4, ry + 0.75, rz - 0.4),
+        vmBox(0.92, 0.14, 1.4, rx, ry + 1.27, rz - 0.4), vmBox(0.5, 0.36, 0.6, rx, ry + 0.52, rz + 0.75)], M.poly),
+        vmMesh([vmBox(0.7, 0.8, 0.04, rx, ry + 0.78, rz - 0.95)], M.lens), vmMesh([vmBox(0.6, 0.6, 0.04, rx, ry + 0.78, rz + 0.2)], M.lens),
+        vmMesh([vmBox(0.18, 0.025, 0.03, rx, ry + 0.78, rz - 0.93), vmBox(0.025, 0.18, 0.03, rx, ry + 0.78, rz - 0.93)], M.led));
+      add('halo', holo);
+    }
+  }
+  // magazines: longer body + base pad (extended), a pull loop (quick), a coloured band (hollow points)
+  const mag = m.parts.mag;
+  const magAdd = {
+    rifle: { ext: [vmBox(0.95, 1.3, 2.05, 0, -4.95, -1.0, 0.3), vmBox(1.05, 0.25, 2.25, 0, -5.6, -1.2, 0.3)], loop: [0, -4.55, -0.85, 0.3], band: [0, -2.0, 0.08, 0.12, 0.98, 2.14] },
+    pistol: { ext: [vmBox(0.82, 0.9, 1.27, 0, -2.2, 0.04), vmBox(1.12, 0.3, 1.66, 0, -2.72, 0.04)], loop: [0, -2.05, 0.04, 0], band: [0, -1.25, 0.0, 0, 0.84, 1.29] },
+    smg: { ext: [vmBox(0.84, 1.5, 1.32, 0, -4.95, 0.18, 0.06), vmBox(0.98, 0.32, 1.45, 0, -5.75, 0.22, 0.06)], loop: [0, -4.5, 0.16, 0.06], band: [0, -2.6, 0.0, 0.06, 0.86, 1.34] },
+    sniper: { ext: [vmBox(0.92, 0.85, 2.52, 0, -2.2, 0)], loop: [0, -1.95, 0, 0], band: [0, -1.1, 0, 0, 0.94, 2.54] },
+  }[m.id];
+  if (magAdd && mag) {
+    add('extmag', new THREE.Group().add(vmMesh(magAdd.ext, M.metal)), mag);
+    const [lx, ly, lz, lr] = magAdd.loop;
+    add('quick', new THREE.Group().add(vmMesh([vmBox(0.16, 0.5, 0.16, lx, ly - 0.25, lz - 0.32, lr), vmBox(0.16, 0.5, 0.16, lx, ly - 0.25, lz + 0.32, lr), vmBox(0.16, 0.16, 0.8, lx, ly - 0.5, lz, lr)], M.wireR)), mag);
+    const [cx, cy, cz, cr, w, d] = magAdd.band;
+    add('hollow', new THREE.Group().add(vmMesh([vmBox(w, 0.28, d, cx, cy, cz, cr)], M.band)), mag);
+  }
+  if (m.id === 'shotgun') {
+    add('extmag', new THREE.Group().add(vmMesh([vmCyl(0.38, 3.0, 10, 0, -0.18, -17.3)], M.metal), vmMesh([vmCyl(0.46, 0.7, 10, 0, -0.18, -18.95), vmCyl(0.5, 0.4, 10, 0, 0.33, -16.2)], M.poly)));
+    const shells = [];
+    for (let i = 0; i < 4; i++) shells.push(vmCyl(0.33, 1.3, 8, 0.72, -0.1, -1.9 + i * 0.76, 0));
+    const sad = new THREE.Group();
+    sad.add(vmMesh([vmBox(0.12, 1.15, 3.4, 0.68, 0.05, -0.75)], M.poly));
+    const sh = vmMesh(shells, M.shell); sh.rotation.x = 0; sad.add(sh);
+    add('quick', sad);
+  }
+  // grips and lasers
+  if (mt.under && (m.id === 'rifle' || m.id === 'smg')) {
+    const [ux, uy, uz] = mt.under;
+    add('grip', new THREE.Group().add(vmMesh([vmCylY(0.42, 2.3, 10, ux, uy - 1.15, uz), vmBox(0.7, 0.3, 1.3, ux, uy - 0.1, uz)], M.poly),
+      vmMesh([vmCylY(0.46, 0.25, 10, ux, uy - 2.35, uz)], M.metal)));
+  }
+  if (mt.laser) {
+    const [lx, ly, lz] = mt.laser, g = new THREE.Group();
+    const side = m.id === 'shotgun';
+    g.add(vmMesh(side ? [vmBox(0.5, 0.55, 1.7, lx + 0.18, ly, lz)] : [vmBox(0.6, 0.55, 1.7, lx, ly - 0.25, lz), vmBox(0.4, 0.2, 1.2, lx, ly + 0.05, lz)], M.poly),
+      vmMesh([side ? vmBox(0.22, 0.22, 0.05, lx + 0.18, ly + 0.05, lz - 0.86) : vmBox(0.22, 0.22, 0.05, lx, ly - 0.25, lz - 0.86)], M.led));
+    add('laser', g);
+  }
+  if (m.id === 'pistol') {
+    const st = new THREE.Group();
+    st.add(vmMesh([vmBox(0.05, 2.6, 1.3, 0.55, -1.75, 1.32, -0.3), vmBox(0.05, 2.6, 1.3, -0.55, -1.75, 1.32, -0.3)], M.tape));
+    add('stipple', st);
+  }
 }

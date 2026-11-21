@@ -132,6 +132,7 @@ class Target {
 const Ents = {
   doors: [], targets: [], stats: { hits: 0, shots: 0 },
   init(L) {
+    this.doors = []; this.targets = [];
     for (const d of L.doors) this.doors.push(new Door(L, d));
     for (const t of L.targets) this.targets.push(new Target(L, t));
   },

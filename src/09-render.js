@@ -33,7 +33,7 @@ void main() {
 
 const SKY_VS = `varying vec3 vDir; void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 const SKY_FS = `
-uniform vec3 sunDir; uniform vec3 zen; uniform vec3 hor; uniform vec3 sunCol; uniform vec3 ground;
+uniform vec3 sunDir; uniform vec3 zen; uniform vec3 hor; uniform vec3 sunCol; uniform vec3 ground; uniform vec3 mtn;
 varying vec3 vDir;
 float h3(vec3 p) { p = fract(p * 0.3183099 + vec3(0.71, 0.113, 0.419)); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
 float n3(vec3 x) {
@@ -60,7 +60,7 @@ void main() {
   vec3 q = vec3(cos(az) * 2.4, sin(az) * 2.4, 7.0);
   float ridge = 0.01 + 0.05 * fbm3(q) + 0.018 * fbm3(q * 3.1);
   float m = 1.0 - smoothstep(ridge - 0.0025, ridge + 0.0025, h);
-  vec3 mc = mix(vec3(0.6, 0.53, 0.44), hor, 0.42 + 0.3 * smoothstep(ridge - 0.06, ridge, h));
+  vec3 mc = mix(mtn, hor, 0.42 + 0.3 * smoothstep(ridge - 0.06, ridge, h));
   col = mix(col, mc, m);
   col = mix(col, ground, smoothstep(-0.005, -0.12, h));
   float sd = max(dot(d, sunDir), 0.0);
@@ -158,12 +158,23 @@ const R = {
     this.u.fogDensity.value = env.fogDensity;
     this.scene.fog = new THREE.FogExp2(new THREE.Color(...env.fogColor), env.fogDensity);
     this.dynSun.position.set(env.sunDir[0], env.sunDir[1], env.sunDir[2]);
+    this.lmTex = lmTex;
     for (const [mat, g] of L.groups) {
       const mesh = new THREE.Mesh(this.geometryFrom(g), this.materialFor(mat, L.tex));
       mesh.matrixAutoUpdate = false; mesh.updateMatrix();
       this.scene.add(mesh);
     }
     this.buildSky(env);
+  },
+
+  // A fresh scene for the next map: free the old world's GPU buffers, keep shared textures/materials.
+  newScene() {
+    const old = this.scene;
+    if (old) old.traverse((o) => { if ((o.isMesh || o.isPoints || o.isLineSegments) && o.geometry && !o.geometry.userData.keep) o.geometry.dispose(); });
+    if (this.lmTex) { this.lmTex.dispose(); this.lmTex = null; }
+    if (this.skyRT) { this.skyRT.dispose(); this.skyRT = null; }
+    this.scene = new THREE.Scene();
+    this.scene.add(this.dynAmb, this.dynSun);
   },
 
   // Brush entity (door/target) as a pivoted group; geometry is relative to the pivot.
@@ -181,8 +192,8 @@ const R = {
     const mat = new THREE.ShaderMaterial({
       uniforms: {
         sunDir: { value: new THREE.Vector3(...env.sunDir) }, zen: { value: new THREE.Vector3(...env.skyZenith) },
-        hor: { value: new THREE.Vector3(...env.skyHorizon) }, sunCol: { value: new THREE.Vector3(1.0, 0.86, 0.62) },
-        ground: { value: new THREE.Vector3(0.62, 0.55, 0.45) },
+        hor: { value: new THREE.Vector3(...env.skyHorizon) }, sunCol: { value: new THREE.Vector3(...(env.skySun || [1.0, 0.86, 0.62])) },
+        ground: { value: new THREE.Vector3(...(env.skyGround || [0.62, 0.55, 0.45])) }, mtn: { value: new THREE.Vector3(...(env.skyMountains || [0.6, 0.53, 0.44])) },
       },
       vertexShader: SKY_VS, fragmentShader: SKY_FS, side: THREE.BackSide, depthWrite: false,
     });
@@ -195,7 +206,7 @@ const R = {
     this.renderer.autoClear = true;
     cc.update(this.renderer, skyScene);
     this.renderer.autoClear = prev;
-    this.scene.background = rt.texture;
+    this.scene.background = rt.texture; this.skyRT = rt;
     box.dispose(); mat.dispose();
   },
 

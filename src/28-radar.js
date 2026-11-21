@@ -7,22 +7,18 @@
 const Radar = {
   img: null, s: 0.125, zoom: 0.8, lo: [0, 0], spotted: new Map(), spotT: 0, tr: null, ctx: null, el: null, px: 168, dpr: 1, place: '',
 
-  build(L) {
-    const s = this.s, lo = L.bounds.lo, hi = L.bounds.hi;
+  // One footprint per solid brush: its top face, classified by height (roofs and floaters skipped).
+  footprint(polys, planes, o, bottom, top) {
+    if (bottom >= 100 || o.radar === false) return null;
+    let ti = -1, best = 0.3;
+    for (let i = 0; i < planes.length; i++) if (polys[i] && planes[i][1] > best) { best = planes[i][1]; ti = i; }
+    if (ti < 0) return null;
+    const kind = o.radar === 'floor' ? 'raised' : top - bottom >= 120 && top >= 150 ? 'wall' : top <= -30 ? 'low' : top <= 20 ? 'ground' : 'raised';
+    return { poly: polys[ti], top, kind };
+  },
+  paint(items, lo, hi, sites, s, labels) {
     const W = Math.max(8, Math.ceil((hi[0] - lo[0]) * s)), H = Math.max(8, Math.ceil((hi[2] - lo[2]) * s));
     const cv = makeCanvas(W, H), g = cv.getContext('2d');
-    this.lo = [lo[0], lo[2]];
-    const items = [];
-    for (const b of L.cw.brushes) {
-      if (!(b.contents & CONTENTS.SOLID)) continue;
-      const o = (b.mb && b.mb.o) || {}, bottom = b.min[1], top = b.max[1];
-      if (bottom >= 100 || o.radar === false) continue;
-      let ti = -1, best = 0.3;
-      for (let i = 0; i < b.faceCount; i++) if (b.polys[i] && b.P[i * 4 + 1] > best) { best = b.P[i * 4 + 1]; ti = i; }
-      if (ti < 0) continue;
-      const kind = o.radar === 'floor' ? 'raised' : top - bottom >= 120 && top >= 150 ? 'wall' : top <= -30 ? 'low' : top <= 20 ? 'ground' : 'raised';
-      items.push({ poly: b.polys[ti], top, kind });
-    }
     const order = { low: 0, ground: 1, raised: 2, wall: 3 }, fill = { low: '#4a4842', ground: '#6c685e', raised: '#918c7e', wall: '#1a1c1d' };
     items.sort((a, b) => order[a.kind] - order[b.kind] || a.top - b.top);
     for (const it of items) {
@@ -31,11 +27,44 @@ const Radar = {
       g.closePath(); g.fillStyle = fill[it.kind]; g.fill();
       if (it.kind === 'raised') { g.strokeStyle = 'rgba(16, 16, 16, 0.55)'; g.lineWidth = 1; g.stroke(); }
     }
-    for (const st of L.sites || []) {
+    for (const st of sites || []) {
       g.fillStyle = 'rgba(240, 165, 58, 0.16)';
       g.fillRect((st.min[0] - lo[0]) * s, (st.min[2] - lo[2]) * s, (st.max[0] - st.min[0]) * s, (st.max[2] - st.min[2]) * s);
+      if (labels) {
+        g.fillStyle = 'rgba(240, 165, 58, 0.95)'; g.font = `700 ${Math.round(labels)}px ${STENCIL_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(st.name, (st.center[0] - lo[0]) * s, (st.center[2] - lo[2]) * s);
+      }
     }
-    this.img = cv; this.tr = makeTrace(); this.spotted.clear();
+    return cv;
+  },
+  build(L) {
+    const lo = L.bounds.lo, hi = L.bounds.hi, items = [];
+    this.lo = [lo[0], lo[2]];
+    for (const b of L.cw.brushes) {
+      if (!(b.contents & CONTENTS.SOLID)) continue;
+      const planes = []; for (let i = 0; i < b.faceCount; i++) planes.push([b.P[i * 4], b.P[i * 4 + 1], b.P[i * 4 + 2]]);
+      const it = this.footprint(b.polys, planes, (b.mb && b.mb.o) || {}, b.min[1], b.max[1]);
+      if (it) items.push(it);
+    }
+    this.img = this.paint(items, lo, hi, L.sites, this.s); this.tr = makeTrace(); this.spotted.clear();
+  },
+  // Overview of a map that isn't loaded (Create Game cards): straight from the map builder.
+  thumbs: {}, thumbURLs: {},
+  thumbURL(key) { return this.thumbURLs[key] || (this.thumbURLs[key] = this.thumb(key).toDataURL()); },
+  thumb(key) {
+    if (this.thumbs[key]) return this.thumbs[key];
+    const def = MAPS[key], mb = def.build(), items = [], lo = [Infinity, 0, Infinity], hi = [-Infinity, 0, -Infinity];
+    for (const b of mb.brushes) {
+      const o = b.o || {};
+      if (o.nocollide || o.entity || o.clip) continue;
+      const planes = b.faces.map((f) => f.plane), polys = brushPolygons(planes);
+      let y0 = Infinity, y1 = -Infinity;
+      for (const p of polys) if (p) for (const v of p) { if (v[1] < y0) y0 = v[1]; if (v[1] > y1) y1 = v[1]; lo[0] = Math.min(lo[0], v[0]); lo[2] = Math.min(lo[2], v[2]); hi[0] = Math.max(hi[0], v[0]); hi[2] = Math.max(hi[2], v[2]); }
+      const it = this.footprint(polys, planes, o, y0, y1);
+      if (it) items.push(it);
+    }
+    const s = 220 / Math.max(hi[0] - lo[0], hi[2] - lo[2]);
+    return (this.thumbs[key] = this.paint(items, lo, hi, mb.sites, s, 18));
   },
 
   attach(canvas) {

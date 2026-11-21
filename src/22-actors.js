@@ -29,6 +29,7 @@ class Actor {
     this.health = 100; this.armor = 100; this.helmet = true; this.alive = false; this.deadT = 0;
     this.kills = 0; this.deaths = 0; this.hurtT = 0; this.hurtFrom = null; this.killer = null;
     this.money = 800; this.kit = false; this.squad = 0;
+    this.dmg = 0; this.hs = 0; this.plants = 0; this.defuses = 0;
     this.cmd = Object.assign({}, IDLE_CMD);
     this.brain = isBot ? new BotBrain(this) : null;
     this.prevPos = [0, 0, 0];
@@ -53,6 +54,7 @@ class Actor {
       dmg = toHealth;
     }
     dmg = Math.max(1, Math.round(dmg));
+    if (attacker && attacker !== this && attacker.team !== this.team) attacker.dmg += Math.min(dmg, this.health);
     this.health -= dmg;
     this.hurtT = 1; this.hurtFrom = from ? from.slice() : null;
     if (this.brain) this.brain.onHurt(attacker, from);
@@ -65,7 +67,7 @@ class Actor {
     this.alive = false; this.deadT = 0; this.deaths++; this.killer = attacker || null;
     this.killInfo = { weapon: def ? def.name : '', headshot };
     if (attacker && attacker !== this) {
-      if (attacker.team !== this.team) { attacker.kills++; Actors.score[attacker.team]++; } else attacker.kills--;
+      if (attacker.team !== this.team) { attacker.kills++; if (headshot) attacker.hs++; Actors.score[attacker.team]++; } else attacker.kills--;
     }
     Actors.feed.push({ killer: attacker ? attacker.name : '', kTeam: attacker ? attacker.team : this.team, victim: this.name, vTeam: this.team,
       weapon: def ? def.name : '', wid: def ? def.id : '', hs: headshot, age: 0, me: !!(attacker && attacker.isMe) || this.isMe });
@@ -158,6 +160,7 @@ const Actors = {
     for (const a of this.list) {
       const p = a.player, m = a.model;
       m.setWeapon(a.loadout.active.def.id, !!a.loadout.byId('charge'));
+      m.mesh.visible = !a.isMe && !this.hidden;
       m.update(dt, { x: lerp(p.prev[0], p.pos[0], alpha), y: lerp(p.prev[1], p.pos[1], alpha), z: lerp(p.prev[2], p.pos[2], alpha),
         yaw: p.yaw, pitch: p.pitch, vx: p.vel[0], vz: p.vel[2], ducked: p.ducked, onGround: p.onGround || p.noclip, alive: a.alive });
       if (FX.L) { FX.lightAt(p.pos[0], p.pos[1] + 40, p.pos[2], tmp); m.setLight(tmp[0], tmp[1], tmp[2]); }
@@ -179,7 +182,7 @@ const Combat = {
       if (res.actor) dealt += res.actor.target.damage(res.actor.damage, res.actor.group, actor, def, eye);
       results.push({ res, dir });
     }
-    Bots.noise(eye, actor, 1700);
+    Bots.noise(eye, actor, def.noise || 1700);
     return { res: results[0].res, dir: base, results, eye, dealt };
   },
   knife(actor, e) {

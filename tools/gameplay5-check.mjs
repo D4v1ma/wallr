@@ -87,12 +87,10 @@ await wait(9000);
 r = await ev(() => { const G = __SF.Game; return { js60: +(G.prepMs + G.tickMs * 64 / 60).toFixed(2), tick: +G.tickMs.toFixed(2), prep: +G.prepMs.toFixed(2), calls: __SF.R.stats.calls, tris: __SF.R.stats.tris, alive: __SF.Actors.list.filter((a) => a.alive).length }; });
 check('10 players on Saltpan Depot: game JavaScript for a 60 FPS frame under 3 ms', r.js60 < 3, JSON.stringify(r));
 
-// switching maps reloads into Hall B; ?map= overrides the saved choice
-await ev(() => __SF.Settings.set('map', 'range'));
-await page.waitForFunction(() => window.__SF && __SF.Game.L && __SF.Game.L.name === 'Hall B', null, { timeout: 180000 }).catch(() => {});
-r = await ev(() => ({ map: window.__SF && __SF.Game.L && __SF.Game.L.name }));
-check('choosing Hall B in the Match tab reloads into the range', r.map === 'Hall B', JSON.stringify(r));
-await ev(() => __SF.Settings.set('map', 'depot')).catch(() => {});
+// switching maps builds Hall B in place (Stage 6: no page reload)
+await ev(() => { window.__same = 7; return __SF.loadMap('range').then(() => { __SF.Game.state = 'menu'; }); });
+r = await ev(() => ({ map: __SF.Game.L.name, probes: !!__SF.Game.L.probes, same: window.__same, actors: __SF.Actors.list.length }));
+check('switching to Hall B builds it in place without reloading the page', r.map === 'Hall B' && r.probes && r.same === 7 && r.actors === 1, JSON.stringify(r));
 check('no page errors', errs.length === 0, errs.slice(0, 5).join(' | '));
 console.log(ok ? 'ALL PASS' : 'SOME FAILED');
 await browser.close();

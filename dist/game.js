@@ -4,7 +4,7 @@
 // Core helpers: math, deterministic noise, settings persistence.
 // All game modules share this IIFE scope; keep names stable.
 
-const GAME_VERSION = 'stage-5';
+const GAME_VERSION = 'stage-6';
 const DEG = Math.PI / 180;
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -605,6 +605,86 @@ function texBallast(seed) {
   return P.toCanvas();
 }
 
+// ==== 04-tex-maps.js ====
+// Textures for Kilnworks and Frostline: brick variants with soot, clay ground, snow, granite.
+
+// Brick with a chosen palette and mortar; `soot` darkens it in rising streaks (kilns, chimneys).
+function texBrickVariant(seed, pal, mortarCol = [0.6, 0.58, 0.53], soot = 0) {
+  const W = 256, rowH = 32, bw = 64, mortar = 4, P = new Pix(W);
+  P.map((x, y, c) => {
+    const u = x / W, v = y / W, row = Math.floor(y / rowH), off = (row & 1) * (bw / 2);
+    const xs = (x + off) % W, bx = Math.floor(xs / bw), lx = xs % bw, ly = y % rowH;
+    const dirt = 0.9 + 0.2 * fbm(u * 4, v * 4, 4, 4, 4, seed + 3);
+    const sootK = soot ? 1 - soot * smoothstep(0.35, 0.75, fbm(u * 3, v * 1.5, 3, 2, 4, seed + 7) * 0.75 + (1 - v) * 0.35) : 1;
+    if (ly < mortar || lx < mortar) {
+      let k = (0.82 + fbm(u * 64, v * 64, 64, 64, 2, seed + 2) * 0.3) * dirt * sootK;
+      if (ly < 2) k *= 0.62;
+      c[0] = mortarCol[0] * k; c[1] = mortarCol[1] * k; c[2] = mortarCol[2] * k;
+      return;
+    }
+    const col = pal[Math.floor(hashi(bx, row, seed) * pal.length)];
+    let k = (1 + (fbm(u * 16, v * 16, 16, 16, 3, seed + 4) - 0.5) * 0.22 + (hashi(x, y, seed + 1) - 0.5) * 0.12) * dirt * sootK;
+    if (ly < mortar + 2) k *= 1.1;
+    if (ly > rowH - 3) k *= 0.82;
+    if (lx > bw - 3) k *= 0.88;
+    const chip = hashi(bx, row, seed + 9);
+    if (chip > 0.62) { const dx = lx - (chip > 0.81 ? bw : mortar), dy = ly - mortar; if (dx * dx + dy * dy < 30 + 40 * (chip - 0.62)) k *= 0.62; }
+    c[0] = col[0] * k; c[1] = col[1] * k; c[2] = col[2] * k;
+  });
+  return P.toCanvas();
+}
+
+// Dry red clay: blotchy, sun-cracked, with grit.
+function texClay(seed) {
+  const W = 256, P = new Pix(W), o = [0, 0, 0];
+  P.map((x, y, c) => {
+    const u = x / W, v = y / W;
+    const blot = fbm(u * 4, v * 4, 4, 4, 5, seed) - 0.5, hue = fbm(u * 2, v * 2, 2, 2, 3, seed + 1) - 0.5;
+    worley(u * 7, v * 7, 7, seed + 2, o);
+    const crack = 1 - smoothstep(0.0, 0.045, o[1] - o[0]) * 1;
+    const fine = hashi(x, y, seed + 3) - 0.5;
+    let k = 1 + blot * 0.26 + fine * 0.1 - crack * 0.32 * smoothstep(0.35, 0.6, fbm(u * 3, v * 3, 3, 3, 2, seed + 4));
+    c[0] = 0.66 * k * (1 + hue * 0.1); c[1] = 0.42 * k * (1 - hue * 0.05); c[2] = 0.29 * k * (1 - hue * 0.12);
+  });
+  const rnd = mulberry32(seed + 5), peb = [];
+  for (let i = 0; i < 90; i++) peb.push([rnd() * 256, rnd() * 256, 0.8 + rnd() * 1.6]);
+  P.stamp((ctx) => { for (const [x, y, r] of peb) { ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); } }, [0.74, 0.6, 0.48], 0.7);
+  return P.toCanvas();
+}
+
+// Packed snow: soft drifts, blue in the hollows, a few sparkles and scuffs.
+function texSnow(seed) {
+  const W = 256, P = new Pix(W);
+  P.map((x, y, c) => {
+    const u = x / W, v = y / W;
+    const drift = fbm(u * 3, v * 3, 3, 3, 5, seed), ripple = Math.sin(TAU * (5 * u + 2 * v + fbm(u * 4, v * 4, 4, 4, 2, seed + 1) * 1.2)) * 0.5 + 0.5;
+    const hollow = smoothstep(0.62, 0.3, drift);
+    let k = 0.9 + drift * 0.14 + ripple * 0.025 + (hashi(x, y, seed + 2) - 0.5) * 0.05;
+    if (hashi(x, y, seed + 3) > 0.996) k += 0.12;
+    const scuff = smoothstep(0.62, 0.72, fbm(u * 6, v * 6, 6, 6, 3, seed + 4)) * 0.08;
+    k -= scuff;
+    c[0] = (0.76 - hollow * 0.1) * k; c[1] = (0.8 - hollow * 0.06) * k; c[2] = 0.86 * k;
+  });
+  return P.toCanvas();
+}
+
+// Granite: faceted cells with fake lighting, lichen speckle, frost in the cracks.
+function texRock(seed, base = [0.46, 0.47, 0.49]) {
+  const W = 256, P = new Pix(W), o = [0, 0, 0];
+  P.map((x, y, c) => {
+    const u = x / W, v = y / W;
+    worley(u * 5, v * 5, 5, seed, o);
+    const facet = 0.82 + hashi(Math.floor(o[2] * 997), 1, seed + 1) * 0.3, edge = smoothstep(0.0, 0.05, o[1] - o[0]);
+    const grain = fbm(u * 24, v * 24, 24, 24, 3, seed + 2) - 0.5, speck = hashi(x, y, seed + 3);
+    let k = facet * (0.72 + 0.28 * edge) + grain * 0.18 + (speck > 0.97 ? 0.12 : speck < 0.03 ? -0.1 : 0);
+    let r = base[0] * k, g = base[1] * k, b = base[2] * k;
+    if (edge < 0.4) { const f = (0.4 - edge) * 1.6; r += (0.82 - r) * f * 0.6; g += (0.86 - g) * f * 0.6; b += (0.92 - b) * f * 0.6; }   // frost in cracks
+    if (fbm(u * 6, v * 6, 6, 6, 3, seed + 4) > 0.66) { r *= 0.92; g *= 0.98; b *= 0.82; }                                              // lichen
+    c[0] = r; c[1] = g; c[2] = b;
+  });
+  return P.toCanvas();
+}
+
 // ==== 04-tex-props.js ====
 // Props, signage, decals, sprites and weapon skins + the texture registry.
 
@@ -1107,6 +1187,23 @@ const TEX_DEFS = {
   sign_culvert:   { gen: () => texSign(['CULVERT', 'FLOOD RISK · KEEP OUT'], [0.8, 0.22, 0.14], [0.95, 0.92, 0.86], 84), fit: true, surf: 'metal' },
   sign_salt:      { gen: () => texSign(['SALT STORE', 'NO NAKED FLAMES'], [0.5, 0.47, 0.42], [0.1, 0.09, 0.08], 85), fit: true, surf: 'metal' },
   site_b:         { gen: () => texSiteSign('B', 59), fit: true, surf: 'metal' },
+  // Kilnworks
+  firebrick:      { gen: () => texBrickVariant(101, [[0.42, 0.2, 0.13], [0.36, 0.17, 0.12], [0.48, 0.25, 0.16], [0.3, 0.15, 0.11]], [0.42, 0.39, 0.35], 0.55), world: 112, surf: 'brick' },
+  brick_yellow:   { gen: () => texBrickVariant(102, [[0.72, 0.6, 0.4], [0.66, 0.55, 0.36], [0.78, 0.66, 0.45], [0.62, 0.5, 0.33], [0.7, 0.56, 0.38]], [0.62, 0.6, 0.55], 0.12), world: 112, surf: 'brick' },
+  clay:           { gen: () => texClay(103), world: 192, surf: 'sand' },
+  sign_kiln:      { gen: () => texSign(['KILN YARD', 'HOT SURFACES · KEEP CLEAR'], [0.8, 0.22, 0.14], [0.95, 0.92, 0.86], 104), fit: true, surf: 'metal' },
+  sign_press:     { gen: () => texSign(['PRESS HALL', 'EAR PROTECTION REQUIRED'], [0.13, 0.2, 0.32], [0.9, 0.88, 0.82], 105), fit: true, surf: 'metal' },
+  sign_kilnworks: { gen: () => texSign(['KILNWORKS', 'BRICK & TILE · GATE 2'], [0.24, 0.16, 0.12], [0.94, 0.82, 0.62], 106), fit: true, surf: 'metal' },
+  sign_pits:      { gen: () => texSign(['CLAY PITS', 'DANGER · SOFT GROUND'], [0.86, 0.66, 0.12], [0.08, 0.07, 0.06], 107), fit: true, surf: 'metal' },
+  // Frostline
+  snow:           { gen: () => texSnow(111), world: 224, surf: 'sand' },
+  rock:           { gen: () => texRock(112), world: 256, surf: 'concrete' },
+  hangar:         { gen: () => texCorrugated(113, [0.66, 0.69, 0.7]), world: 128, surf: 'metal' },
+  paint_white:    { gen: () => texMetalPanel(114, [0.74, 0.76, 0.76]), world: 128, surf: 'metal' },
+  paint_orange:   { gen: () => texMetalPanel(115, [0.8, 0.36, 0.12]), world: 128, surf: 'metal' },
+  sign_hangar:    { gen: () => texSign(['HANGAR 2', 'NO OPEN FLAMES'], [0.13, 0.2, 0.32], [0.9, 0.88, 0.82], 116), fit: true, surf: 'metal' },
+  sign_dish:      { gen: () => texSign(['DISH ARRAY', 'RF HAZARD · NO ENTRY'], [0.8, 0.22, 0.14], [0.95, 0.92, 0.86], 117), fit: true, surf: 'metal' },
+  sign_frost:     { gen: () => texSign(['FROSTLINE STATION', 'ELEVATION 2140 M'], [0.18, 0.24, 0.3], [0.9, 0.92, 0.94], 118), fit: true, surf: 'metal' },
   jump32:         { gen: () => texLabelBox('32', 50), fit: true, surf: 'concrete' },
   jump48:         { gen: () => texLabelBox('48', 51), fit: true, surf: 'concrete' },
   jump64:         { gen: () => texLabelBox('64', 52), fit: true, surf: 'concrete' },
@@ -1115,6 +1212,7 @@ const TEX_DEFS = {
   step18:         { gen: () => texLabelBox('18', 55), fit: true, surf: 'concrete' },
   step20:         { gen: () => texLabelBox('20', 56), fit: true, surf: 'concrete' },
   lamp:           { fullbright: [1.0, 0.92, 0.74], surf: 'metal' },
+  screen_glow:    { fullbright: [0.42, 0.9, 0.62], surf: 'metal' },
 };
 
 // Non-world textures (sprites, decals, weapon skins).
@@ -1718,7 +1816,7 @@ function compileLevel(map, tex) {
   for (const b of cw.brushes) for (let i = 0; i < 3; i++) { lo[i] = Math.min(lo[i], b.min[i]); hi[i] = Math.max(hi[i], b.max[i]); }
 
   return { cw, faces, luxels, atlasW, atlasH, groups, entGroups, lights: map.lights, doors: map.doors, targets: map.targets, spawns: map.spawns,
-    teamSpawns: map.teamSpawns, hotspots: map.hotspots, sites: map.sites, areas: map.areas, tactics: map.tactics, env: map.env, bounds: { lo, hi }, tex };
+    teamSpawns: map.teamSpawns, hotspots: map.hotspots, sites: map.sites, areas: map.areas, tactics: map.tactics, menuShots: map.menuShots || null, env: map.env, bounds: { lo, hi }, tex };
 }
 
 // ==== 07-map-depot.js ====
@@ -2013,6 +2111,13 @@ function buildDepot() {
     ['Plaza', -200, -300, 500, 300], ['Back Alley', 200, 300, 500, 1000], ['Shed 4', 500, 700, 1300, 1450], ['Culvert', -1100, 1150, 500, 1330],
     ['Sluice Yard', -1950, 500, -900, 1450], ['Service Road', 1300, -1450, 1650, 1450], ['Warden Yard', 1650, -500, 1950, 500]]) M.area(n, x0, z0, x1, z1);
 
+  // main-menu fly-through: over the Scales Yard toward Platform 2, down the street, inside Shed 4
+  M.menuShots = [
+    { from: [560, 330, -360], to: [1180, 320, -420], look: [880, 10, -1080], lookTo: [1040, 10, -1060] },
+    { from: [-1260, 120, 60], to: [-760, 130, 40], look: [200, 40, -20] },
+    { from: [580, 250, 760], to: [880, 240, 740], look: [960, 30, 1260], lookTo: [1060, 30, 1220] },
+  ];
+
   // ---------------- bot tactics ----------------
   M.tactics = {
     routes: {
@@ -2022,11 +2127,493 @@ function buildDepot() {
       culvert: { stack: [-1150, 0, 880], yaw: Math.PI, via: [200, -48, 1240] },
     },
     siteRoutes: { A: ['cut', 'office'], B: ['culvert', 'alley'] },
+    mid: [-200, -300, 500, 300],
     sites: {
       A: { hold: [[700, 0, -1060, 100], [1250, 0, -1160, 90], [960, 0, -860, 160], [1310, -48, -1270, 90], [1100, 0, -1210, 95]],
         plant: [[820, 0, -1000], [1080, 0, -940], [960, -48, -1350]], smoke: [[780, 0, -790], [540, -48, -1350]] },
       B: { hold: [[1200, 0, 960, 90], [640, 0, 820, 135], [1210, 0, 780, 70], [700, 0, 1380, 45], [1000, 0, 1300, 80]],
         plant: [[820, 0, 1180], [1000, 0, 900], [700, 0, 1300]], smoke: [[570, 0, 910], [560, 0, 1240]] },
+    },
+  };
+  return M;
+}
+
+// ==== 07-map-frost.js ====
+// "Frostline": an original mountain radar station under a grey winter sky.
+// Axes: +X east, +Y up, +Z south. Raiders come in from the supply drop (west), Wardens hold the
+// barracks row (east).
+//   A: Hangar 2 (indoor: a parked survey plane, tool crates) - via the Fuel Depot (north lane) or
+//      the Radio Path behind the comms block
+//   B: Dish Array (outdoor platform raised 96 units: two dishes, a control hut) - up the ramp from
+//      the Ice Cut (south lane) or the stairs from the Generator Path
+//   Mid: the Pass between two rock ridges into the comms block, whose north and south doors feed
+//   the Radio and Generator paths.
+
+function buildFrostline() {
+  const M = new MapBuilder();
+  const sd = [0.32, 0.58, -0.55], sl = Math.hypot(...sd);
+  M.env = {
+    sunDir: sd.map((v) => v / sl), sunColor: [0.92, 0.95, 1.0], sunIntensity: 0.88,
+    skyZenith: [0.46, 0.56, 0.7], skyHorizon: [0.84, 0.88, 0.93], skyIntensity: 0.92,
+    fogColor: [0.82, 0.86, 0.91], fogDensity: 0.00015, ambient: 0.17,
+    skySun: [0.95, 0.95, 0.92], skyGround: [0.86, 0.89, 0.93], skyMountains: [0.84, 0.88, 0.93],
+    lmBig: 256, lmSmall: 12, probeStep: 96, bakeRays: 9,
+  };
+  const ND = { nocollide: true, noshadow: true };
+  const H = 420;
+  const floor = (x0, z0, x1, z1, tex, y = 0, t = 16) => M.box(x0, y - t, z0, x1, y, z1, { top: tex });
+  const block = (x0, z0, x1, z1, h, side, y0 = 0, top = null) => M.box(x0, y0, z0, x1, h, z1, { sides: side, top, bottom: null });
+  const plate = (x0, y0, z0, x1, y1, z1, face, tex) => M.box(x0, y0, z0, x1, y1, z1, { [face]: tex, sides: 'steel', top: 'steel', bottom: 'steel' });
+  const win = (x0, y0, z0, x1, y1, z1, face) => M.box(x0, y0, z0, x1, y1, z1, { [face]: 'window', sides: 'steel', top: 'steel', bottom: 'steel' }, ND);
+  const crate = (x, z, s, tex, y = 0, yaw = 0) => M.box(x - s / 2, y, z - s / 2, x + s / 2, y + s, z + s / 2, tex, { yaw });
+  const barrel = (x, z, tex = 'barrel', y = 0) => M.prism(x, z, y, y + 44, 13, 12, { side: tex, top: 'barrel_top' }, { rot: x * 0.01 });
+  const lamp = (x, y, z, col = [0.92, 0.95, 1.0], k = 1.5, r = 560, hang = 0) => {
+    if (hang > 0) M.box(x - 0.6, y + 8, z - 0.6, x + 0.6, y + 8 + hang, z + 0.6, 'steel', ND);
+    M.prism(x, z, y + 4, y + 10, 9, 8, 'steel', { nocollide: true });
+    M.box(x - 4, y, z - 4, x + 4, y + 4, z + 4, 'lamp', ND);
+    M.light(x, y - 8, z, col, k, r);
+  };
+  const pole = (x, z, h = 220) => { M.prism(x, z, 0, h, 3, 8, 'steel'); M.box(x - 3, h - 4, z - 16, x + 3, h, z + 16, 'steel', ND); lamp(x, h - 10, z + 14, [1.0, 0.9, 0.72], 1.0, 460); };
+  const drift = (x, z, r, h, y = 0) => { M.prism(x, z, y, y + h * 0.55, r, 12, { side: 'snow', top: 'snow' }); M.prism(x, z, y + h * 0.55, y + h, r * 0.55, 12, { side: 'snow', top: 'snow' }); };
+  const boulder = (x, z, r, h, rot = 0) => M.prism(x, z, 0, h, r, 7, { side: 'rock', top: 'snow' }, { rot });
+  const ridge = (x0, z0, x1, z1, h) => M.box(x0, 0, z0, x1, h, z1, { sides: 'rock', top: 'snow', bottom: null }, { lm: 24 });
+
+  // ---------------- cliffs all round ----------------
+  M.box(-1850, -64, -1450, 1850, H, -1400, { s: 'rock' }, { lm: 32 });
+  M.box(-1850, -64, 1400, 1850, H, 1450, { n: 'rock' }, { lm: 32 });
+  M.box(-1850, -64, -1400, -1800, H, 1400, { e: 'rock' }, { lm: 32 });
+  M.box(1800, -64, -1400, 1850, H, 1400, { w: 'rock' }, { lm: 32 });
+  for (const [x, z, r, h] of [[-1500, -1400, 120, 520], [-400, -1400, 160, 560], [700, 1400, 150, 540], [1600, 1400, 140, 500], [-1800, 1000, 130, 520], [1800, -800, 120, 520]]) M.prism(x, z, 0, h, r, 7, { side: 'rock', top: 'snow' }, { rot: x * 0.003 });
+
+  // ---------------- floors ----------------
+  floor(-1800, -1400, -1300, 1400, 'snow');               // Drop Zone (Raider spawn)
+  floor(-1300, -1400, 100, -650, 'snow');                 // Fuel Depot (north lane)
+  floor(-1300, -250, -300, 250, 'snow');                  // the Pass (mid)
+  floor(-1300, 650, 100, 1400, 'snow');                   // Ice Cut (south lane)
+  floor(-300, -650, 300, -350, 'snow');                   // Radio Path
+  floor(-300, 350, 300, 650, 'snow');                     // Generator Path
+  floor(-300, -350, 300, 350, 'tiles');                   // comms block
+  floor(100, -1400, 1300, -650, 'concrete_floor');        // A: Hangar 2
+  floor(1300, -1400, 1800, 1400, 'snow');                 // Barracks Row (Warden spawn)
+
+  // ---------------- ridges and the station building ----------------
+  ridge(-1300, -650, -300, -250, 300); ridge(-1300, 250, -300, 650, 300);
+  for (const [x, z] of [[-1250, -620], [-700, -640], [-1100, 620], [-500, 640]]) boulder(x, z, 70, 120, x * 0.01);
+  block(300, -650, 1300, 650, 320, 'paint_white');
+  for (const z of [-450, -150, 150, 450]) win(1300, 150, z - 40, 1304, 210, z + 40, 'e');
+  M.box(290, 320, -660, 1310, 336, 660, { sides: 'steel', top: 'roof', bottom: 'steel' });
+  M.prism(800, 0, 336, 420, 150, 16, { side: 'paint_white', top: 'paint_white' }); M.prism(800, 0, 420, 470, 100, 16, { side: 'paint_white', top: 'paint_white' });
+  M.prism(800, 0, 470, 495, 50, 12, { side: 'paint_white', top: 'paint_white' });
+  plate(1304, 230, -100, 1308, 290, 100, 'e', 'sign_frost');
+
+  // ---------------- comms block (mid): a loop round the equipment room ----------------
+  const CW = { sides: 'paint_orange', top: 'steel', bottom: null }, CI = { sides: 'plaster', top: 'steel', bottom: null };
+  // west wall with the door from the Pass (z -60..60)
+  M.box(-300, 0, -350, -284, 240, -60, CW); M.box(-300, 0, 60, -284, 240, 350, CW); M.box(-300, 112, -60, -284, 240, 60, CW);
+  // north wall with the door to the Radio Path (x 100..220); south wall with the door to the Generator Path
+  M.box(-284, 0, -350, 100, 240, -334, CW); M.box(220, 0, -350, 300, 240, -334, CW); M.box(100, 112, -350, 220, 240, -334, CW);
+  M.box(-284, 0, 334, 100, 240, 350, CW); M.box(220, 0, 334, 300, 240, 350, CW); M.box(100, 112, 334, 220, 240, 350, CW);
+  M.box(-300, 240, -350, 300, 256, 350, { bottom: 'plaster', top: 'roof', sides: 'steel' });
+  // equipment room in the middle (solid racks), consoles along the outer walls
+  M.box(-130, 0, -170, 130, 200, 170, { sides: 'panel', top: 'steel', bottom: null });
+  for (let z = -150; z < 160; z += 60) M.box(130, 30, z, 134, 170, z + 40, 'screen_glow', ND);
+  M.box(-280, 0, -320, -220, 72, -200, { sides: 'paint_white', top: 'steel', bottom: null });
+  M.box(-280, 0, 200, -220, 72, 320, { sides: 'paint_white', top: 'steel', bottom: null });
+  for (const [x, z] of [[0, -260], [0, 260], [-210, 0]]) lamp(x, 222, z, [0.9, 0.95, 1.0], 1.2, 420, 4);
+  for (const z of [-200, 140]) win(-304, 130, z, -300, 180, z + 60, 'w');
+
+  // ---------------- A: Hangar 2 ----------------
+  const HG = { sides: 'hangar', top: 'steel', bottom: null };
+  // west wall: the big hangar door from the Fuel Depot (z -1150..-850, 260 high)
+  M.box(100, 0, -1400, 120, 380, -1150, HG); M.box(100, 0, -850, 120, 380, -650, HG); M.box(100, 260, -1150, 120, 380, -850, HG);
+  M.box(60, 260, -1180, 100, 300, -820, { sides: 'paint_orange', top: 'steel', bottom: 'steel' });              // door beam
+  // south wall: door to the Radio Path (x 150..270); east wall: door to Barracks Row (z -1100..-980)
+  M.box(120, 0, -670, 150, 380, -650, HG); M.box(270, 0, -670, 1300, 380, -650, HG); M.box(150, 112, -670, 270, 380, -650, HG);
+  M.box(1280, 0, -1400, 1300, 380, -1100, HG); M.box(1280, 0, -980, 1300, 380, -670, HG); M.box(1280, 112, -1100, 1300, 380, -980, HG);
+  const RF = { bottom: 'shed_roof', top: null, sides: 'steel' };
+  M.box(100, 380, -1400, 1300, 396, -1100, RF); M.box(100, 380, -950, 1300, 396, -650, RF);
+  M.box(100, 380, -1100, 550, 396, -950, RF); M.box(750, 380, -1100, 1300, 396, -950, RF);
+  for (const x of [300, 600, 900, 1150]) M.box(x - 8, 350, -1400, x + 8, 380, -650, 'steel', ND);
+  // the survey plane: fuselage on legs, wings overhead, a tail fin
+  M.box(420, 40, -1060, 980, 150, -940, { sides: 'paint_white', top: 'paint_white', bottom: 'steel' });
+  M.box(330, 60, -1040, 420, 130, -960, { sides: 'paint_orange', top: 'paint_orange', bottom: 'steel' });
+  M.box(640, 126, -1380, 780, 140, -620 + -50, { sides: 'paint_white', top: 'paint_white', bottom: 'paint_white' }, ND);
+  M.box(900, 150, -1004, 960, 260, -996, { sides: 'paint_orange', top: 'steel', bottom: null }, ND);
+  M.box(880, 140, -1110, 980, 148, -890, { sides: 'paint_white', top: 'paint_white', bottom: 'paint_white' }, ND);
+  for (const [x, z] of [[500, -1050], [500, -950], [900, -1050], [900, -950]]) M.prism(x, z, 0, 40, 8, 8, 'steel');
+  // crates and tool chests
+  crate(350, -1300, 64, 'crate_mil'); crate(354, -1300, 48, 'crate', 64, 0.25); crate(1150, -1250, 64, 'crate_b', 0, 0.2);
+  crate(1180, -760, 56, 'crate_mil', 0, -0.3); crate(780, -760, 64, 'crate'); crate(250, -780, 48, 'crate_b', 0, 0.4);
+  M.box(1200, 0, -1390, 1270, 90, -1300, { sides: 'paint_orange', top: 'steel', bottom: null });
+  M.box(560, 0, -1380, 720, 48, -1340, { sides: 'paint_white', top: 'diamond', bottom: null });
+  barrel(1240, -1050); barrel(1220, -1070, 'barrel_red'); barrel(160, -1380);
+  for (const [x, z] of [[350, -1000], [700, -1250], [700, -800], [1050, -1000]]) lamp(x, 340, z, [1.0, 0.92, 0.78], 1.5, 640, 10);
+  plate(124, 150, -840, 128, 220, -760, 'e', 'site_a'); plate(500, 260, -646, 680, 320, -642, 's', 'sign_hangar');
+  plate(96, 280, -1060, 100, 330, -940, 'w', 'sign_hangar'); plate(1276, 130, -960, 1280, 200, -880, 'w', 'site_a');
+
+  // ---------------- Fuel Depot (north lane) ----------------
+  for (const [x, z] of [[-900, -1180], [-560, -1230], [-240, -1120]]) {
+    M.prism(x, z, 0, 220, 88, 16, { side: 'paint_white', top: 'steel' });
+    M.box(x - 92, 120, z - 6, x + 92, 132, z + 6, 'steel', ND);
+  }
+  for (const x of [-1100, -700, -300, 50]) M.prism(x, -700, 0, 170, 5, 8, 'steel');
+  M.box(-1150, 160, -712, 80, 176, -688, { sides: 'steel', top: 'steel', bottom: 'steel' }, ND);             // pipe rack
+  M.box(-1080, 0, -950, -880, 110, -860, { sides: 'paint_orange', top: 'steel', bottom: null });              // fuel bowser
+  M.box(-880, 0, -945, -820, 80, -865, { sides: 'paint_orange', top: 'steel', bottom: null });
+  drift(-1200, -1300, 90, 60); drift(-450, -900, 70, 46); drift(-50, -1300, 80, 50);
+  crate(-650, -780, 64, 'crate_mil', 0, 0.2); barrel(-1250, -780); barrel(-1225, -760, 'barrel_red'); crate(-100, -900, 56, 'crate', 0, -0.3);
+  pole(-800, -680, 210); pole(-50, -1380, 210);
+
+  // ---------------- the Pass (mid) ----------------
+  boulder(-1000, -120, 60, 70, 0.4); boulder(-700, 160, 70, 90, 1.1); drift(-450, -170, 60, 40);
+  M.box(-900, 0, 60, -780, 50, 140, { sides: 'paint_orange', top: 'steel', bottom: null }, { yaw: 0.2 });   // broken snowcat
+  M.box(-890, 50, 70, -820, 100, 130, { sides: 'paint_orange', top: 'steel', bottom: null }, { yaw: 0.2 });
+  pole(-600, -235, 200);
+
+  // ---------------- Radio Path and Generator Path ----------------
+  M.box(-260, 0, -620, -140, 130, -500, { sides: 'paint_white', top: 'roof', bottom: null });              // radio hut
+  M.prism(-200, -560, 130, 330, 5, 6, 'steel'); M.box(-212, 300, -572, -188, 340, -548, 'steel', ND);       // mast
+  crate(240, -420, 48, 'crate_b', 0, 0.2);
+  M.box(-260, 0, 500, -120, 100, 620, { sides: 'paint_orange', top: 'steel', bottom: null });             // generator
+  for (const z of [520, 560, 600]) M.box(-122, 20, z, -118, 80, z + 20, 'steel', ND);
+  barrel(-60, 620); barrel(-35, 600, 'barrel_red');
+
+  // ---------------- B: Dish Array (raised platform) ----------------
+  M.box(100, 0, 650, 1300, 96, 1400, { top: 'concrete', sides: 'concrete', bottom: null }, { radar: 'floor' });
+  M.box(100, 96, 650, 1300, 97, 670, 'hazard', { nocollide: true, noshadow: true });
+  // west ramp from the Ice Cut (z 900..1100), north stairs from the Generator Path, east stairs from Barracks Row
+  M.ramp(-180, 900, 100, 1100, 0, 96, 'e', { top: 'concrete', sides: 'concrete' });
+  for (let k = 0; k < 6; k++) M.box(150, 0, 500 + 25 * k, 280, 16 * (k + 1), 525 + 25 * k, { top: 'concrete', sides: 'concrete', bottom: null });
+  for (let k = 0; k < 6; k++) M.box(1450 - 25 * (k + 1), 0, 900, 1450 - 25 * k, 16 * (k + 1), 1040, { top: 'concrete', sides: 'concrete', bottom: null });
+  // railings along the open edges (waist high, see-through gaps between posts)
+  for (let x = 120; x < 1300; x += 120) if (!(x > 140 && x < 300)) M.box(x, 96, 650, x + 6, 136, 656, 'steel');
+  M.box(100, 130, 650, 1300, 136, 656, 'steel', ND);
+  // dishes on pedestals (you can walk under the bowls), a control hut
+  const dish = (x, z, r) => {
+    M.prism(x, z, 96, 250, 26, 10, { side: 'paint_white', top: 'steel' });
+    M.prism(x, z, 250, 262, r, 18, { side: 'paint_white', top: 'paint_white', bottom: 'paint_white' }, ND);
+    M.prism(x, z, 262, 272, r * 0.75, 18, { side: 'paint_white', top: 'paint_white' }, ND);
+    M.prism(x, z, 272, 340, 3, 6, 'steel', ND); M.box(x - 8, 340, z - 8, x + 8, 356, z + 8, 'paint_orange', ND);
+  };
+  dish(550, 1050, 150); dish(1000, 1200, 130);
+  M.box(1050, 96, 700, 1260, 216, 850, { sides: 'paint_orange', top: 'roof', bottom: null });
+  win(1046, 150, 740, 1050, 190, 810, 'w');
+  crate(400, 800, 64, 'crate_mil', 96, 0.2); crate(404, 800, 48, 'crate_b', 160, 0.5); crate(800, 1330, 64, 'crate', 96, -0.2);
+  crate(1200, 1050, 56, 'crate_mil', 96, 0.3); drift(250, 1300, 80, 50, 96); drift(780, 880, 60, 40, 96);
+  M.box(650, 96, 760, 760, 136, 800, { sides: 'paint_white', top: 'steel', bottom: null });                 // cable drum
+  for (const [x, z] of [[300, 900], [800, 1100], [1150, 1300]]) lamp(x, 200, z, [1.0, 0.9, 0.72], 1.1, 480, 0);
+  plate(96, 20, 960, 100, 80, 1040, 'w', 'site_b'); plate(1300, 110, 1180, 1304, 180, 1260, 'e', 'site_b');
+  plate(1046, 120, 860, 1050, 170, 850, 'w', 'sign_dish');
+
+  // ---------------- Ice Cut (south lane) ----------------
+  boulder(-1100, 900, 80, 110, 0.3); boulder(-750, 1250, 90, 130, 1.4); boulder(-400, 820, 60, 80, 2.2);
+  drift(-950, 1150, 80, 50); drift(-250, 1300, 70, 46);
+  M.box(-640, 0, 980, -520, 60, 1060, { sides: 'crate_mil', top: 'crate_mil', bottom: null }, { yaw: 0.3 });
+  pole(-1000, 1380, 210);
+
+  // ---------------- Drop Zone (Raider spawn) ----------------
+  crate(-1700, -1000, 64, 'crate_mil', 0, 0.2); crate(-1700, -1000, 48, 'crate_mil', 64, 0.6); crate(-1400, 1000, 64, 'crate_mil', 0, -0.2);
+  M.box(-1760, 0, -60, -1620, 24, 60, 'timber'); crate(-1690, -10, 56, 'crate_mil', 24, 0.1);                  // supply pallet
+  drift(-1500, -1250, 100, 60); drift(-1550, 1250, 90, 56);
+  // a wall of supply containers faces the Pass mouth: no view from mid into the spawn
+  M.box(-1450, 0, -430, -1400, 120, -10, { sides: 'container', top: 'steel', bottom: null });
+  M.box(-1450, 0, 10, -1400, 120, 430, { sides: 'container_blue', top: 'steel', bottom: null });
+  M.box(-1452, 120, -200, -1398, 230, 120, { sides: 'container', top: 'steel', bottom: null });
+  barrel(-1760, 300); barrel(-1740, 320, 'barrel_red');
+
+  // ---------------- Barracks Row (Warden spawn) ----------------
+  block(1500, -1400, 1800, -700, 260, 'paint_orange'); block(1500, 700, 1800, 1400, 260, 'paint_white');
+  M.box(1490, 260, -1410, 1800, 272, -690, { sides: 'steel', top: 'roof', bottom: 'steel' });
+  M.box(1490, 260, 690, 1800, 272, 1410, { sides: 'steel', top: 'roof', bottom: 'steel' });
+  for (const z of [-1250, -1000, -850]) win(1496, 120, z, 1500, 180, z + 80, 'w');
+  for (const z of [800, 1050, 1250]) win(1496, 120, z, 1500, 180, z + 80, 'w');
+  crate(1360, -400, 56, 'crate_b', 0, 0.3); crate(1740, 640, 64, 'crate', 0, 0.1); drift(1420, 450, 70, 40);
+  pole(1360, -650); pole(1360, 650);
+
+  // ---------------- spawns ----------------
+  // Raiders spawn north and south of the Pass mouth, behind the ridge ends
+  for (const [x, z] of [[-1700, -520], [-1580, -520], [-1700, -400], [-1580, -400], [-1640, -640], [-1700, 520], [-1580, 520], [-1700, 400], [-1580, 400], [-1640, 640]]) M.teamSpawn(0, x, 0, z, -Math.PI / 2);
+  for (const [x, z] of [[1600, -300], [1700, -300], [1600, -150], [1700, -150], [1600, 150], [1700, 150], [1600, 300], [1700, 300]]) M.teamSpawn(1, x, 0, z, Math.PI / 2);
+  M.spawn(-1640, 0, -460, -Math.PI / 2);
+
+  // ---------------- plant sites, places, names ----------------
+  M.site('A', 130, -1390, 1270, -680, -16, 300);
+  M.site('B', 110, 670, 1290, 1390, 80, 320);
+  for (const [x, y, z, n] of [[700, 0, -800, 'Hangar 2'], [300, 0, -1200, 'hangar door'], [1200, 0, -1150, 'hangar back'], [-600, 0, -1000, 'Fuel Depot'],
+    [-200, 0, -800, 'depot corner'], [0, 0, -500, 'Radio Path'], [215, 0, 0, 'comms block'], [-800, 0, 0, 'the Pass'], [0, 0, 500, 'Generator Path'],
+    [-600, 0, 1000, 'Ice Cut'], [-50, 0, 1000, 'ramp'], [700, 96, 1000, 'Dish Array'], [1150, 96, 900, 'control hut'], [1550, 0, 0, 'Barracks Row'],
+    [1400, 0, -1050, 'north barracks'], [1400, 0, 1150, 'south barracks'], [-1600, 0, 0, 'Drop Zone']]) M.hotspot(x, y, z, n);
+  for (const [n, x0, z0, x1, z1] of [['Drop Zone', -1800, -1400, -1300, 1400], ['Fuel Depot', -1300, -1400, 100, -650], ['the Pass', -1300, -250, -300, 250],
+    ['Ice Cut', -1300, 650, 100, 1400], ['Radio Path', -300, -650, 300, -350], ['Generator Path', -300, 350, 300, 650], ['Comms Block', -300, -350, 300, 350],
+    ['Hangar 2', 100, -1400, 1300, -650], ['Dish Array', 100, 650, 1300, 1400], ['Barracks Row', 1300, -1400, 1800, 1400]]) M.area(n, x0, z0, x1, z1);
+
+  // main-menu fly-through
+  M.menuShots = [
+    { from: [180, 300, -720], to: [600, 300, -720], look: [760, 70, -1150], lookTo: [900, 70, -1100] },
+    { from: [-120, 300, 760], to: [300, 320, 700], look: [800, 140, 1150] },
+    { from: [-1250, 220, -720], to: [-900, 230, -740], look: [-250, 90, -1150] },
+  ];
+
+  // ---------------- bot tactics ----------------
+  M.tactics = {
+    routes: {
+      fuel: { stack: [-1620, 0, -760], yaw: -Math.PI / 2, via: [-150, 0, -1000] },
+      radio: { stack: [-1350, 0, -420], yaw: Math.PI, via: [160, 0, -500] },
+      ice: { stack: [-1620, 0, 760], yaw: -Math.PI / 2, via: [-260, 0, 1000] },
+      gen: { stack: [-1350, 0, 420], yaw: 0, via: [215, 0, 460] },
+    },
+    siteRoutes: { A: ['fuel', 'radio'], B: ['ice', 'gen'] },
+    mid: [-1250, -250, 300, 250],
+    sites: {
+      A: { hold: [[1000, 0, -900, 90], [500, 0, -1300, 156], [1150, 0, -780, 110], [700, 0, -760, 95], [1180, 0, -1250, 70]],
+        plant: [[950, 0, -1250], [350, 0, -1200], [1050, 0, -850]], smoke: [[200, 0, -1000], [210, 0, -720]] },
+      B: { hold: [[900, 96, 1000, 90], [450, 96, 1300, 60], [280, 96, 800, 15], [1150, 96, 1300, 110], [700, 96, 750, 30]],
+        plant: [[1000, 96, 1260], [550, 96, 880], [850, 96, 1300]], smoke: [[150, 96, 1000], [215, 96, 700]] },
+    },
+  };
+  return M;
+}
+
+// ==== 07-map-kiln.js ====
+// "Kilnworks": an original brick-and-tile works at the edge of a clay quarry, late afternoon.
+// Axes: +X east, +Y up, +Z south. Raiders come up from the quarry (south), Wardens hold the office
+// court (north).
+//   A: Kiln Yard (two kilns, brick stacks)      - via the Clay Pits (west lane) or Kiln Alley off mid
+//   B: Press Hall (indoor: presses, conveyor, a raised control booth) - via the Rail Siding (east lane)
+//      or the Conveyor Room off mid
+//   Mid: the Clay Court, split by the pug-mill house; the office block closes its north end.
+
+function buildKilnworks() {
+  const M = new MapBuilder();
+  const sd = [-0.55, 0.42, 0.55], sl = Math.hypot(...sd);
+  M.env = {
+    sunDir: sd.map((v) => v / sl), sunColor: [1.0, 0.8, 0.6], sunIntensity: 1.1,
+    skyZenith: [0.34, 0.46, 0.68], skyHorizon: [0.95, 0.77, 0.58], skyIntensity: 0.8,
+    fogColor: [0.84, 0.72, 0.6], fogDensity: 0.00009, ambient: 0.12,
+    skySun: [1.0, 0.76, 0.48], skyGround: [0.6, 0.45, 0.35], skyMountains: [0.52, 0.42, 0.36],
+    lmBig: 256, lmSmall: 12, probeStep: 96, bakeRays: 9,
+  };
+  const ND = { nocollide: true, noshadow: true };
+  const H = 384;
+  const floor = (x0, z0, x1, z1, tex, y = 0, t = 16) => M.box(x0, y - t, z0, x1, y, z1, { top: tex });
+  const block = (x0, z0, x1, z1, h, side, y0 = 0) => M.box(x0, y0, z0, x1, h, z1, { sides: side, top: null, bottom: null });
+  const wall = (x0, z0, x1, z1, h, tex, y0 = 0, cap = 'concrete_plain') => M.box(x0, y0, z0, x1, h, z1, { sides: tex, top: cap, bottom: null });
+  const plate = (x0, y0, z0, x1, y1, z1, face, tex) => M.box(x0, y0, z0, x1, y1, z1, { [face]: tex, sides: 'steel', top: 'steel', bottom: 'steel' });
+  const win = (x0, y0, z0, x1, y1, z1, face) => M.box(x0, y0, z0, x1, y1, z1, { [face]: 'window', sides: 'steel', top: 'steel', bottom: 'steel' }, ND);
+  const crate = (x, z, s, tex, y = 0, yaw = 0) => M.box(x - s / 2, y, z - s / 2, x + s / 2, y + s, z + s / 2, tex, { yaw });
+  const barrel = (x, z, tex = 'barrel', y = 0) => M.prism(x, z, y, y + 44, 13, 12, { side: tex, top: 'barrel_top' }, { rot: x * 0.01 });
+  const lamp = (x, y, z, col = [1.0, 0.8, 0.56], k = 1.6, r = 560, hang = 0) => {
+    if (hang > 0) M.box(x - 0.6, y + 8, z - 0.6, x + 0.6, y + 8 + hang, z + 0.6, 'steel', ND);
+    M.prism(x, z, y + 4, y + 10, 9, 8, 'steel', { nocollide: true });
+    M.box(x - 4, y, z - 4, x + 4, y + 4, z + 4, 'lamp', ND);
+    M.light(x, y - 8, z, col, k, r);
+  };
+  const pole = (x, z, h = 220) => { M.prism(x, z, 0, h, 3, 8, 'steel'); M.box(x - 3, h - 4, z - 16, x + 3, h, z + 16, 'steel', ND); lamp(x, h - 10, z + 14, [1.0, 0.84, 0.6], 1.0, 460); };
+  // brick stacks on pallets: the works' everyday cover
+  const bricks = (x, z, w, d, h, yaw = 0) => { M.box(x - w / 2, 0, z - d / 2, x + w / 2, 8, z + d / 2, 'timber', { yaw }); M.box(x - w / 2 + 2, 8, z - d / 2 + 2, x + w / 2 - 2, 8 + h, z + d / 2 - 2, { sides: 'brick', top: 'brick', bottom: null }, { yaw }); };
+  const heap = (x, z, r, h, tex = 'clay') => { M.prism(x, z, 0, h * 0.6, r, 12, { side: tex, top: tex }); M.prism(x, z, h * 0.6, h, r * 0.6, 12, { side: tex, top: tex }); };
+
+  // ---------------- outer walls: quarry rock to the south and west, works brick north and east ----------------
+  M.box(-1750, -64, -1550, 1750, H, -1500, { s: 'brick_yellow' }, { lm: 32 });
+  M.box(-1750, -64, 1500, 1750, H, 1550, { n: 'rock' }, { lm: 32 });
+  M.box(-1750, -64, -1500, -1700, H, 1500, { e: 'rock' }, { lm: 32 });
+  M.box(1700, -64, -1500, 1750, H, 1500, { w: 'brick_yellow' }, { lm: 32 });
+  const PIL = { sides: 'brick', top: 'concrete_plain', bottom: null };
+  for (let x = -1380; x <= 1700; x += 320) M.box(x - 14, 0, -1500, x + 14, H - 24, -1486, PIL, { lm: 16 });
+  for (let z = -1200; z <= -600; z += 300) M.box(1686, 0, z - 14, 1700, H - 24, z + 14, PIL, { lm: 16 });
+
+  // ---------------- floors ----------------
+  floor(-1700, 1000, 1700, 1500, 'clay');                 // Quarry Gate (Raider spawn)
+  floor(-1700, -500, -1150, 1000, 'clay');                // Clay Pits (west lane)
+  floor(-450, -800, 450, 1000, 'concrete_floor');         // Clay Court (mid)
+  floor(1150, -550, 1700, 1000, 'asphalt');               // Rail Siding (east lane)
+  floor(-1700, -1500, -750, -500, 'concrete_floor');      // A: Kiln Yard
+  floor(-750, -1150, -450, -500, 'concrete');             // Kiln Alley
+  floor(-750, -1500, 750, -1150, 'asphalt');              // Office Court (Warden spawn)
+  floor(450, -1150, 750, -550, 'concrete_floor');         // Conveyor Room
+  floor(750, -1500, 1700, -550, 'concrete_floor');        // B: Press Hall
+
+  // ---------------- solid buildings between the lanes ----------------
+  block(-1150, -500, -450, 1000, 300, 'brick');           // drying sheds
+  block(450, -550, 1150, 1000, 300, 'brick_yellow');      // pallet store
+  block(-450, -1150, 450, -800, 320, 'brick_yellow');     // works office
+  for (const z of [-300, 0, 300, 600]) { win(-450, 130, z, -446, 190, z + 80, 'e'); win(-1154, 130, z, -1150, 190, z + 80, 'w'); }
+  for (const z of [-250, 100, 450, 750]) { win(446, 130, z, 450, 190, z + 80, 'w'); win(1150, 130, z, 1154, 190, z + 80, 'e'); }
+  for (const x of [-360, -160, 80, 280]) { win(x, 150, -800, x + 80, 220, -796, 's'); win(x, 150, -1154, x + 80, 220, -1150, 'n'); }
+  plate(-120, 230, -1154, 120, 290, -1150, 'n', 'sign_kilnworks');
+  plate(-100, 250, -800, 100, 300, -796, 's', 'sign_kilnworks');
+  // drying-shed louvres and a chimney on the office
+  for (let z = -460; z < 980; z += 120) M.box(-1156, 220, z, -1150, 228, z + 90, 'timber', ND);
+  M.prism(300, -980, 320, 470, 30, 10, { side: 'brick', top: 'steel' });
+
+  // ---------------- A: Kiln Yard ----------------
+  // south wall with the gate from the Clay Pits (x -1450..-1250)
+  wall(-1700, -520, -1450, -500, 260, 'brick'); wall(-1250, -520, -750, -500, 260, 'brick');
+  // east wall: door to the Office Court (z -1320..-1200) and to Kiln Alley (z -800..-680)
+  wall(-770, -1500, -750, -1320, 260, 'brick'); wall(-770, -1200, -750, -800, 260, 'brick'); wall(-770, -680, -750, -520, 260, 'brick');
+  M.box(-770, 112, -1320, -750, 260, -1200, { sides: 'brick', top: 'concrete_plain', bottom: 'concrete_plain' });
+  M.box(-770, 112, -800, -750, 260, -680, { sides: 'brick', top: 'concrete_plain', bottom: 'concrete_plain' });
+  // kiln 1: a big rectangular kiln with a firing arch and a tall chimney
+  block(-1520, -1360, -1220, -1110, 230, 'firebrick');
+  M.box(-1520, 230, -1360, -1220, 246, -1110, { sides: 'concrete_plain', top: 'concrete_plain', bottom: null });
+  plate(-1430, 0, -1112, -1310, 110, -1108, 's', 'door_metal');
+  M.prism(-1300, -1300, 246, 520, 34, 12, { side: 'firebrick', top: 'steel' });
+  // kiln 2: a round updraught kiln
+  M.prism(-1050, -880, 0, 170, 105, 16, { side: 'firebrick', top: 'concrete_plain' });
+  M.prism(-1050, -880, 170, 200, 70, 16, { side: 'firebrick', top: 'concrete_plain' });
+  M.prism(-1050, -880, 200, 360, 22, 10, { side: 'firebrick', top: 'steel' });
+  plate(-1090, 0, -778, -1010, 96, -774, 's', 'door_metal');
+  // brick stacks, a clay cart, coal bin
+  bricks(-1560, -820, 88, 72, 56, 0.1); bricks(-1380, -700, 72, 72, 72, -0.2); bricks(-900, -1250, 96, 64, 56, 0.05);
+  bricks(-1180, -1420, 80, 64, 64, 0.3); bricks(-860, -620, 64, 64, 48, 0);
+  M.box(-1640, 0, -1180, -1560, 40, -1060, { sides: 'steel', top: 'diamond', bottom: null });
+  M.box(-1300, 0, -980, -1220, 30, -920, { sides: 'plywood', top: 'plywood', bottom: null }, { yaw: 0.4 });
+  barrel(-1650, -1440); barrel(-1620, -1460, 'barrel_red');
+  lamp(-1360, 200, -1080, [1.0, 0.8, 0.56], 1.0, 420);
+  plate(-1454, 120, -522, -1440, 180, -520, 'n', 'site_a'); plate(-1260, 120, -522, -1246, 180, -520, 'n', 'site_a');
+  plate(-1100, 150, -522, -980, 210, -520, 'n', 'sign_kiln');
+  plate(-772, 120, -1100, -770, 190, -1020, 'w', 'site_a');
+
+  // ---------------- Kiln Alley (Wardens' way to A and mid) ----------------
+  wall(-610, -1160, -450, -1140, 260, 'brick_yellow');                       // court side: opening x -750..-610
+  wall(-470, -800, -450, -760, 260, 'brick_yellow'); wall(-470, -600, -450, -500, 260, 'brick_yellow');   // mid side: opening z -760..-600
+  bricks(-560, -1000, 64, 72, 56, 0.2); crate(-680, -560, 56, 'crate', 0, 0.3);
+  pole(-560, -900, 210);
+
+  // ---------------- Office Court (Warden spawn) ----------------
+  crate(-680, -1450, 64, 'crate_b'); crate(-684, -1450, 48, 'crate', 64, 0.2); crate(660, -1440, 56, 'crate_mil', 0, 0.3);
+  barrel(-560, -1470); barrel(-530, -1460, 'barrel_red'); barrel(560, -1475);
+  M.box(-120, 0, -1490, 120, 40, -1440, { sides: 'concrete_plain', top: 'concrete_plain', bottom: null });   // planter
+  pole(-400, -1300); pole(400, -1300);
+
+  // ---------------- Conveyor Room (Wardens' way to B and mid) ----------------
+  wall(450, -1160, 610, -1140, 216, 'brick_yellow');                          // court side: opening x 610..750
+  wall(450, -800, 470, -760, 216, 'brick_yellow'); wall(450, -600, 470, -550, 216, 'brick_yellow');       // mid side: opening z -760..-600
+  M.box(450, 200, -1140, 750, 216, -550, { bottom: 'shed_roof', top: 'roof', sides: 'steel' });
+  M.box(470, 0, -1120, 530, 44, -830, { sides: 'steel', top: 'diamond', bottom: null });                 // conveyor
+  for (let z = -1100; z < -840; z += 64) M.box(476, 44, z, 524, 50, z + 40, 'timber', ND);
+  lamp(600, 186, -1000, [1.0, 0.86, 0.64], 1.0, 380, 0); lamp(600, 186, -700, [1.0, 0.86, 0.64], 1.0, 380, 0);
+
+  // ---------------- B: Press Hall ----------------
+  const HW = { sides: 'brick_yellow', top: 'concrete_plain', bottom: null };
+  // west wall: doors from the Office Court (z -1320..-1200) and the Conveyor Room (z -760..-640)
+  M.box(750, 0, -1500, 770, 320, -1320, HW); M.box(750, 0, -1200, 770, 320, -760, HW); M.box(750, 0, -640, 770, 320, -550, HW);
+  M.box(750, 112, -1320, 770, 320, -1200, HW); M.box(750, 112, -760, 770, 320, -640, HW);
+  // south wall with the roller door to the siding (x 1300..1500, 192 high)
+  M.box(770, 0, -570, 1300, 320, -550, HW); M.box(1500, 0, -570, 1700, 320, -550, HW); M.box(1300, 192, -570, 1500, 320, -550, HW);
+  // roof with skylights
+  const RF = { bottom: 'shed_roof', top: null, sides: 'steel' };
+  M.box(770, 320, -1500, 1700, 336, -1250, RF); M.box(770, 320, -1130, 1700, 336, -900, RF); M.box(770, 320, -780, 1700, 336, -570, RF);
+  M.box(770, 320, -1250, 1000, 336, -1130, RF); M.box(1150, 320, -1250, 1700, 336, -1130, RF);
+  M.box(770, 320, -900, 1250, 336, -780, RF); M.box(1400, 320, -900, 1700, 336, -780, RF);
+  for (const x of [900, 1200, 1500]) M.box(x - 6, 296, -1500, x + 6, 320, -570, 'steel', ND);
+  // two presses: a base, four columns, a head (you can see between base and head)
+  const press = (x0, z0, x1, z1) => {
+    M.box(x0, 0, z0, x1, 90, z1, { sides: 'panel', top: 'diamond', bottom: null });
+    for (const [x, z] of [[x0 + 14, z0 + 14], [x1 - 14, z0 + 14], [x0 + 14, z1 - 14], [x1 - 14, z1 - 14]]) M.prism(x, z, 90, 240, 10, 10, 'steel');
+    M.box(x0 - 6, 240, z0 - 6, x1 + 6, 296, z1 + 6, { sides: 'paint_orange', top: 'steel', bottom: 'steel' });
+    M.box(x0 + 40, 150, z0 + 40, x1 - 40, 240, z1 - 40, 'steel');
+  };
+  press(950, -1250, 1150, -1060); press(1350, -960, 1550, -770);
+  // conveyor along the north wall, pallets, a control booth in the north-east corner
+  M.box(800, 0, -1430, 1320, 44, -1370, { sides: 'steel', top: 'diamond', bottom: null });
+  for (let x = 820; x < 1300; x += 72) M.box(x, 44, -1424, x + 48, 50, -1376, 'timber', ND);
+  bricks(880, -900, 80, 64, 56, 0.15); bricks(1230, -680, 72, 64, 64, -0.1); bricks(1600, -1150, 64, 80, 48, 0); bricks(1100, -800, 64, 64, 40, 0.5);
+  crate(830, -1180, 56, 'crate_b', 0, 0.2); crate(1640, -640, 64, 'crate'); crate(1640, -640, 48, 'crate_mil', 64, 0.3);
+  M.box(1480, 0, -1500, 1700, 80, -1300, { sides: 'panel', top: 'diamond', bottom: null });                // booth platform
+  M.ramp(1520, -1300, 1640, -1160, 0, 80, 'n', { top: 'diamond', sides: 'steel' });
+  M.box(1480, 80, -1306, 1520, 116, -1300, 'steel'); M.box(1640, 80, -1306, 1700, 116, -1300, 'steel');    // railings
+  M.box(1480, 80, -1500, 1486, 116, -1306, 'steel');
+  M.box(1560, 80, -1490, 1690, 120, -1450, { sides: 'paint_white', top: 'steel', bottom: null });         // control desk
+  for (const [x, z] of [[950, -900], [1300, -1200], [1300, -700], [1550, -1380]]) lamp(x, 282, z, [1.0, 0.86, 0.64], 1.4, 600, 6);
+  plate(770, 130, -1060, 774, 200, -980, 'e', 'site_b'); plate(1060, 150, -574, 1180, 210, -570, 'n', 'sign_press');
+  plate(1310, 200, -574, 1490, 250, -570, 'n', 'sign_press'); plate(1560, 120, -546, 1640, 190, -544, 's', 'site_b');
+
+  // ---------------- Clay Court (mid) ----------------
+  block(-150, 350, 150, 650, 220, 'brick');                                     // pug-mill house
+  M.box(-160, 220, 340, 160, 232, 660, { sides: 'steel', top: 'roof', bottom: 'steel' });
+  M.prism(80, 560, 232, 380, 22, 10, { side: 'brick', top: 'steel' });
+  win(-154, 100, 420, -150, 150, 500, 'w'); win(150, 100, 480, 154, 150, 560, 'e');
+  M.box(-350, 0, -150, -170, 96, -118, { sides: 'timber', top: 'timber', bottom: null });                   // drying racks
+  M.box(170, 0, -60, 350, 96, -28, { sides: 'timber', top: 'timber', bottom: null });
+  bricks(-260, -620, 72, 64, 64, 0.2); bricks(300, -470, 64, 64, 48, -0.25); bricks(-330, 200, 64, 72, 56, 0); bricks(330, 820, 64, 64, 64, 0.4);
+  crate(250, 230, 56, 'crate', 0, 0.3); barrel(-380, 860); barrel(-355, 880, 'barrel_red');
+  M.box(-60, 0, -380, 60, 40, -350, { sides: 'concrete_plain', top: 'concrete_plain', bottom: null });
+  pole(-420, -300, 210); pole(420, 300, 210);
+
+  // ---------------- Clay Pits (west lane) ----------------
+  heap(-1540, 660, 110, 84); heap(-1290, 300, 80, 60); heap(-1580, 0, 90, 70); heap(-1300, -260, 70, 52);
+  for (const [x, z] of [[-1690, 220], [-1170, 220]]) M.prism(x, z, 0, 236, 6, 8, 'steel');
+  M.box(-1700, 220, 200, -1150, 236, 240, { sides: 'steel', top: 'steel', bottom: 'steel' }, ND);           // conveyor gantry overhead
+  M.box(-1700, 0, -380, -1600, 120, -220, { sides: 'shed', top: 'shed_roof', bottom: null });                // pit hut
+  M.box(-1400, 0, 760, -1330, 36, 840, { sides: 'plywood', top: 'plywood', bottom: null }, { yaw: -0.5 }); // tipped barrow
+  plate(-1154, 120, 840, -1150, 180, 960, 'w', 'sign_pits');
+
+  // ---------------- Rail Siding (east lane) ----------------
+  for (let z = -520; z < 990; z += 64) M.box(1394, 0, z, 1506, 4, z + 12, 'timber', { lm: 16 });
+  M.box(1420, 4, -540, 1426, 10, 1000, 'steel', { lm: 16 }); M.box(1474, 4, -540, 1480, 10, 1000, 'steel', { lm: 16 });
+  M.box(1395, 22, 100, 1505, 146, 420, { e: 'wagon', w: 'wagon', n: 'panel', s: 'panel', top: 'roof', bottom: 'steel' });
+  for (const z of [130, 340]) M.box(1415, 4, z, 1485, 22, z + 50, 'steel');
+  M.box(1150, 0, 0, 1230, 40, 600, { sides: 'concrete', top: 'concrete_plain', bottom: null });            // loading dock
+  crate(1600, -250, 64, 'crate_mil', 0, 0.2); crate(1250, -330, 56, 'crate', 0, -0.3); crate(1620, 700, 64, 'crate_b');
+  barrel(1640, 120); barrel(1615, 140, 'barrel_red');
+  pole(1660, -100); pole(1660, 600);
+
+  // ---------------- Quarry Gate (Raider spawn) ----------------
+  // the weighbridge office screens the spawn from the Clay Court
+  M.box(-350, 0, 1090, 350, 170, 1210, { sides: 'plaster_warm', top: null, bottom: null });
+  M.box(-362, 170, 1078, 362, 182, 1222, { sides: 'steel', top: 'roof', bottom: 'steel' });
+  for (const x of [-250, -50, 150]) win(x, 80, 1086, x + 90, 130, 1090, 'n');
+  plate(-60, 100, 1210, 60, 150, 1214, 's', 'sign_kilnworks');
+  M.box(900, 0, 1300, 1080, 130, 1420, { sides: 'paint_orange', top: 'steel', bottom: null });              // digger body
+  M.box(910, 130, 1330, 1000, 200, 1410, { sides: 'paint_orange', top: 'steel', bottom: null });            // cab
+  M.box(1080, 60, 1340, 1240, 80, 1380, 'paint_orange'); M.box(1230, 0, 1320, 1290, 70, 1400, 'steel');     // arm and bucket
+  heap(-1000, 1400, 110, 90, 'clay'); heap(1520, 1130, 100, 70, 'clay');
+  M.box(-1500, 0, 1380, -1300, 150, 1500, { sides: 'plaster_warm', top: 'roof', bottom: null });           // gatehouse
+  win(-1450, 70, 1376, -1380, 120, 1380, 'n');
+  bricks(-600, 1150, 80, 64, 56, 0.2); bricks(600, 1120, 64, 72, 64, -0.2); crate(-1550, 1100, 64, 'crate_mil', 0, 0.3);
+  pole(-1000, 1050); pole(1000, 1050);
+
+  // ---------------- spawns ----------------
+  // Raiders spawn behind the weighbridge office, out of the court's long sightline
+  for (const [x, z] of [[-260, 1300], [-130, 1300], [0, 1300], [130, 1300], [260, 1300], [-195, 1420], [-65, 1420], [65, 1420], [195, 1420]]) M.teamSpawn(0, x, 0, z, 0);
+  for (const [x, z] of [[-300, -1300], [-150, -1300], [0, -1300], [150, -1300], [300, -1300], [-225, -1400], [-75, -1400], [75, -1400]]) M.teamSpawn(1, x, 0, z, Math.PI);
+  M.spawn(0, 0, 1300, 0);
+
+  // ---------------- plant sites, places, names ----------------
+  M.site('A', -1690, -1490, -790, -540, -16, 240);
+  M.site('B', 790, -1490, 1690, -590, -16, 200);
+  for (const [x, y, z, n] of [[-1300, 0, -950, 'Kiln Yard'], [-1050, 0, -720, 'kiln 2'], [-1360, 0, -1050, 'kiln 1 front'], [-600, 0, -900, 'Kiln Alley'],
+    [0, 0, -1300, 'Office Court'], [600, 0, -900, 'Conveyor Room'], [1200, 0, -900, 'Press Hall'], [1590, 80, -1400, 'control booth'],
+    [0, 0, -500, 'north court'], [0, 0, 0, 'Clay Court'], [-300, 0, 500, 'pug mill west'], [300, 0, 500, 'pug mill east'],
+    [-1430, 0, 200, 'Clay Pits'], [-1400, 0, -380, 'pits gate'], [1300, 0, 300, 'Rail Siding'], [1400, 0, -450, 'roller door'],
+    [0, 0, 1250, 'Quarry Gate'], [-1300, 0, 1200, 'quarry west'], [1300, 0, 1200, 'quarry east']]) M.hotspot(x, y, z, n);
+  for (const [n, x0, z0, x1, z1] of [['Kiln Yard', -1700, -1500, -750, -500], ['Kiln Alley', -750, -1150, -450, -500], ['Office Court', -750, -1500, 750, -1150],
+    ['Conveyor Room', 450, -1150, 750, -550], ['Press Hall', 750, -1500, 1700, -550], ['Clay Court', -450, -800, 450, 1000], ['Clay Pits', -1700, -500, -1150, 1000],
+    ['Rail Siding', 1150, -550, 1700, 1000], ['Quarry Gate', -1700, 1000, 1700, 1500]]) M.area(n, x0, z0, x1, z1);
+
+  // main-menu fly-through
+  M.menuShots = [
+    { from: [-820, 330, -560], to: [-800, 320, -1080], look: [-1340, 90, -1000], lookTo: [-1250, 90, -1150] },
+    { from: [-360, 150, 930], to: [330, 160, 900], look: [0, 90, -600] },
+    { from: [820, 250, -620], to: [1100, 240, -640], look: [1260, 60, -1200], lookTo: [1420, 60, -1150] },
+  ];
+
+  // ---------------- bot tactics ----------------
+  M.tactics = {
+    routes: {
+      pits: { stack: [-1000, 0, 1130], yaw: 0.5, via: [-1350, 0, -460] },
+      alley: { stack: [-600, 0, 1130], yaw: -0.4, via: [-600, 0, -720] },
+      siding: { stack: [1000, 0, 1130], yaw: -0.5, via: [1400, 0, -500] },
+      conveyor: { stack: [600, 0, 1130], yaw: 0.4, via: [600, 0, -720] },
+    },
+    siteRoutes: { A: ['pits', 'alley'], B: ['siding', 'conveyor'] },
+    mid: [-450, -800, 450, 300],
+    sites: {
+      A: { hold: [[-1150, 0, -1000, 150], [-1600, 0, -1000, 175], [-1000, 0, -620, -65], [-1250, 0, -1420, 165], [-880, 0, -1100, -150]],
+        plant: [[-1350, 0, -920], [-1100, 0, -1180], [-1500, 0, -680]], smoke: [[-1350, 0, -640], [-860, 0, -740]] },
+      B: { hold: [[1250, 0, -1000, 170], [1600, 80, -1350, 165], [900, 0, -1000, -70], [1450, 0, -700, -170], [1050, 0, -700, 150]],
+        plant: [[1250, 0, -880], [1050, 0, -1300], [1450, 0, -1150]], smoke: [[1400, 0, -660], [860, 0, -700]] },
     },
   };
   return M;
@@ -2236,8 +2823,10 @@ function buildTestRange() {
 
 // Map registry: the defuse map and the practice range.
 const MAPS = {
-  depot: { name: 'Saltpan Depot', build: buildDepot, blurb: 'Defuse map: Platform 2 (A) and Shed 4 (B)' },
-  range: { name: 'Hall B', build: buildTestRange, blurb: 'Practice range: plates, step and jump tests' },
+  depot: { name: 'Saltpan Depot', build: buildDepot, blurb: 'Salt-works rail yard · A Platform 2, B Shed 4' },
+  kiln: { name: 'Kilnworks', build: buildKilnworks, blurb: 'Brick works on a clay quarry · A Kiln Yard, B Press Hall' },
+  frost: { name: 'Frostline', build: buildFrostline, blurb: 'Mountain radar station in snow · A Hangar 2, B Dish Array' },
+  range: { name: 'Hall B', build: buildTestRange, blurb: 'Small practice hall · plates, spray board, jump boxes', practice: true },
 };
 
 // ==== 08-bake.js ====
@@ -2532,7 +3121,7 @@ void main() {
 
 const SKY_VS = `varying vec3 vDir; void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 const SKY_FS = `
-uniform vec3 sunDir; uniform vec3 zen; uniform vec3 hor; uniform vec3 sunCol; uniform vec3 ground;
+uniform vec3 sunDir; uniform vec3 zen; uniform vec3 hor; uniform vec3 sunCol; uniform vec3 ground; uniform vec3 mtn;
 varying vec3 vDir;
 float h3(vec3 p) { p = fract(p * 0.3183099 + vec3(0.71, 0.113, 0.419)); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
 float n3(vec3 x) {
@@ -2559,7 +3148,7 @@ void main() {
   vec3 q = vec3(cos(az) * 2.4, sin(az) * 2.4, 7.0);
   float ridge = 0.01 + 0.05 * fbm3(q) + 0.018 * fbm3(q * 3.1);
   float m = 1.0 - smoothstep(ridge - 0.0025, ridge + 0.0025, h);
-  vec3 mc = mix(vec3(0.6, 0.53, 0.44), hor, 0.42 + 0.3 * smoothstep(ridge - 0.06, ridge, h));
+  vec3 mc = mix(mtn, hor, 0.42 + 0.3 * smoothstep(ridge - 0.06, ridge, h));
   col = mix(col, mc, m);
   col = mix(col, ground, smoothstep(-0.005, -0.12, h));
   float sd = max(dot(d, sunDir), 0.0);
@@ -2657,12 +3246,23 @@ const R = {
     this.u.fogDensity.value = env.fogDensity;
     this.scene.fog = new THREE.FogExp2(new THREE.Color(...env.fogColor), env.fogDensity);
     this.dynSun.position.set(env.sunDir[0], env.sunDir[1], env.sunDir[2]);
+    this.lmTex = lmTex;
     for (const [mat, g] of L.groups) {
       const mesh = new THREE.Mesh(this.geometryFrom(g), this.materialFor(mat, L.tex));
       mesh.matrixAutoUpdate = false; mesh.updateMatrix();
       this.scene.add(mesh);
     }
     this.buildSky(env);
+  },
+
+  // A fresh scene for the next map: free the old world's GPU buffers, keep shared textures/materials.
+  newScene() {
+    const old = this.scene;
+    if (old) old.traverse((o) => { if ((o.isMesh || o.isPoints || o.isLineSegments) && o.geometry && !o.geometry.userData.keep) o.geometry.dispose(); });
+    if (this.lmTex) { this.lmTex.dispose(); this.lmTex = null; }
+    if (this.skyRT) { this.skyRT.dispose(); this.skyRT = null; }
+    this.scene = new THREE.Scene();
+    this.scene.add(this.dynAmb, this.dynSun);
   },
 
   // Brush entity (door/target) as a pivoted group; geometry is relative to the pivot.
@@ -2680,8 +3280,8 @@ const R = {
     const mat = new THREE.ShaderMaterial({
       uniforms: {
         sunDir: { value: new THREE.Vector3(...env.sunDir) }, zen: { value: new THREE.Vector3(...env.skyZenith) },
-        hor: { value: new THREE.Vector3(...env.skyHorizon) }, sunCol: { value: new THREE.Vector3(1.0, 0.86, 0.62) },
-        ground: { value: new THREE.Vector3(0.62, 0.55, 0.45) },
+        hor: { value: new THREE.Vector3(...env.skyHorizon) }, sunCol: { value: new THREE.Vector3(...(env.skySun || [1.0, 0.86, 0.62])) },
+        ground: { value: new THREE.Vector3(...(env.skyGround || [0.62, 0.55, 0.45])) }, mtn: { value: new THREE.Vector3(...(env.skyMountains || [0.6, 0.53, 0.44])) },
       },
       vertexShader: SKY_VS, fragmentShader: SKY_FS, side: THREE.BackSide, depthWrite: false,
     });
@@ -2694,7 +3294,7 @@ const R = {
     this.renderer.autoClear = true;
     cc.update(this.renderer, skyScene);
     this.renderer.autoClear = prev;
-    this.scene.background = rt.texture;
+    this.scene.background = rt.texture; this.skyRT = rt;
     box.dispose(); mat.dispose();
   },
 
@@ -3494,9 +4094,23 @@ const Snd = {
   },
 
   // Gunshot by sound id; positional when pos is given (other players), direct for your own gun.
-  shot(kind, pos) {
+  shot(kind, pos, supp) {
+    if (supp) { this.suppShot(pos, kind); return; }
     if (kind === 'pistol') this.pistolShot(pos); else if (kind === 'smg') this.smgShot(pos);
     else if (kind === 'shotgun') this.shotgunShot(pos); else if (kind === 'sniper') this.sniperShot(pos); else this.rifleShot(pos);
+  },
+
+  // Suppressed: a dull cough and the action cycling, little echo.
+  suppShot(pos, kind) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime, o = this.dest(pos || null, 0.45), dry = pos ? o : [this.master], p = 0.94 + Math.random() * 0.1;
+    const heavy = kind === 'sniper' ? 1.35 : kind === 'pistol' ? 0.8 : 1;
+    this.nz(t, o, { type: 'bandpass', f: 1050 * p / heavy, q: 0.8, g: 0.42 * heavy, d: 0.05 * heavy });
+    this.nz(t, o, { type: 'lowpass', f: 520 * p, q: 0.5, g: 0.35 * heavy, d: 0.07 * heavy });
+    this.tone(t, dry, { f0: 150 * p / heavy, f1: 55, dur: 0.06 * heavy, g: 0.32 });
+    this.nz(t + 0.012, dry, { type: 'bandpass', f: 3400 * p, q: 3, g: 0.22, d: 0.02 });
+    this.nz(t + 0.03, dry, { type: 'bandpass', f: 2200 * p, q: 2.5, g: 0.14, d: 0.025 });
+    this.nz(t + 0.01, [this.revSend], { type: 'lowpass', f: 700, q: 0.4, g: 0.12, a: 0.01, d: 0.2 });
   },
 
   smgShot(pos) {
@@ -4444,14 +5058,14 @@ class Charge extends Weapon {
 }
 
 const WEAPON_CLASS = { gun: Gun, knife: Knife, grenade: Grenade, charge: Charge };
-const makeWeapon = (id) => new WEAPON_CLASS[WEAPONS[id].kind](WEAPONS[id]);
+const makeWeapon = (id, def = WEAPONS[id]) => new WEAPON_CLASS[def.kind](def);
 
 // Slots: 1 primary, 2 pistol, 3 knife, 4 grenade, 5 charge. One weapon per slot.
 class Loadout {
-  constructor(ids = ['rifle', 'pistol', 'knife', 'smoke']) { this.listShowT = 0; this.restock = true; this.active = null; this.setKit(ids); }
+  constructor(ids = ['rifle', 'pistol', 'knife', 'smoke'], defOf = null) { this.listShowT = 0; this.restock = true; this.active = null; this.defOf = defOf || ((id) => WEAPONS[id]); this.setKit(ids); }
   setKit(ids) {
     if (this.active) this.active.holster();
-    this.list = ids.map(makeWeapon); this.sort();
+    this.list = ids.map((id) => makeWeapon(id, this.defOf(id))); this.sort();
     this.active = this.list[0]; this.prev = this.list[1] || this.list[0];
     this.active.draw();
   }
@@ -4480,7 +5094,7 @@ class Loadout {
   // Adds a weapon (an id or a weapon object, e.g. picked up with its ammo). Returns the weapon it
   // pushed out of the same slot so the caller can drop it, null if none, or false if refused.
   give(item, autoSwitch = true) {
-    const w = typeof item === 'string' ? makeWeapon(item) : item;
+    const w = typeof item === 'string' ? makeWeapon(item, this.defOf(item)) : item;
     if (w.kind === 'grenade') {
       const g = this.byId(w.def.id);
       if (g) { if (g.count > 0) return false; g.count = 1; return null; }
@@ -4533,6 +5147,282 @@ class Loadout {
     pl.maxSpeed = this.active.speed();
   }
 }
+
+// ==== 15-arsenal.js ====
+// Attachments and camos. The profile's per-gun choices turn into modified weapon defs for the local
+// player (bots carry stock guns). Attachments are bought per gun; camos unlock for every gun.
+// Camo patterns are generated on canvas (tileable) and box-projected onto the viewmodel.
+
+const ATT_SLOTS = [
+  { id: 'muzzle', name: 'Muzzle' }, { id: 'optic', name: 'Optic' }, { id: 'mag', name: 'Magazine' }, { id: 'grip', name: 'Grip / stock' },
+];
+const ARMORY_GUNS = ['pistol', 'smg', 'shotgun', 'rifle', 'sniper'];          // the buy-menu guns
+const GUN_PRICE_K = { pistol: 0.7, smg: 0.9, shotgun: 0.9, rifle: 1, sniper: 1.1 };
+
+function scaleRecoil(d, v, h) {
+  d.recoil = Object.assign({}, d.recoil, { pattern: d.recoil.pattern.map(([p, y]) => [p * v, y * h]) });
+}
+// Reload k times as long; the viewmodel plays its reload clips 1/k as fast to match.
+function scaleReload(d, k) {
+  if (d.shellReload) d.shellReload = Object.assign({}, d.shellReload, { start: d.shellReload.start * k, each: d.shellReload.each * k, shellMarks: d.shellReload.shellMarks.map(([t, s]) => [t * k, s]) });
+  else d.reload = Object.assign({}, d.reload, { time: d.reload.time * k, empty: d.reload.empty * k, marks: d.reload.marks.map(([t, s]) => [t * k, s]), emptyMarks: d.reload.emptyMarks.map(([t, s]) => [t * k, s]) });
+  d.reloadRate = (d.reloadRate || 1) / k;
+}
+
+const ATTACHMENTS = {
+  hush: { slot: 'muzzle', name: 'Hush Can', kind: 'Suppressor', guns: ['pistol', 'smg', 'rifle', 'sniper'], price: 450,
+    pros: ['Enemies hear your shots from about a third as far', 'Almost no muzzle flash'], cons: ['−6% damage', 'Slightly more damage falloff'],
+    apply(d) { d.suppressed = true; d.noise = 600; d.flash *= 0.22; d.damage *= 0.94; d.rangeMod = Math.max(0.5, d.rangeMod - 0.02); } },
+  brake: { slot: 'muzzle', name: 'Ridge Brake', kind: 'Compensator', guns: ['pistol', 'smg', 'rifle', 'shotgun'], price: 350,
+    pros: ['−18% vertical recoil', '−15% view kick'], cons: ['Bigger muzzle flash', 'Louder: heard 20% farther'],
+    apply(d) { scaleRecoil(d, 0.82, 1); d.kick *= 0.85; d.flash *= 1.35; d.noise = (d.noise || 1700) * 1.2; } },
+  choke: { slot: 'muzzle', name: 'Full Choke', kind: 'Choke', guns: ['shotgun'], price: 300,
+    pros: ['−28% pellet spread'], cons: ['+0.15 s draw time'],
+    apply(d) { d.pelletSpread *= 0.72; d.drawTime += 0.15; } },
+  pip: { slot: 'optic', name: 'Pip Reflex', kind: 'Red dot', guns: ['pistol', 'smg', 'rifle', 'shotgun'], price: 350,
+    pros: ['−15% standing and crouched inaccuracy'], cons: ['+0.08 s draw time'],
+    apply(d) { d.inStand *= 0.85; d.inCrouch *= 0.85; d.drawTime += 0.08; } },
+  halo: { slot: 'optic', name: 'Halo Holo', kind: 'Holographic sight', guns: ['smg', 'rifle', 'shotgun'], price: 450,
+    pros: ['−10% standing inaccuracy', '−10% inaccuracy on the move'], cons: ['+0.12 s draw time'],
+    apply(d) { d.inStand *= 0.9; d.inCrouch *= 0.9; d.inMove *= 0.9; d.drawTime += 0.12; } },
+  glass: { slot: 'optic', name: 'Fieldglass 4×', kind: 'Low-power scope', guns: ['sniper'], price: 300,
+    pros: ['Wider view through the scope', '+15 move speed while scoped'], cons: ['Less magnification', '+30% scoped inaccuracy'],
+    apply(d) { d.scope = [55, 28]; d.scopedSpeed += 15; d.inScoped *= 1.3; d.inScopedCrouch *= 1.3; } },
+  extmag: { slot: 'mag', name: 'Long Mag', names: { shotgun: 'Long Tube' }, kind: 'Extended magazine', guns: ['pistol', 'smg', 'shotgun', 'rifle', 'sniper'], price: 400,
+    pros: ['+33% rounds per magazine'], prosBy: { shotgun: ['+2 shells in the tube'] }, cons: ['+12% reload time', '−5 move speed'],
+    apply(d) { d.mag = d.shellReload ? d.mag + 2 : Math.round(d.mag * 1.34); d.maxSpeed -= 5; scaleReload(d, 1.12); } },
+  quick: { slot: 'mag', name: 'Quick Mag', names: { shotgun: 'Side Saddle' }, kind: 'Fast-reload magazine', guns: ['pistol', 'smg', 'shotgun', 'rifle', 'sniper'], price: 350,
+    pros: ['−22% reload time'], cons: ['Fewer rounds per magazine'], consBy: { shotgun: ['−1 shell in the tube'] },
+    apply(d) { scaleReload(d, 0.78); d.mag = d.shellReload ? d.mag - 1 : d.mag - Math.max(1, Math.round(d.mag * 0.1)); } },
+  hollow: { slot: 'mag', name: 'Hollow Points', kind: 'Expanding rounds', guns: ['pistol', 'smg', 'rifle', 'sniper'], price: 450,
+    pros: ['+10% damage'], cons: ['−15% armor penetration', '−20% wall penetration'],
+    apply(d) { d.damage *= 1.1; d.armorPen *= 0.85; d.penetration *= 0.8; } },
+  grip: { slot: 'grip', name: 'Vertical Grip', kind: 'Foregrip', guns: ['smg', 'rifle'], price: 350,
+    pros: ['−30% sideways recoil', 'Spray resets 15% faster'], cons: ['−5 move speed'],
+    apply(d) { scaleRecoil(d, 1, 0.7); d.recoil.recover *= 1.15; d.recoil.jitter *= 0.85; d.maxSpeed -= 5; } },
+  laser: { slot: 'grip', name: 'Laser Module', kind: 'Laser', guns: ['pistol', 'smg', 'shotgun', 'rifle'], price: 400,
+    pros: ['−20% inaccuracy while moving', '−20% in the air and on landing'], cons: ['+0.05 s draw time'],
+    apply(d) { d.inMove *= 0.8; d.inAir *= 0.8; d.inLand *= 0.8; d.drawTime += 0.05; } },
+  skeleton: { slot: 'grip', name: 'Skeleton Stock', kind: 'Light stock', guns: ['smg', 'shotgun', 'rifle', 'sniper'], price: 300,
+    pros: ['+10 move speed', '−20% draw time'], cons: ['+10% vertical recoil', '+10% view kick'],
+    apply(d) { d.maxSpeed += 10; if (d.scopedSpeed) d.scopedSpeed += 5; d.drawTime *= 0.8; scaleRecoil(d, 1.1, 1); d.kick *= 1.1; } },
+  stipple: { slot: 'grip', name: 'Stippled Grip', kind: 'Grip texture', guns: ['pistol'], price: 250,
+    pros: ['−12% recoil', '−10% inaccuracy from firing'], cons: ['+0.05 s draw time'],
+    apply(d) { scaleRecoil(d, 0.88, 0.88); d.inFire *= 0.9; d.drawTime += 0.05; } },
+};
+for (const [id, a] of Object.entries(ATTACHMENTS)) a.id = id;
+
+const attName = (attId, gun) => { const a = ATTACHMENTS[attId]; return a ? (a.names && a.names[gun]) || a.name : ''; };
+const attPrice = (attId, gun) => Math.round(ATTACHMENTS[attId].price * (GUN_PRICE_K[gun] || 1) / 10) * 10;
+const attFits = (attId, gun) => !!ATTACHMENTS[attId] && ATTACHMENTS[attId].guns.includes(gun);
+const attPros = (a, gun) => (a.prosBy && a.prosBy[gun]) || a.pros;
+const attCons = (a, gun) => (a.consBy && a.consBy[gun]) || a.cons;
+
+// ---------------------------------------------------------------------------
+// Camos: one painter per pattern on a 256 px tile; `shine`/`spec` set the gun material.
+// ---------------------------------------------------------------------------
+const CAMO_TIERS = { standard: 'Standard', rare: 'Rare', elite: 'Elite', legend: 'Legendary' };
+const mixc = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+// Layered blotches: each layer paints its colour where fbm(seed) exceeds its threshold.
+function camoBlotch(P, base, layers, scale, wobble = 0.35) {
+  const N = P.w;
+  P.map((x, y, c) => {
+    let col = base;
+    for (const [rgb, thr, seed, sc] of layers) {
+      const s = (sc || scale), u = x / N * s, v = y / N * s;
+      const w = fbm(u * 2 + 3, v * 2 + 7, s * 2, s * 2, 2, seed + 50) * wobble;
+      const n = fbm(u + w, v - w, s, s, 4, seed);
+      if (n > thr) col = mixc(col, rgb, smoothstep(thr, thr + 0.012, n));
+    }
+    c[0] = col[0]; c[1] = col[1]; c[2] = col[2];
+  });
+}
+function camoGrime(P, k = 0.1, seed = 9) {
+  const N = P.w;
+  P.map((x, y, c) => {
+    const g = 1 - k * 0.5 + k * fbm(x / N * 8, y / N * 8, 8, 8, 3, seed) + (hashi(x, y, seed) - 0.5) * k * 0.35;
+    c[0] *= g; c[1] *= g; c[2] *= g;
+  });
+}
+const CAMOS = {
+  field: { name: 'Fieldworks', tier: 'standard', price: 150, shine: 14, spec: 0.06,
+    paint(P) { camoBlotch(P, [0.42, 0.43, 0.29], [[[0.35, 0.27, 0.17], 0.52, 11], [[0.2, 0.25, 0.14], 0.57, 23], [[0.08, 0.08, 0.07], 0.63, 37]], 3); camoGrime(P, 0.12); } },
+  dune: { name: 'Dune Drift', tier: 'standard', price: 150, shine: 12, spec: 0.05,
+    paint(P) {
+      const N = P.w;
+      P.map((x, y, c) => {
+        const w = fbm(x / N * 3, y / N * 3, 3, 3, 3, 71), s = Math.sin((y / N * 4 + w * 1.6) * TAU) * 0.5 + 0.5;
+        let col = mixc([0.75, 0.64, 0.46], [0.86, 0.78, 0.6], smoothstep(0.45, 0.55, s));
+        if (fbm(x / N * 4, y / N * 4, 4, 4, 4, 72) > 0.6) col = [0.54, 0.41, 0.27];
+        c[0] = col[0]; c[1] = col[1]; c[2] = col[2];
+      });
+      camoGrime(P, 0.1);
+    } },
+  grid: { name: 'Gridlock', tier: 'standard', price: 150, shine: 18, spec: 0.08,
+    paint(P) {
+      const N = P.w, cell = 8, cols = [[0.22, 0.23, 0.25], [0.38, 0.39, 0.41], [0.55, 0.56, 0.57], [0.3, 0.33, 0.38]];
+      P.map((x, y, c) => {
+        const cx = Math.floor(x / cell), cy = Math.floor(y / cell), M = N / cell;
+        const n = fbm(cx / M * 4, cy / M * 4, 4, 4, 3, 81) + (hashi(cx, cy, 82) - 0.5) * 0.18;
+        const col = cols[clamp(Math.floor((n - 0.28) * 9), 0, 3)];
+        c[0] = col[0]; c[1] = col[1]; c[2] = col[2];
+      });
+      camoGrime(P, 0.08);
+    } },
+  night: { name: 'Nightfall', tier: 'standard', price: 200, shine: 30, spec: 0.14,
+    paint(P) { camoBlotch(P, [0.07, 0.07, 0.08], [[[0.13, 0.12, 0.17], 0.5, 91], [[0.17, 0.18, 0.24], 0.6, 92]], 2, 0.6); camoGrime(P, 0.08); } },
+  frost: { name: 'Hoarfrost', tier: 'rare', price: 300, shine: 20, spec: 0.1,
+    paint(P) {
+      const N = P.w, o = [0, 0, 0], cols = [[0.9, 0.92, 0.94], [0.72, 0.76, 0.8], [0.52, 0.58, 0.64], [0.33, 0.38, 0.45]];
+      P.map((x, y, c) => {
+        worley(x / N * 6, y / N * 6, 6, 101, o);
+        const col = cols[Math.floor(o[2] * 4) % 4], edge = smoothstep(0.0, 0.06, o[1] - o[0]);
+        c[0] = col[0] * (0.82 + 0.18 * edge); c[1] = col[1] * (0.82 + 0.18 * edge); c[2] = col[2] * (0.85 + 0.15 * edge);
+      });
+      camoGrime(P, 0.06);
+    } },
+  tiger: { name: 'Ember Stripe', tier: 'rare', price: 300, shine: 22, spec: 0.1,
+    paint(P) {
+      const N = P.w;
+      P.map((x, y, c) => {
+        const w = fbm(x / N * 2, y / N * 4, 2, 4, 4, 111), s = Math.sin((x / N * 6 + w * 2.2) * TAU);
+        const k = smoothstep(0.35, 0.55, s * 0.5 + 0.5 + (fbm(x / N * 8, y / N * 8, 8, 8, 2, 112) - 0.5) * 0.4);
+        const col = mixc([0.86, 0.4, 0.1], [0.06, 0.05, 0.04], k);
+        c[0] = col[0]; c[1] = col[1]; c[2] = col[2];
+      });
+      camoGrime(P, 0.1);
+    } },
+  web: { name: 'Crimson Web', tier: 'rare', price: 400, shine: 26, spec: 0.12,
+    paint(P) {
+      const N = P.w, o = [0, 0, 0];
+      P.map((x, y, c) => {
+        worley(x / N * 5, y / N * 5, 5, 121, o);
+        const line = 1 - smoothstep(0.015, 0.05, o[1] - o[0]), base = 0.32 + 0.12 * fbm(x / N * 4, y / N * 4, 4, 4, 3, 122);
+        const col = mixc([base, base * 0.12, base * 0.1], [0.04, 0.03, 0.03], line);
+        c[0] = col[0]; c[1] = col[1]; c[2] = col[2];
+      });
+    } },
+  hex: { name: 'Hexcore', tier: 'elite', price: 550, shine: 40, spec: 0.22,
+    paint(P) {
+      const N = P.w, sz = N / 8;
+      P.map((x, y, c) => {
+        // hex grid: distance to the nearest cell centre in axial coords
+        const q = (x * 2 / 3) / sz, r = (-x / 3 + Math.sqrt(3) / 3 * y) / sz;
+        let rx = Math.round(q), ry = Math.round(r), rz = Math.round(-q - r);
+        const dx = Math.abs(rx - q), dy = Math.abs(ry - r), dz = Math.abs(rz + q + r);
+        if (dx > dy && dx > dz) rx = -ry - rz; else if (dy > dz) ry = -rx - rz;
+        const fx = q - rx, fy = r - ry, d = Math.max(Math.abs(fx), Math.abs(fy), Math.abs(fx + fy));
+        const glow = smoothstep(0.38, 0.49, d), pulse = hashi(rx & 255, ry & 255, 131);
+        const base = mixc([0.04, 0.12, 0.14], [0.07, 0.2, 0.22], pulse);
+        const col = mixc(base, [0.25, 0.9, 0.95], glow * 0.85);
+        c[0] = col[0]; c[1] = col[1]; c[2] = col[2];
+      });
+    } },
+  carbon: { name: 'Carbon Weave', tier: 'elite', price: 550, shine: 60, spec: 0.35,
+    paint(P) {
+      const N = P.w, t = 8;
+      P.map((x, y, c) => {
+        const cx = Math.floor(x / t), cy = Math.floor(y / t), fx = (x % t) / t, fy = (y % t) / t;
+        const over = (cx + cy) % 2 === 0, sheen = over ? Math.sin(fx * Math.PI) : Math.sin(fy * Math.PI);
+        const v = 0.07 + 0.09 * sheen + (hashi(x, y, 141) - 0.5) * 0.02;
+        c[0] = v; c[1] = v * 1.02; c[2] = v * 1.08;
+      });
+    } },
+  cobalt: { name: 'Cobalt Anodize', tier: 'elite', price: 800, shine: 85, spec: 0.55,
+    paint(P) {
+      const N = P.w;
+      P.map((x, y, c) => {
+        const streak = fbm(x / N * 64, y / N * 2, 64, 2, 2, 151) * 0.16, v = fbm(x / N * 3, y / N * 3, 3, 3, 3, 152) * 0.12;
+        c[0] = 0.07 + streak * 0.5; c[1] = 0.17 + streak + v * 0.5; c[2] = 0.52 + streak + v;
+      });
+    } },
+  flare: { name: 'Signal Flare', tier: 'elite', price: 800, shine: 34, spec: 0.16,
+    paint(P) {
+      const N = P.w;
+      P.map((x, y, c) => {
+        const s = ((x + y) / N * 4) % 1, k = s < 0.5 ? 0 : 1;
+        const col = k ? [0.95, 0.93, 0.88] : [0.98, 0.38, 0.05];
+        c[0] = col[0]; c[1] = col[1]; c[2] = col[2];
+      });
+      camoGrime(P, 0.12, 161);
+    } },
+  gilded: { name: 'Gilded Scroll', tier: 'legend', price: 1500, shine: 90, spec: 0.75,
+    paint(P) {
+      const N = P.w;
+      P.map((x, y, c) => {
+        const u = x / N * TAU * 4, v = y / N * TAU * 4;
+        const curl = Math.sin(u + Math.sin(v) * 1.6) * Math.cos(v + Math.cos(u) * 1.6);
+        const engr = smoothstep(0.82, 0.9, Math.abs(curl)) * 0.55, gl = fbm(x / N * 4, y / N * 4, 4, 4, 3, 171) * 0.18;
+        c[0] = (0.78 + gl) * (1 - engr); c[1] = (0.58 + gl * 0.8) * (1 - engr); c[2] = (0.22 + gl * 0.3) * (1 - engr * 0.8);
+      });
+    } },
+};
+for (const [id, c] of Object.entries(CAMOS)) c.id = id;
+
+// ---------------------------------------------------------------------------
+const Arsenal = {
+  cache: new Map(), camoCanvases: {}, camoTex: {},
+
+  // The profile's choice for one gun: { muzzle, optic, mag, grip, camo } (missing = none).
+  kitFor(gun) {
+    const k = (typeof Profile !== 'undefined' && Profile.v && Profile.v.kit[gun]) || {};
+    return { muzzle: k.muzzle || null, optic: k.optic || null, mag: k.mag || null, grip: k.grip || null, camo: k.camo || null };
+  },
+  // Weapon def for the local player: the stock def with the equipped attachments applied.
+  def(id, kit) {
+    const base = WEAPONS[id];
+    if (!base || base.kind !== 'gun' || !ARMORY_GUNS.includes(id)) return base;
+    kit = kit || this.kitFor(id);
+    const sig = [id, kit.muzzle, kit.optic, kit.mag, kit.grip, kit.camo].join('|');
+    if (sig === id + '|||||') return base;
+    let d = this.cache.get(sig);
+    if (d) return d;
+    d = Object.assign({}, base, { recoil: Object.assign({}, base.recoil) });
+    const baseDraw = d.drawTime;
+    for (const slot of ATT_SLOTS) {
+      const a = ATTACHMENTS[kit[slot.id]];
+      if (a && a.slot === slot.id && a.guns.includes(id)) a.apply(d);
+    }
+    d.drawRate = baseDraw / d.drawTime;
+    d.kit = kit; d.kitSig = sig;
+    this.cache.set(sig, d);
+    return d;
+  },
+
+  // Numbers for the loadout screen (bigger is better except reload).
+  stats(d) {
+    const p10 = patternAt(d.recoil.pattern, 9), rec = Math.hypot(p10[0], p10[1]) + d.recoil.jitter * 4 + d.kick * 1.5;
+    return [
+      { id: 'dmg', name: 'Damage', v: d.damage * (d.pellets || 1), max: 240, fmt: (v) => Math.round(v) },
+      { id: 'rpm', name: 'Fire rate', v: d.rpm, max: 900, fmt: (v) => `${Math.round(v)} rpm` },
+      { id: 'acc', name: 'Accuracy', v: clamp(1 - (d.spread + d.inStand) / 12, 0, 1) * 100, max: 100, fmt: (v) => Math.round(v) },
+      { id: 'move', name: 'Moving accuracy', v: clamp(1 - (d.inMove) / 280, 0, 1) * 100, max: 100, fmt: (v) => Math.round(v) },
+      { id: 'rec', name: 'Recoil control', v: clamp(1 - rec / 14, 0, 1) * 100, max: 100, fmt: (v) => Math.round(v) },
+      { id: 'mob', name: 'Mobility', v: d.maxSpeed, max: 260, fmt: (v) => `${Math.round(v)} u/s` },
+      { id: 'rel', name: 'Reload', v: d.shellReload ? d.shellReload.start + d.shellReload.each * d.mag : d.reload.time, max: 5, fmt: (v) => `${v.toFixed(2)} s`, lower: true },
+      { id: 'mag', name: 'Magazine', v: d.mag, max: 45, fmt: (v) => `${Math.round(v)}` },
+    ];
+  },
+
+  // Tileable camo canvas (generated once, on demand).
+  camoCanvas(id) {
+    if (this.camoCanvases[id]) return this.camoCanvases[id];
+    const c = CAMOS[id];
+    if (!c) return null;
+    const P = new Pix(256);
+    c.paint(P);
+    return (this.camoCanvases[id] = P.toCanvas());
+  },
+  camoTexture(id) {
+    if (this.camoTex[id]) return this.camoTex[id];
+    const cv = this.camoCanvas(id);
+    if (!cv || typeof THREE === 'undefined') return null;
+    const t = new THREE.CanvasTexture(cv);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = R.maxAniso || 1;
+    t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter;
+    return (this.camoTex[id] = t);
+  },
+};
 
 // ==== 15-ballistics.js ====
 // Bullet and knife resolution. Bullets punch through thin brushes depending on material:
@@ -4898,6 +5788,8 @@ function vmMaterials() {
     tape: new THREE.MeshLambertMaterial({ color: 0x3a3a38 }),
     wireR: new THREE.MeshLambertMaterial({ color: 0xa8281c }), wireB: new THREE.MeshLambertMaterial({ color: 0x24509c }),
     screen: new THREE.MeshBasicMaterial({ color: 0x6ee88a }), led: new THREE.MeshBasicMaterial({ color: 0xff3020 }),
+    lens: new THREE.MeshPhongMaterial({ color: 0x3a6a78, shininess: 120, specular: new THREE.Color(0.7, 0.75, 0.8), transparent: true, opacity: 0.55 }),
+    band: new THREE.MeshLambertMaterial({ color: 0x3f9a4c }),
   };
 }
 
@@ -5182,6 +6074,106 @@ function buildChargeVM(M) {
   return m;
 }
 
+// ---------------------------------------------------------------------------
+// Attachments on the viewmodels. Gun-space mount points per gun: bore end (muzzle devices), top rail
+// (optics), under the handguard (grips, lasers). Magazine additions ride on the 'mag' part so they
+// move with the reload animation. `ext` is how far a muzzle device pushes the muzzle forward.
+const VM_MOUNTS = {
+  rifle: { bore: [0, 0.5, -20.45], r: 0.47, rail: [0, 1.46, -1.4], under: [0, -0.5, -12.2], laser: [0, -0.62, -6.4], supp: 6.6 },
+  pistol: { bore: [0, 0.83, -5.1], r: 0.3, rail: [0, 1.525, 0.0], railPart: 'slide', under: [0, -0.18, -3.3], laser: [0, -0.2, -3.25], supp: 4.4 },
+  smg: { bore: [0, 0.5, -10.65], r: 0.36, rail: [0, 1.425, -0.7], under: [0, -0.15, -7.9], laser: [0, -0.92, -3.6], supp: 5.6 },
+  shotgun: { bore: [0, 0.85, -19.9], r: 0.42, rail: [0, 1.5, 0.6], laser: [0.62, 0.85, -14.2] },
+  sniper: { bore: [0, 0.55, -26.8], r: 0.52, supp: 7.6 },
+};
+
+function vmBuildAttachments(m, M) {
+  const mt = VM_MOUNTS[m.id];
+  if (!mt) return;
+  m.att = {}; m.attExt = {};
+  const add = (id, group, parent) => { group.visible = false; (parent || m.root).add(group); m.att[id] = group; return group; };
+  const [bx, by, bz] = mt.bore, r = mt.r;
+  if (mt.supp) {
+    const L = mt.supp, rr = Math.max(0.5, r + 0.2), g = new THREE.Group();
+    g.add(vmMesh([vmCyl(rr, L, 14, bx, by, bz - L / 2 + 0.7)], M.poly),
+      vmMesh([vmCyl(rr + 0.04, 0.35, 14, bx, by, bz + 0.55), vmCyl(rr + 0.03, 0.3, 14, bx, by, bz - L + 0.85), vmCyl(r * 0.55, 0.08, 10, bx, by, bz - L + 0.67)], M.metal));
+    add('hush', g); m.attExt.hush = L - 0.7;
+  }
+  {
+    const g = new THREE.Group(), rr = r + 0.1, z0 = bz - 0.55;
+    g.add(vmMesh([vmCyl(rr, 1.6, 10, bx, by, z0)], M.metal),
+      vmMesh([vmBox(0.06, rr * 0.9, 0.3, rr - 0.02, by + rr * 0.15, z0 - 0.35), vmBox(0.06, rr * 0.9, 0.3, rr - 0.02, by + rr * 0.15, z0 + 0.25),
+        vmBox(0.06, rr * 0.9, 0.3, -rr + 0.02, by + rr * 0.15, z0 - 0.35), vmBox(0.06, rr * 0.9, 0.3, -rr + 0.02, by + rr * 0.15, z0 + 0.25),
+        vmBox(rr * 1.2, 0.06, 0.32, 0, by + rr - 0.02, z0 - 0.05)], M.tape));
+    add('brake', g); m.attExt.brake = 1.1;
+  }
+  if (m.id === 'shotgun') {
+    const g = new THREE.Group();
+    g.add(vmMesh([vmCyl(r + 0.08, 1.0, 12, bx, by, bz - 0.25)], M.metal), vmMesh([vmCyl(r + 0.1, 0.12, 12, bx, by, bz - 0.55)], M.tape));
+    add('choke', g); m.attExt.choke = 0.65;
+  }
+  if (mt.rail) {
+    const parent = mt.railPart ? m.parts[mt.railPart] : null, off = parent ? parent.position : null;
+    const [rx, ry, rz] = off ? [mt.rail[0] - off.x, mt.rail[1] - off.y, mt.rail[2] - off.z] : mt.rail, k = m.id === 'pistol' ? 0.78 : 1;
+    // reflex: a low mount, a hood over a tilted lens, the dot on the lens
+    const pip = new THREE.Group();
+    pip.add(vmMesh([vmBox(0.62 * k, 0.28 * k, 1.5 * k, rx, ry + 0.14 * k, rz), vmBox(0.1, 0.62 * k, 0.55 * k, rx + 0.3 * k, ry + 0.55 * k, rz - 0.25 * k),
+      vmBox(0.1, 0.62 * k, 0.55 * k, rx - 0.3 * k, ry + 0.55 * k, rz - 0.25 * k), vmBox(0.7 * k, 0.12 * k, 0.75 * k, rx, ry + 0.9 * k, rz - 0.25 * k)], M.poly),
+      vmMesh([vmBox(0.5 * k, 0.5 * k, 0.04, rx, ry + 0.58 * k, rz - 0.42 * k, -0.12)], M.lens),
+      vmMesh([vmBox(0.07, 0.07, 0.05, rx, ry + 0.58 * k, rz - 0.39 * k)], M.led));
+    add('pip', pip, parent);
+    if (m.id !== 'pistol') {
+      const holo = new THREE.Group();
+      holo.add(vmMesh([vmBox(0.8, 0.34, 2.3, rx, ry + 0.17, rz + 0.1), vmBox(0.12, 1.0, 1.2, rx + 0.4, ry + 0.75, rz - 0.4), vmBox(0.12, 1.0, 1.2, rx - 0.4, ry + 0.75, rz - 0.4),
+        vmBox(0.92, 0.14, 1.4, rx, ry + 1.27, rz - 0.4), vmBox(0.5, 0.36, 0.6, rx, ry + 0.52, rz + 0.75)], M.poly),
+        vmMesh([vmBox(0.7, 0.8, 0.04, rx, ry + 0.78, rz - 0.95)], M.lens), vmMesh([vmBox(0.6, 0.6, 0.04, rx, ry + 0.78, rz + 0.2)], M.lens),
+        vmMesh([vmBox(0.18, 0.025, 0.03, rx, ry + 0.78, rz - 0.93), vmBox(0.025, 0.18, 0.03, rx, ry + 0.78, rz - 0.93)], M.led));
+      add('halo', holo);
+    }
+  }
+  // magazines: longer body + base pad (extended), a pull loop (quick), a coloured band (hollow points)
+  const mag = m.parts.mag;
+  const magAdd = {
+    rifle: { ext: [vmBox(0.95, 1.3, 2.05, 0, -4.95, -1.0, 0.3), vmBox(1.05, 0.25, 2.25, 0, -5.6, -1.2, 0.3)], loop: [0, -4.55, -0.85, 0.3], band: [0, -2.0, 0.08, 0.12, 0.98, 2.14] },
+    pistol: { ext: [vmBox(0.82, 0.9, 1.27, 0, -2.2, 0.04), vmBox(1.12, 0.3, 1.66, 0, -2.72, 0.04)], loop: [0, -2.05, 0.04, 0], band: [0, -1.25, 0.0, 0, 0.84, 1.29] },
+    smg: { ext: [vmBox(0.84, 1.5, 1.32, 0, -4.95, 0.18, 0.06), vmBox(0.98, 0.32, 1.45, 0, -5.75, 0.22, 0.06)], loop: [0, -4.5, 0.16, 0.06], band: [0, -2.6, 0.0, 0.06, 0.86, 1.34] },
+    sniper: { ext: [vmBox(0.92, 0.85, 2.52, 0, -2.2, 0)], loop: [0, -1.95, 0, 0], band: [0, -1.1, 0, 0, 0.94, 2.54] },
+  }[m.id];
+  if (magAdd && mag) {
+    add('extmag', new THREE.Group().add(vmMesh(magAdd.ext, M.metal)), mag);
+    const [lx, ly, lz, lr] = magAdd.loop;
+    add('quick', new THREE.Group().add(vmMesh([vmBox(0.16, 0.5, 0.16, lx, ly - 0.25, lz - 0.32, lr), vmBox(0.16, 0.5, 0.16, lx, ly - 0.25, lz + 0.32, lr), vmBox(0.16, 0.16, 0.8, lx, ly - 0.5, lz, lr)], M.wireR)), mag);
+    const [cx, cy, cz, cr, w, d] = magAdd.band;
+    add('hollow', new THREE.Group().add(vmMesh([vmBox(w, 0.28, d, cx, cy, cz, cr)], M.band)), mag);
+  }
+  if (m.id === 'shotgun') {
+    add('extmag', new THREE.Group().add(vmMesh([vmCyl(0.38, 3.0, 10, 0, -0.18, -17.3)], M.metal), vmMesh([vmCyl(0.46, 0.7, 10, 0, -0.18, -18.95), vmCyl(0.5, 0.4, 10, 0, 0.33, -16.2)], M.poly)));
+    const shells = [];
+    for (let i = 0; i < 4; i++) shells.push(vmCyl(0.33, 1.3, 8, 0.72, -0.1, -1.9 + i * 0.76, 0));
+    const sad = new THREE.Group();
+    sad.add(vmMesh([vmBox(0.12, 1.15, 3.4, 0.68, 0.05, -0.75)], M.poly));
+    const sh = vmMesh(shells, M.shell); sh.rotation.x = 0; sad.add(sh);
+    add('quick', sad);
+  }
+  // grips and lasers
+  if (mt.under && (m.id === 'rifle' || m.id === 'smg')) {
+    const [ux, uy, uz] = mt.under;
+    add('grip', new THREE.Group().add(vmMesh([vmCylY(0.42, 2.3, 10, ux, uy - 1.15, uz), vmBox(0.7, 0.3, 1.3, ux, uy - 0.1, uz)], M.poly),
+      vmMesh([vmCylY(0.46, 0.25, 10, ux, uy - 2.35, uz)], M.metal)));
+  }
+  if (mt.laser) {
+    const [lx, ly, lz] = mt.laser, g = new THREE.Group();
+    const side = m.id === 'shotgun';
+    g.add(vmMesh(side ? [vmBox(0.5, 0.55, 1.7, lx + 0.18, ly, lz)] : [vmBox(0.6, 0.55, 1.7, lx, ly - 0.25, lz), vmBox(0.4, 0.2, 1.2, lx, ly + 0.05, lz)], M.poly),
+      vmMesh([side ? vmBox(0.22, 0.22, 0.05, lx + 0.18, ly + 0.05, lz - 0.86) : vmBox(0.22, 0.22, 0.05, lx, ly - 0.25, lz - 0.86)], M.led));
+    add('laser', g);
+  }
+  if (m.id === 'pistol') {
+    const st = new THREE.Group();
+    st.add(vmMesh([vmBox(0.05, 2.6, 1.3, 0.55, -1.75, 1.32, -0.3), vmBox(0.05, 2.6, 1.3, -0.55, -1.75, 1.32, -0.3)], M.tape));
+    add('stipple', st);
+  }
+}
+
 // ==== 18-viewmodel.js ====
 // Viewmodel runtime: keyframed clips per weapon (draw / reload / inspect / attacks / throws)
 // layered over procedural motion (bob, mouse sway, breathing, stance, fire kick).
@@ -5354,6 +6346,66 @@ function sampleKeys(keys, t, out) {
 }
 const inWindows = (wins, t) => !!wins && wins.some(([a, b]) => t >= a && t < b);
 
+// Box-projected UVs (per triangle, along its dominant axis) so a tiling camo wraps every part evenly.
+function camoUV(g, k = 1 / 7) {
+  const p = g.attributes.position.array, n = p.length / 3, uv = new Float32Array(n * 2);
+  for (let t = 0; t + 2 < n; t += 3) {
+    const a = t * 3, ux = p[a + 3] - p[a], uy = p[a + 4] - p[a + 1], uz = p[a + 5] - p[a + 2], vx = p[a + 6] - p[a], vy = p[a + 7] - p[a + 1], vz = p[a + 8] - p[a + 2];
+    const nx = Math.abs(uy * vz - uz * vy), ny = Math.abs(uz * vx - ux * vz), nz = Math.abs(ux * vy - uy * vx);
+    for (let v = t; v < t + 3; v++) {
+      const x = p[v * 3], y = p[v * 3 + 1], z = p[v * 3 + 2];
+      let s, q;
+      if (nx >= ny && nx >= nz) { s = z; q = y; } else if (ny >= nz) { s = x; q = z; } else { s = x; q = y; }
+      uv[v * 2] = s * k + 0.37; uv[v * 2 + 1] = q * k + 0.61;
+    }
+  }
+  return new THREE.BufferAttribute(uv, 2);
+}
+
+// Per-gun materials (so each gun can wear its own camo), attachment meshes, remembered base state.
+function vmPrepareKit(m, Mg) {
+  m.mats = { metal: Mg.metal, poly: Mg.poly, tan: Mg.tan, wood: Mg.wood };
+  m.matBase = {};
+  for (const [k, mat] of Object.entries(m.mats)) m.matBase[k] = { map: mat.map, shininess: mat.shininess, specular: mat.specular.clone() };
+  vmBuildAttachments(m, Mg);
+  const body = new Set(Object.values(m.mats));
+  m.bodyMeshes = [];
+  m.root.traverse((o) => { if (o.isMesh && body.has(o.material)) { o.geometry.userData.uvBase = o.geometry.attributes.uv; m.bodyMeshes.push(o); } });
+  m.muzzleBase = m.anchors.muzzle ? m.anchors.muzzle.position.z : 0;
+  m.flashBase = m.flash ? m.flash.position.z : 0;
+  m.flashBaseScale = m.flashScale || 1;
+  m.kitSig = '';
+}
+function vmMatsFor(M) {
+  return Object.assign({}, M, { metal: M.metal.clone(), poly: M.poly.clone(), tan: M.tan.clone(), wood: M.wood.clone() });
+}
+
+// Show a weapon def's attachments and camo on its viewmodel (stock defs show neither).
+function vmApplyKit(m, def) {
+  if (!m.mats) return;
+  const kit = def.kit || null, sig = def.kitSig || '';
+  if (m.kitSig === sig) return;
+  m.kitSig = sig;
+  const on = new Set(kit ? [kit.muzzle, kit.optic, kit.mag, kit.grip].filter(Boolean) : []);
+  for (const [id, g] of Object.entries(m.att || {})) g.visible = on.has(id);
+  const ext = kit && kit.muzzle && m.attExt ? m.attExt[kit.muzzle] || 0 : 0;
+  if (m.anchors.muzzle) m.anchors.muzzle.position.z = m.muzzleBase - ext;
+  if (m.flash) m.flash.position.z = m.flashBase - ext;
+  const stock = WEAPONS[m.id];
+  m.flashScale = m.flashBaseScale * (stock && stock.flash ? def.flash / stock.flash : 1);
+  const camo = kit && kit.camo ? CAMOS[kit.camo] : null, tex = camo ? Arsenal.camoTexture(kit.camo) : null;
+  for (const mesh of m.bodyMeshes) {
+    const g = mesh.geometry;
+    if (tex) { if (!g.userData.uvCamo) g.userData.uvCamo = camoUV(g); g.setAttribute('uv', g.userData.uvCamo); }
+    else g.setAttribute('uv', g.userData.uvBase);
+  }
+  for (const [k, mat] of Object.entries(m.mats)) {
+    const b = m.matBase[k];
+    if (tex) { mat.map = tex; mat.shininess = camo.shine; mat.specular.setScalar(camo.spec); }
+    else { mat.map = b.map; mat.shininess = b.shininess; mat.specular.copy(b.specular); }
+  }
+}
+
 const Viewmodel = {
   rig: null, models: {}, cur: null, tris: 0,
   bob: 0, swayX: 0, swayY: 0, kick: 0, kickRoll: 0, flashT: 0, time: 0,
@@ -5364,7 +6416,10 @@ const Viewmodel = {
     this.M = M;
     this.rig = new THREE.Group();
     for (const fn of [buildRifleVM, buildPistolVM, buildKnifeVM, buildSmokeVM, buildSmgVM, buildShotgunVM, buildSniperVM, buildChargeVM]) {
-      const m = fn(M);
+      const gun = fn === buildRifleVM || fn === buildPistolVM || fn === buildSmgVM || fn === buildShotgunVM || fn === buildSniperVM;
+      const Mg = gun ? vmMatsFor(M) : M;
+      const m = fn(Mg);
+      if (gun) vmPrepareKit(m, Mg);
       m.root.visible = false;
       this.models[m.id] = m;
       this.rig.add(m.root);
@@ -5414,6 +6469,7 @@ const Viewmodel = {
     this.show(w.def.id);
     const m = this.cur;
     if (!m) return;
+    vmApplyKit(m, w.def);
     this.time += dt;
     // --- procedural layer on the rig
     let x = 0, y = 0, rx = 0, ry = 0, rz = 0;
@@ -5429,7 +6485,8 @@ const Viewmodel = {
     this.rig.position.set(x, y, 0);
     this.rig.rotation.set(rx, ry, rz);
     // --- weapon pose: base + clip + kick
-    const t = w.animTime() + alpha * TICK, clips = VM_CLIPS[m.id], clip = clips[w.anim], s = this.s6, b = m.base;
+    const rate = (w.anim.startsWith('reload') && w.def.reloadRate) || (w.anim === 'draw' && w.def.drawRate) || 1;
+    const t = (w.animTime() + alpha * TICK) * rate, clips = VM_CLIPS[m.id], clip = clips[w.anim], s = this.s6, b = m.base;
     sampleKeys(clip ? clip.root : null, t, s);
     this.kick = damp(this.kick, 0, 15, dt);
     m.root.position.set(b.x + s[0], b.y + s[1] + this.kick * 0.12, b.z + s[2] + this.kick * 1.15);
@@ -5603,6 +6660,7 @@ class Target {
 const Ents = {
   doors: [], targets: [], stats: { hits: 0, shots: 0 },
   init(L) {
+    this.doors = []; this.targets = [];
     for (const d of L.doors) this.doors.push(new Door(L, d));
     for (const t of L.targets) this.targets.push(new Target(L, t));
   },
@@ -6291,6 +7349,7 @@ class Actor {
     this.health = 100; this.armor = 100; this.helmet = true; this.alive = false; this.deadT = 0;
     this.kills = 0; this.deaths = 0; this.hurtT = 0; this.hurtFrom = null; this.killer = null;
     this.money = 800; this.kit = false; this.squad = 0;
+    this.dmg = 0; this.hs = 0; this.plants = 0; this.defuses = 0;
     this.cmd = Object.assign({}, IDLE_CMD);
     this.brain = isBot ? new BotBrain(this) : null;
     this.prevPos = [0, 0, 0];
@@ -6315,6 +7374,7 @@ class Actor {
       dmg = toHealth;
     }
     dmg = Math.max(1, Math.round(dmg));
+    if (attacker && attacker !== this && attacker.team !== this.team) attacker.dmg += Math.min(dmg, this.health);
     this.health -= dmg;
     this.hurtT = 1; this.hurtFrom = from ? from.slice() : null;
     if (this.brain) this.brain.onHurt(attacker, from);
@@ -6327,7 +7387,7 @@ class Actor {
     this.alive = false; this.deadT = 0; this.deaths++; this.killer = attacker || null;
     this.killInfo = { weapon: def ? def.name : '', headshot };
     if (attacker && attacker !== this) {
-      if (attacker.team !== this.team) { attacker.kills++; Actors.score[attacker.team]++; } else attacker.kills--;
+      if (attacker.team !== this.team) { attacker.kills++; if (headshot) attacker.hs++; Actors.score[attacker.team]++; } else attacker.kills--;
     }
     Actors.feed.push({ killer: attacker ? attacker.name : '', kTeam: attacker ? attacker.team : this.team, victim: this.name, vTeam: this.team,
       weapon: def ? def.name : '', wid: def ? def.id : '', hs: headshot, age: 0, me: !!(attacker && attacker.isMe) || this.isMe });
@@ -6420,6 +7480,7 @@ const Actors = {
     for (const a of this.list) {
       const p = a.player, m = a.model;
       m.setWeapon(a.loadout.active.def.id, !!a.loadout.byId('charge'));
+      m.mesh.visible = !a.isMe && !this.hidden;
       m.update(dt, { x: lerp(p.prev[0], p.pos[0], alpha), y: lerp(p.prev[1], p.pos[1], alpha), z: lerp(p.prev[2], p.pos[2], alpha),
         yaw: p.yaw, pitch: p.pitch, vx: p.vel[0], vz: p.vel[2], ducked: p.ducked, onGround: p.onGround || p.noclip, alive: a.alive });
       if (FX.L) { FX.lightAt(p.pos[0], p.pos[1] + 40, p.pos[2], tmp); m.setLight(tmp[0], tmp[1], tmp[2]); }
@@ -6441,7 +7502,7 @@ const Combat = {
       if (res.actor) dealt += res.actor.target.damage(res.actor.damage, res.actor.group, actor, def, eye);
       results.push({ res, dir });
     }
-    Bots.noise(eye, actor, 1700);
+    Bots.noise(eye, actor, def.noise || 1700);
     return { res: results[0].res, dir: base, results, eye, dealt };
   },
   knife(actor, e) {
@@ -6462,6 +7523,7 @@ const BOT_SKILL = {
   easy: { react: 0.62, aimErr: 4.5, turn: 210, recoil: 0.25, head: 0.08, burst: [2, 4], fov: 100, settle: 1.2 },
   normal: { react: 0.36, aimErr: 2.4, turn: 330, recoil: 0.55, head: 0.25, burst: [3, 6], fov: 110, settle: 1.9 },
   hard: { react: 0.2, aimErr: 1.1, turn: 520, recoil: 0.85, head: 0.55, burst: [4, 8], fov: 120, settle: 2.8 },
+  expert: { react: 0.13, aimErr: 0.7, turn: 700, recoil: 0.95, head: 0.7, burst: [5, 10], fov: 126, settle: 3.5 },
 };
 
 const Bots = {
@@ -7090,10 +8152,11 @@ const Match = {
     Actors.feed = []; Actors.score = [0, 0];
     for (const a of Actors.list) {
       a.squad = a.team === Actors.me.team ? 0 : 1;
-      a.money = MATCH.start; a.kills = 0; a.deaths = 0; a.kit = false;
+      a.money = MATCH.start; a.kills = 0; a.deaths = 0; a.kit = false; a.dmg = 0; a.hs = 0; a.plants = 0; a.defuses = 0;
       a.alive = false;                       // everyone starts the first round fresh
     }
     if (Actors.me) Actors.me.squad = 0;
+    this.hold = false;
     this.startRound();
   },
 
@@ -7191,7 +8254,7 @@ const Match = {
         if (this.t <= 0) this.nextRound();
         break;
       case 'over':
-        if (this.t <= 0) this.startMatch();
+        if (this.t <= 0 && !this.hold) this.startMatch();
         break;
     }
   },
@@ -7207,13 +8270,14 @@ const Match = {
 
   onPlant(actor, site) {
     if (!this.active || this.phase !== 'live') return;
-    this.planted = true; this.phase = 'planted';
+    this.planted = true; this.phase = 'planted'; actor.plants++;
     actor.money = Math.min(MATCH.max, actor.money + MATCH.plantReward);
     this.banner = { title: `Charge planted at ${site.name}`, sub: Actors.me.team === TEAM.WARDENS ? 'Get there and defuse it (hold E)' : 'Guard it until it blows', t: 3, kind: 'plant' };
     if (typeof Tactics !== 'undefined') Tactics.onPlant(site);
   },
   onDefuse(a) {
     if (!this.active) return;
+    a.defuses++;
     a.money = Math.min(MATCH.max, a.money + MATCH.defuseReward);
     this.endRound(TEAM.WARDENS, 'defuse');
   },
@@ -7255,9 +8319,11 @@ const Match = {
     this.phase = 'post'; this.t = MATCH.post;
     if (this.score[win] >= this.len.win) {
       this.phase = 'over'; this.t = MATCH.over; this.draw = false;
+      if (typeof Session !== 'undefined') Session.matchOver(mine ? 'win' : 'loss');
       this.banner = { title: `${TEAMS[side].name} win the match`, sub: `${this.score[win]} – ${this.score[lose]}`, t: MATCH.over, kind: mine ? 'win' : 'lose', side, final: true };
     } else if (this.round >= this.len.max) {
       this.phase = 'over'; this.t = MATCH.over; this.draw = true;
+      if (typeof Session !== 'undefined') Session.matchOver('draw');
       this.banner = { title: 'Draw', sub: `${this.score[0]} – ${this.score[1]}`, t: MATCH.over, kind: 'draw', final: true };
     } else if (this.round === this.len.half) {
       this.halftimeNext = true; this.t = MATCH.halftime;
@@ -7278,6 +8344,279 @@ const Match = {
     this.startRound();
   },
 };
+
+// ==== 26-profile.js ====
+// Career profile: XP and levels (each level pays shop points), owned attachments and camos, the
+// per-gun kit, Elo rating and rank, lifetime stats and recent matches.
+// Saved on this device (localStorage) and, when the page runs as a claude.ai artifact with the
+// `db` capability, in a private per-user document so progress follows the account.
+
+const DIFFS = {
+  easy: { name: 'Easy', elo: 750, xp: 0.8, blurb: 'Slow to react, loose aim' },
+  normal: { name: 'Normal', elo: 1050, xp: 1, blurb: 'Fair fights' },
+  hard: { name: 'Hard', elo: 1350, xp: 1.25, blurb: 'Quick, accurate, punishes peeks' },
+  expert: { name: 'Expert', elo: 1650, xp: 1.5, blurb: 'Near-instant reactions, headshot aim' },
+};
+const DIFF_ORDER = ['easy', 'normal', 'hard', 'expert'];
+
+// Ranks by rating. The family sets the emblem colour; tiers are I–III.
+const RANK_FAMILIES = [
+  { name: 'Spark', col: '#c07a4a', col2: '#6e3d22' }, { name: 'Flint', col: '#aeb6bb', col2: '#535b61' },
+  { name: 'Fuse', col: '#f0a53a', col2: '#8a5310' }, { name: 'Charge', col: '#4fc6b8', col2: '#1b5f58' },
+  { name: 'Blast', col: '#e5573f', col2: '#7a1f13' }, { name: 'Shockwave', col: '#a688f0', col2: '#4b3290' },
+  { name: 'Short Fuse', col: '#ffd76a', col2: '#9a6a00' },
+];
+const RANKS = (() => {
+  const list = [], roman = ['I', 'II', 'III'];
+  let r = 0;
+  for (let f = 0; f < 5; f++) for (let t = 0; t < 3; t++) { list.push({ name: `${RANK_FAMILIES[f].name} ${roman[t]}`, fam: f, tier: t + 1, min: r }); r = r === 0 ? 700 : r + 100; }
+  list.push({ name: 'Shockwave', fam: 5, tier: 0, min: 2200 });
+  list.push({ name: 'Short Fuse', fam: 6, tier: 0, min: 2400 });
+  return list;
+})();
+const PLACEMENTS = 3;
+const rankFor = (elo) => { let k = 0; for (let i = 0; i < RANKS.length; i++) if (elo >= RANKS[i].min) k = i; return k; };
+
+// Levels: XP needed for the next level grows, and every level-up pays shop points.
+const LEVELS = {
+  need: (L) => Math.min(800 + 150 * (L - 1), 6000),
+  points: (L) => Math.min(150 + 10 * (L - 1), 600) + (L % 10 === 0 ? 500 : 0),
+  of(xp) {
+    let L = 1, rest = Math.max(0, xp);
+    while (L < 200 && rest >= this.need(L)) { rest -= this.need(L); L++; }
+    return { level: L, into: rest, need: this.need(L) };
+  },
+};
+const WELCOME_POINTS = 600;
+
+const Profile = {
+  key: 'shortfuse.profile.v1', v: null, listeners: [],
+  cloud: null, cloudState: 'local', writing: false, again: false, saveT: null, retryT: null,
+
+  blank() {
+    const kit = {};
+    for (const g of ARMORY_GUNS) kit[g] = { muzzle: null, optic: null, mag: null, grip: null, camo: null };
+    return {
+      ver: 1, created: Date.now(), updated: 0, xp: 0, points: WELCOME_POINTS, owned: { att: [], camo: [] }, kit,
+      elo: 1000, peak: 1000, placed: 0, lastCfg: null,
+      stats: { matches: 0, wins: 0, losses: 0, draws: 0, left: 0, ranked: 0, kills: 0, deaths: 0, hs: 0, damage: 0, rounds: 0, plants: 0, defuses: 0 },
+      history: [],
+    };
+  },
+
+  // Accept anything shaped roughly right; drop what isn't.
+  sanitize(o) {
+    const b = this.blank();
+    if (!o || typeof o !== 'object') return b;
+    const num = (v, d, lo = 0, hi = 1e9) => (typeof v === 'number' && isFinite(v) ? clamp(v, lo, hi) : d);
+    b.created = num(o.created, b.created); b.updated = num(o.updated, 0); b.xp = num(o.xp, 0); b.points = num(o.points, WELCOME_POINTS);
+    b.elo = num(o.elo, 1000, 0, 5000); b.peak = num(o.peak, b.elo, 0, 5000); b.placed = num(o.placed, 0, 0, 1e6);
+    if (o.owned && typeof o.owned === 'object') {
+      if (Array.isArray(o.owned.att)) b.owned.att = o.owned.att.filter((s) => typeof s === 'string' && ATTACHMENTS[s.split(':')[1]] && attFits(s.split(':')[1], s.split(':')[0]));
+      if (Array.isArray(o.owned.camo)) b.owned.camo = o.owned.camo.filter((s) => typeof s === 'string' && CAMOS[s]);
+    }
+    if (o.kit && typeof o.kit === 'object') {
+      for (const g of ARMORY_GUNS) {
+        const k = o.kit[g];
+        if (!k || typeof k !== 'object') continue;
+        for (const s of ATT_SLOTS) { const a = k[s.id]; if (a && attFits(a, g) && ATTACHMENTS[a].slot === s.id && b.owned.att.includes(`${g}:${a}`)) b.kit[g][s.id] = a; }
+        if (k.camo && b.owned.camo.includes(k.camo)) b.kit[g].camo = k.camo;
+      }
+    }
+    if (o.stats && typeof o.stats === 'object') for (const k of Object.keys(b.stats)) b.stats[k] = num(o.stats[k], 0);
+    if (Array.isArray(o.history)) b.history = o.history.filter((h) => h && typeof h === 'object').slice(0, 15);
+    if (o.lastCfg && typeof o.lastCfg === 'object') b.lastCfg = o.lastCfg;
+    return b;
+  },
+
+  load() {
+    let saved = null;
+    try { if (typeof localStorage !== 'undefined') saved = JSON.parse(localStorage.getItem(this.key) || 'null'); } catch (e) { saved = null; }
+    this.v = this.sanitize(saved);
+  },
+  on(f) { this.listeners.push(f); },
+  emit() { for (const f of this.listeners) { try { f(this.v); } catch (e) { /* UI listener */ } } },
+
+  // Every real change goes through here: device copy now, account copy one write at a time.
+  save(soon) {
+    this.v.updated = Date.now();
+    try { if (typeof localStorage !== 'undefined') localStorage.setItem(this.key, JSON.stringify(this.v)); } catch (e) { /* storage blocked */ }
+    if (this.cloud) {
+      clearTimeout(this.saveT);
+      if (soon) this.saveT = setTimeout(() => this.push(), 1500); else this.push();
+    }
+    this.emit();
+  },
+  async push() {
+    if (!this.cloud || this.cloudState === 'readonly') return;
+    if (this.writing) { this.again = true; return; }
+    this.writing = true;
+    try {
+      await this.cloud.set(JSON.parse(JSON.stringify(this.v)));
+      this.cloudState = 'synced';
+    } catch (e) {
+      const code = e && e.code;
+      if (code === 'invalid_argument' || code === 'revoked' || code === 'not_granted') this.cloudState = 'readonly';
+      else { this.cloudState = 'offline'; clearTimeout(this.retryT); this.retryT = setTimeout(() => this.push(), 20000); }
+    }
+    this.writing = false;
+    this.emit();
+    if (this.again) { this.again = false; this.push(); }
+  },
+
+  // Optional: the account copy. Never blocks the game; the device copy is used until it answers.
+  async connect() {
+    const c = typeof window !== 'undefined' ? window.claude : null;
+    if (!c || typeof c.use !== 'function') return;
+    this.cloudState = 'connecting'; this.emit();
+    const limit = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(() => r(null), ms))]);
+    try {
+      const [db, user] = await limit(Promise.all([c.use('db'), c.use('user')]), 10000) || [null, null];
+      const id = db && user ? await limit(user.id(), 10000) : null;
+      if (!db || !id) { this.cloudState = 'local'; this.emit(); return; }
+      const ref = db.doc(`data/users/${id}/profile`);
+      const snap = await limit(ref.get(), 10000);
+      if (!snap) { this.cloudState = 'local'; this.emit(); return; }
+      this.cloud = ref; this.cloudState = 'synced';
+      const remote = snap.exists ? this.sanitize(snap.data()) : null;
+      if (remote && remote.updated > this.v.updated) {
+        this.v = remote;
+        try { localStorage.setItem(this.key, JSON.stringify(this.v)); } catch (e) { /* storage blocked */ }
+        Arsenal.cache.clear();
+        this.emit();
+      } else if (this.v.updated > (remote ? remote.updated : 0)) this.push();
+      else this.emit();
+    } catch (e) { this.cloudState = 'local'; this.emit(); }
+  },
+  syncLabel() {
+    return { synced: 'Saved to your account', connecting: 'Connecting…', offline: 'Account save pending', readonly: 'Saved on this device (no write access)' }[this.cloudState] || 'Saved on this device';
+  },
+
+  level() { return LEVELS.of(this.v.xp); },
+  rank() { return this.v.placed >= PLACEMENTS ? rankFor(this.v.elo) : -1; },
+  owns(kind, id) { return this.v.owned[kind].includes(id); },
+
+  // Shop: attachments are per gun ("rifle:hush"), camos are for every gun.
+  buy(kind, id, gun) {
+    const key = kind === 'att' ? `${gun}:${id}` : id;
+    if (this.owns(kind, key)) return { ok: false, msg: 'Already owned' };
+    if (kind === 'att' && !attFits(id, gun)) return { ok: false, msg: 'Does not fit this gun' };
+    const price = kind === 'att' ? attPrice(id, gun) : CAMOS[id] ? CAMOS[id].price : Infinity;
+    if (this.v.points < price) return { ok: false, msg: `Need ${price - this.v.points} more points` };
+    this.v.points -= price;
+    this.v.owned[kind].push(key);
+    this.save();
+    return { ok: true, msg: kind === 'att' ? `${attName(id, gun)} unlocked for the ${WEAPONS[gun].name}` : `${CAMOS[id].name} unlocked for every gun`, price };
+  },
+  equip(gun, slot, id) {
+    const k = this.v.kit[gun];
+    if (!k) return false;
+    if (slot === 'camo') { if (id && !this.owns('camo', id)) return false; k.camo = id || null; }
+    else {
+      if (id && (!this.owns('att', `${gun}:${id}`) || ATTACHMENTS[id].slot !== slot)) return false;
+      k[slot] = id || null;
+    }
+    Arsenal.cache.clear();
+    this.save(true);
+    return true;
+  },
+
+  // Fold a finished (or abandoned) match into the career; returns everything the results screen shows.
+  applyMatch(cfg, st, outcome) {
+    const v = this.v, lv0 = this.level(), rank0 = this.rank(), elo0 = v.elo, placed0 = v.placed;
+    const xp = Rewards.xp(cfg, st, outcome);
+    const elo = cfg.mode === 'defuse' && outcome !== 'none' ? Rewards.elo(cfg, st, outcome, v.elo, v.placed) : null;
+    v.xp += xp.total;
+    const lv1 = this.level(), ups = [];
+    for (let L = lv0.level + 1; L <= lv1.level; L++) { const p = LEVELS.points(L); ups.push({ level: L, points: p }); v.points += p; }
+    if (elo) {
+      v.elo = Math.max(0, v.elo + elo.delta);
+      if (cfg.ranked) v.placed++;
+      if (v.placed >= PLACEMENTS) v.peak = Math.max(v.peak, v.elo);
+    }
+    const s = v.stats;
+    if (cfg.mode === 'defuse' && outcome !== 'none') {
+      s.matches++; if (cfg.ranked) s.ranked++;
+      if (outcome === 'win') s.wins++; else if (outcome === 'draw') s.draws++; else if (outcome === 'left') s.left++; else s.losses++;
+      s.rounds += st.rounds; s.plants += st.plants; s.defuses += st.defuses;
+    }
+    s.kills += st.kills; s.deaths += st.deaths; s.hs += st.hs; s.damage += Math.round(st.dmg);
+    const rec = { t: Date.now(), map: cfg.map, mode: cfg.mode, ranked: !!cfg.ranked, diff: cfg.diff, outcome, score: st.score || null,
+      k: st.kills, d: st.deaths, adr: st.rounds ? Math.round(st.dmg / st.rounds) : 0, xp: xp.total, elo: elo ? elo.delta : null };
+    if (cfg.mode === 'defuse' && outcome !== 'none') { v.history.unshift(rec); v.history.length = Math.min(v.history.length, 15); }
+    this.save();
+    return { outcome, cfg, st, xp, ups, lv0, lv1, elo, elo0, elo1: v.elo, rank0, rank1: this.rank(), placed0, placed1: v.placed, pointsNow: v.points };
+  },
+};
+
+// XP and Elo for one match. `st`: { kills, deaths, hs, dmg, rounds, roundsWon, plants, defuses }.
+const Rewards = {
+  xp(cfg, st, outcome) {
+    const lines = [], add = (label, v) => { if (v) lines.push({ label, v: Math.round(v) }); };
+    if (cfg.mode === 'defuse') {
+      add(`Eliminations ${st.kills} × 100`, st.kills * 100);
+      add(`Headshots ${st.hs} × 30`, st.hs * 30);
+      add(`Damage ${Math.round(st.dmg)} × 0.5`, st.dmg * 0.5);
+      add(`Rounds won ${st.roundsWon} × 60`, st.roundsWon * 60);
+      add(`Charges planted ${st.plants} × 80`, st.plants * 80);
+      add(`Charges defused ${st.defuses} × 120`, st.defuses * 120);
+      if (outcome === 'win') add('Match win', 600);
+      else if (outcome === 'draw') add('Match draw', 300);
+      if (outcome !== 'left' && outcome !== 'none') add('Match completed', 400);
+    } else {
+      add(`Practice eliminations ${st.kills} × 40`, st.kills * 40);
+      add(`Practice damage ${Math.round(st.dmg)} × 0.2`, st.dmg * 0.2);
+    }
+    const base = lines.reduce((n, l) => n + l.v, 0), d = DIFFS[cfg.diff] || DIFFS.normal;
+    let k = d.xp; const mults = [`${d.name} bots ×${d.xp}`];
+    if (cfg.ranked) { k *= 1.25; mults.push('Ranked ×1.25'); }
+    return { lines, base, k, mults, total: Math.round(base * k) };
+  },
+
+  // Bot sides have a rating set by difficulty (and how many of them you face); the result moves
+  // you toward it Elo-style, and your own eliminations and damage add on top. Ranked matches count
+  // fully; casual ones a quarter. Placement matches move twice as far.
+  oppRating(cfg) {
+    const d = DIFFS[cfg.diff] || DIFFS.normal;
+    return d.elo + 40 * ((cfg.enemies || 5) - 1 - (cfg.allies ?? 4));
+  },
+  elo(cfg, st, outcome, rating, placed) {
+    const ropp = this.oppRating(cfg), E = 1 / (1 + Math.pow(10, (ropp - rating) / 400));
+    const S = outcome === 'win' ? 1 : outcome === 'draw' ? 0.5 : 0;
+    const lenK = cfg.len === 'short' ? 0.7 : 1, placing = cfg.ranked && placed < PLACEMENTS;
+    const K = (cfg.ranked ? (placing ? 64 : 32) : 8) * lenK;
+    const result = K * (S - E);
+    const adr = st.rounds ? st.dmg / st.rounds : 0;
+    const parts = [
+      { label: `Eliminations ${st.kills} × 0.9`, v: st.kills * 0.9 }, { label: `Headshots ${st.hs} × 0.15`, v: st.hs * 0.15 },
+      { label: `Damage per round ${Math.round(adr)} vs 75`, v: st.rounds ? (adr - 75) * 0.12 : 0 }, { label: `Deaths ${st.deaths} × −0.6`, v: -st.deaths * 0.6 },
+      { label: 'Objectives', v: st.plants * 0.5 + st.defuses * 1.0 },
+    ];
+    const rawSum = parts.reduce((n, p) => n + p.v, 0), fav = rawSum > 0 ? 2 * (1 - E) : 2 * E;   // favourites gain less and lose more
+    const modeK = cfg.ranked ? (placing ? 2 : 1) : 0.25, cap = cfg.ranked ? 24 : 6;
+    const perf = clamp(rawSum * lenK * fav * modeK, -cap, cap);
+    const why = [`${rawSum > 0 ? 'gains' : 'losses'} ×${fav.toFixed(2)} at ${Math.round(E * 100)}% expected`];
+    if (lenK !== 1) why.push(`short ×${lenK}`);
+    why.push(cfg.ranked ? (placing ? 'placement ×2' : 'ranked ×1') : 'casual ×0.25');
+    if (Math.abs(rawSum * lenK * fav * modeK) > cap) why.push(`capped at ±${cap}`);
+    if (rawSum) parts.push({ label: `Weighting: ${why.join(', ')}`, v: perf - rawSum });
+    const delta = Math.round(result + perf);
+    const res = outcome === 'win' ? 'Win' : outcome === 'draw' ? 'Draw' : outcome === 'left' ? 'Left early (counts as a loss)' : 'Loss';
+    return {
+      delta, E, ropp, result, perf, placing,
+      lines: [{ label: `${res} vs ${(DIFFS[cfg.diff] || DIFFS.normal).name} bots (${ropp}) · expected ${Math.round(E * 100)}%`, v: result }, { label: 'Performance', v: perf }],
+      parts, modeLabel: cfg.ranked ? (placing ? `Ranked placement ${placed + 1}/${PLACEMENTS} · ×2` : 'Ranked · full weight') : 'Casual · ×0.25 weight',
+    };
+  },
+  // What a win and a loss would roughly be worth with an average game (Create Game summary).
+  preview(cfg, rating, placed) {
+    const st = { kills: 14, deaths: 14, hs: 4, dmg: 1900, rounds: cfg.len === 'short' ? 14 : 24, plants: 1, defuses: 0 };
+    st.dmg = st.rounds * 78;
+    return { win: this.elo(cfg, st, 'win', rating, placed).delta, loss: this.elo(cfg, st, 'loss', rating, placed).delta };
+  },
+};
+
+Profile.load();
 
 // ==== 27-tactics.js ====
 // Team play for bots in defuse mode: buying by economy, a Raider plan per round (target site,
@@ -7409,22 +8748,18 @@ const Tactics = {
 const Radar = {
   img: null, s: 0.125, zoom: 0.8, lo: [0, 0], spotted: new Map(), spotT: 0, tr: null, ctx: null, el: null, px: 168, dpr: 1, place: '',
 
-  build(L) {
-    const s = this.s, lo = L.bounds.lo, hi = L.bounds.hi;
+  // One footprint per solid brush: its top face, classified by height (roofs and floaters skipped).
+  footprint(polys, planes, o, bottom, top) {
+    if (bottom >= 100 || o.radar === false) return null;
+    let ti = -1, best = 0.3;
+    for (let i = 0; i < planes.length; i++) if (polys[i] && planes[i][1] > best) { best = planes[i][1]; ti = i; }
+    if (ti < 0) return null;
+    const kind = o.radar === 'floor' ? 'raised' : top - bottom >= 120 && top >= 150 ? 'wall' : top <= -30 ? 'low' : top <= 20 ? 'ground' : 'raised';
+    return { poly: polys[ti], top, kind };
+  },
+  paint(items, lo, hi, sites, s, labels) {
     const W = Math.max(8, Math.ceil((hi[0] - lo[0]) * s)), H = Math.max(8, Math.ceil((hi[2] - lo[2]) * s));
     const cv = makeCanvas(W, H), g = cv.getContext('2d');
-    this.lo = [lo[0], lo[2]];
-    const items = [];
-    for (const b of L.cw.brushes) {
-      if (!(b.contents & CONTENTS.SOLID)) continue;
-      const o = (b.mb && b.mb.o) || {}, bottom = b.min[1], top = b.max[1];
-      if (bottom >= 100 || o.radar === false) continue;
-      let ti = -1, best = 0.3;
-      for (let i = 0; i < b.faceCount; i++) if (b.polys[i] && b.P[i * 4 + 1] > best) { best = b.P[i * 4 + 1]; ti = i; }
-      if (ti < 0) continue;
-      const kind = o.radar === 'floor' ? 'raised' : top - bottom >= 120 && top >= 150 ? 'wall' : top <= -30 ? 'low' : top <= 20 ? 'ground' : 'raised';
-      items.push({ poly: b.polys[ti], top, kind });
-    }
     const order = { low: 0, ground: 1, raised: 2, wall: 3 }, fill = { low: '#4a4842', ground: '#6c685e', raised: '#918c7e', wall: '#1a1c1d' };
     items.sort((a, b) => order[a.kind] - order[b.kind] || a.top - b.top);
     for (const it of items) {
@@ -7433,11 +8768,44 @@ const Radar = {
       g.closePath(); g.fillStyle = fill[it.kind]; g.fill();
       if (it.kind === 'raised') { g.strokeStyle = 'rgba(16, 16, 16, 0.55)'; g.lineWidth = 1; g.stroke(); }
     }
-    for (const st of L.sites || []) {
+    for (const st of sites || []) {
       g.fillStyle = 'rgba(240, 165, 58, 0.16)';
       g.fillRect((st.min[0] - lo[0]) * s, (st.min[2] - lo[2]) * s, (st.max[0] - st.min[0]) * s, (st.max[2] - st.min[2]) * s);
+      if (labels) {
+        g.fillStyle = 'rgba(240, 165, 58, 0.95)'; g.font = `700 ${Math.round(labels)}px ${STENCIL_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(st.name, (st.center[0] - lo[0]) * s, (st.center[2] - lo[2]) * s);
+      }
     }
-    this.img = cv; this.tr = makeTrace(); this.spotted.clear();
+    return cv;
+  },
+  build(L) {
+    const lo = L.bounds.lo, hi = L.bounds.hi, items = [];
+    this.lo = [lo[0], lo[2]];
+    for (const b of L.cw.brushes) {
+      if (!(b.contents & CONTENTS.SOLID)) continue;
+      const planes = []; for (let i = 0; i < b.faceCount; i++) planes.push([b.P[i * 4], b.P[i * 4 + 1], b.P[i * 4 + 2]]);
+      const it = this.footprint(b.polys, planes, (b.mb && b.mb.o) || {}, b.min[1], b.max[1]);
+      if (it) items.push(it);
+    }
+    this.img = this.paint(items, lo, hi, L.sites, this.s); this.tr = makeTrace(); this.spotted.clear();
+  },
+  // Overview of a map that isn't loaded (Create Game cards): straight from the map builder.
+  thumbs: {}, thumbURLs: {},
+  thumbURL(key) { return this.thumbURLs[key] || (this.thumbURLs[key] = this.thumb(key).toDataURL()); },
+  thumb(key) {
+    if (this.thumbs[key]) return this.thumbs[key];
+    const def = MAPS[key], mb = def.build(), items = [], lo = [Infinity, 0, Infinity], hi = [-Infinity, 0, -Infinity];
+    for (const b of mb.brushes) {
+      const o = b.o || {};
+      if (o.nocollide || o.entity || o.clip) continue;
+      const planes = b.faces.map((f) => f.plane), polys = brushPolygons(planes);
+      let y0 = Infinity, y1 = -Infinity;
+      for (const p of polys) if (p) for (const v of p) { if (v[1] < y0) y0 = v[1]; if (v[1] > y1) y1 = v[1]; lo[0] = Math.min(lo[0], v[0]); lo[2] = Math.min(lo[2], v[2]); hi[0] = Math.max(hi[0], v[0]); hi[2] = Math.max(hi[2], v[2]); }
+      const it = this.footprint(polys, planes, o, y0, y1);
+      if (it) items.push(it);
+    }
+    const s = 220 / Math.max(hi[0] - lo[0], hi[2] - lo[2]);
+    return (this.thumbs[key] = this.paint(items, lo, hi, mb.sites, s, 18));
   },
 
   attach(canvas) {
@@ -7792,78 +9160,6 @@ const HUD = {
   },
 };
 
-const Menu = {
-  init() {
-    document.querySelectorAll('.tabs [role="tab"]').forEach((t) => t.addEventListener('click', () => this.tab(t.dataset.tab)));
-    this.bindSettings();
-  },
-  loading(label, frac) {
-    $('load-label').textContent = label;
-    $('load-pct').textContent = Math.round(frac * 100) + '%';
-    $('load-bar').style.width = (frac * 100).toFixed(1) + '%';
-  },
-  error(msg) {
-    $('load-label').textContent = 'Cannot start';
-    const n = $('load-note'); n.className = 'err'; n.textContent = msg;
-  },
-  showMain(resume) {
-    $('sf-overlay').hidden = false; $('sf-loading').hidden = true; $('sf-menu').hidden = false;
-    $('btn-play').textContent = resume ? 'Resume' : 'Play';
-  },
-  hide() { $('sf-overlay').hidden = true; },
-  tab(name) {
-    for (const t of ['controls', 'settings', 'bots']) {
-      $('tab-' + t).setAttribute('aria-selected', String(t === name));
-      $('pane-' + t).hidden = t !== name;
-    }
-  },
-  bindSettings() {
-    const s = Settings.v;
-    const range = (id, key, fmt, scale = 1) => {
-      const el = $(id), out = $('out-' + id.slice(4));
-      el.value = s[key] * scale; if (out) out.textContent = fmt(s[key]);
-      el.addEventListener('input', () => { const v = parseFloat(el.value) / scale; Settings.set(key, v); if (out) out.textContent = fmt(v); });
-    };
-    const check = (id, key) => { const el = $(id); el.checked = s[key]; el.addEventListener('change', () => Settings.set(key, el.checked)); };
-    const select = (id, key, num) => { const el = $(id); el.value = String(s[key]); el.addEventListener('change', () => Settings.set(key, num ? parseFloat(el.value) : el.value)); };
-    range('set-sens', 'sensitivity', (v) => v.toFixed(2));
-    check('set-invert', 'invertY'); check('set-raw', 'rawInput');
-    range('set-fov', 'fov', (v) => `${Math.round(v)}°`);
-    select('set-aspect', 'aspect');
-    range('set-vmfov', 'vmFov', (v) => `${Math.round(v)}°`);
-    range('set-rscale', 'renderScale', (v) => `${Math.round(v)}%`);
-    select('set-dpr', 'maxDpr', true);
-    select('set-xhstyle', 'xhStyle'); select('set-xhcolor', 'xhColor');
-    range('set-xhsize', 'xhSize', (v) => `${v}px`); range('set-xhgap', 'xhGap', (v) => `${v}px`); range('set-xhthick', 'xhThick', (v) => `${v}px`);
-    check('set-xhdot', 'xhDot'); check('set-xhoutline', 'xhOutline'); check('set-xhrecoil', 'xhRecoil');
-    range('set-vol', 'volume', (v) => `${Math.round(v)}%`);
-    check('set-fps', 'showFps'); check('set-speed', 'showSpeed');
-    select('set-botskill', 'botSkill'); select('set-team', 'team', true); check('set-ff', 'ff');
-    select('set-mode', 'mode'); select('set-matchlen', 'matchLen'); select('set-map', 'map');
-    const roster = (fn) => () => { fn(); if (Match.active) Match.startMatch(); this.updateBots(); };
-    $('bot-add-0').addEventListener('click', roster(() => { if (Actors.list.length < 12) Actors.addBot(0); }));
-    $('bot-add-1').addEventListener('click', roster(() => { if (Actors.list.length < 12) Actors.addBot(1); }));
-    $('bot-clear').addEventListener('click', roster(() => Actors.removeBots()));
-    $('match-restart').addEventListener('click', () => { if (Match.active) Match.startMatch(); else Match.setMode('skirmish'); HUD.note(Match.active ? 'New match' : 'Skirmish reset'); this.updateBots(); });
-    Settings.on((k) => {
-      if (['fov', 'aspect', 'vmFov', 'renderScale', 'maxDpr'].includes(k)) R.resize();
-      if (k.startsWith('xh')) HUD.applyCrosshairStyle();
-      if (k === 'volume') Snd.setVolume();
-      if (k === 'showFps' || k === 'showSpeed' || k === 'showHints') HUD.applyToggles();
-      if (k === 'team') { Actors.setTeam(Settings.v.team); this.updateBots(); }
-      if (k === 'ff') Actors.ff = !!Settings.v.ff;
-      if (k === 'mode') { Match.setMode(Settings.v.mode); this.updateBots(); }
-      if (k === 'map') { $('menu-note').textContent = `Loading ${(MAPS[Settings.v.map] || MAPS.depot).name}…`; setTimeout(() => location.reload(), 60); }
-      if (k === 'matchLen' && Match.active) { Match.startMatch(); this.updateBots(); }
-    });
-  },
-  updateBots() {
-    const r = Actors.count(0), w = Actors.count(1), me = Actors.me;
-    const m = Match.active ? ` Round ${Match.round}, ${TEAMS[0].name} ${Match.sideScore(0)} – ${Match.sideScore(1)} ${TEAMS[1].name}.` : ' Skirmish: respawns after 3 s.';
-    $('bot-status').textContent = `${r} Raider bot${r === 1 ? '' : 's'} and ${w} Warden bot${w === 1 ? '' : 's'}; you're on the ${TEAMS[me.team].name}.${m}`;
-  },
-};
-
 // Buy menu: B opens it during buy time near your spawn; 1-9 (or a click with a free cursor) buys.
 const BuyMenu = {
   open: false, msg: '', msgT: 0, sig: '', renderT: 0,
@@ -7905,6 +9201,472 @@ const BuyMenu = {
   },
 };
 
+// ==== 29-menus.js ====
+// Front end. Screens are <section class="scr"> elements in #sf-overlay: the main menu over a slow
+// fly-through of the loaded map, Create Game, the armory (Loadout and Shop share it), Career,
+// Settings and Controls, the in-match pause menu, a "ready" card after a map load, and results.
+
+const MAP_LIST = ['depot', 'kiln', 'frost', 'range'];
+const SCREENS = ['loading', 'home', 'create', 'armory', 'career', 'settings', 'controls', 'pause', 'ready', 'results'];
+const escHTML = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const fmtN = (n) => Math.round(n).toLocaleString('en-US');
+const signed = (n, d = 0) => (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(n).toFixed(d);
+const ptsHTML = (n) => `<span class="pts"><i aria-hidden="true"></i>${fmtN(n)}<small> pts</small></span>`;
+
+// Rank emblem: a hexagonal badge in the family colour, a glyph per family, chevrons for I–III.
+let emblemSeq = 0;
+const EMBLEM_GLYPH = [
+  '<path d="M32 18 L35 29 L46 32 L35 35 L32 46 L29 35 L18 32 L29 29 Z" fill="#fff8e8"/>',
+  '<path d="M32 16 L43 30 L32 48 L21 30 Z" fill="#f4f7f8" stroke="rgba(0,0,0,.3)" stroke-width="1.2"/><path d="M32 16 L32 48 M21 30 L43 30" stroke="rgba(0,0,0,.25)" stroke-width="1"/>',
+  '<path d="M22 44 C22 34 38 36 36 26 C35 22 31 21 30 18" fill="none" stroke="#fff3da" stroke-width="3" stroke-linecap="round"/><circle cx="30" cy="16" r="4.2" fill="#fff"/><circle cx="30" cy="16" r="7" fill="none" stroke="#fff3da" stroke-width="1.2" opacity=".7"/>',
+  '<path d="M35 14 L23 34 L31 34 L28 50 L42 28 L34 28 Z" fill="#f2fffc"/>',
+  '<path d="M32 13 L35.5 25 L47 19 L40 30 L51 34 L39 37 L44 49 L33 41 L27 51 L26 39 L14 41 L23 32 L14 23 L27 26 Z" fill="#fff1ea"/>',
+  '<circle cx="32" cy="32" r="5" fill="#fff"/><circle cx="32" cy="32" r="11" fill="none" stroke="#f3eeff" stroke-width="2.4"/><circle cx="32" cy="32" r="17" fill="none" stroke="#f3eeff" stroke-width="1.6" opacity=".7"/>',
+  '<path d="M32 12 C38 20 44 24 42 34 C41 41 36 46 32 47 C27 46 22 42 22 35 C22 29 26 27 27 22 C30 26 30 29 31 31 C33 26 33 18 32 12 Z" fill="#fff6d8"/><path d="M32 30 C35 34 37 37 35 41 C34 43 31 44 29 42 C28 39 30 36 32 30 Z" fill="#e5573f"/>',
+];
+function emblemSVG(rk, px = 56) {
+  const id = `eg${++emblemSeq}`;
+  if (rk < 0) {
+    return `<svg class="emblem" viewBox="0 0 64 64" width="${px}" height="${px}" aria-hidden="true"><path d="M32 3 L57 17 L57 47 L32 61 L7 47 L7 17 Z" fill="#1d2120" stroke="#59605a" stroke-width="2" stroke-dasharray="4 3"/><text x="32" y="41" text-anchor="middle" font-family="Chakra Petch, sans-serif" font-weight="700" font-size="24" fill="#8a918a">?</text></svg>`;
+  }
+  const r = RANKS[rk], f = RANK_FAMILIES[r.fam];
+  let chev = '';
+  for (let i = 0; i < r.tier; i++) { const y = 50 - i * 5; chev += `<path d="M24 ${y} L32 ${y + 4} L40 ${y}" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round" opacity=".9"/>`; }
+  return `<svg class="emblem" viewBox="0 0 64 64" width="${px}" height="${px}" aria-hidden="true"><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${f.col}"/><stop offset="1" stop-color="${f.col2}"/></linearGradient></defs>`
+    + `<path d="M32 3 L57 17 L57 47 L32 61 L7 47 L7 17 Z" fill="url(#${id})" stroke="rgba(0,0,0,.6)" stroke-width="2"/><path d="M32 8 L52.5 19.5 L52.5 44.5 L32 56 L11.5 44.5 L11.5 19.5 Z" fill="none" stroke="rgba(255,255,255,.38)" stroke-width="1.2"/>`
+    + `<g transform="translate(0 ${r.tier ? -4 : 0})">${EMBLEM_GLYPH[r.fam]}</g>${chev}</svg>`;
+}
+const rankName = (rk, placed) => (rk < 0 ? `Unranked · ${Math.min(placed, PLACEMENTS)}/${PLACEMENTS} placements` : RANKS[rk].name);
+const levelBadge = (lv) => `<span class="lvl" title="Level ${lv}">${lv}</span>`;
+function xpBar(lv) { return `<div class="xpbar" title="${fmtN(lv.into)} / ${fmtN(lv.need)} XP"><i style="width:${(100 * lv.into / lv.need).toFixed(1)}%"></i></div>`; }
+
+// ---------------------------------------------------------------------------
+// 3D gun preview for the armory (its own small renderer; the game's renderer keeps drawing the map).
+// ---------------------------------------------------------------------------
+const ArmoryView = {
+  renderer: null, scene: null, cam: null, models: {}, cur: null, canvas: null, raf: 0, t: 0, last: 0, running: false, failed: false,
+  init(canvas) {
+    if (this.renderer || this.failed) return !!this.renderer;
+    try { this.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true }); } catch (e) { this.failed = true; return false; }
+    this.canvas = canvas;
+    this.renderer.setClearColor(0x000000, 0);
+    this.scene = new THREE.Scene();
+    this.cam = new THREE.PerspectiveCamera(24, 2, 1, 400);
+    const key = new THREE.DirectionalLight(0xfff1dc, 1.05); key.position.set(1, 1.4, 0.8);
+    const rim = new THREE.DirectionalLight(0x9cc4ff, 0.45); rim.position.set(-1, 0.6, -1.2);
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.48), key, rim);
+    const M = vmMaterials();
+    const builders = { rifle: buildRifleVM, pistol: buildPistolVM, smg: buildSmgVM, shotgun: buildShotgunVM, sniper: buildSniperVM };
+    for (const g of ARMORY_GUNS) {
+      const Mg = vmMatsFor(M), m = builders[g](Mg);
+      vmPrepareKit(m, Mg);
+      m.root.traverse((o) => { if (o.isMesh && (o.material === Mg.glove || o.material === Mg.sleeve)) o.visible = false; });
+      for (const p of ['left', 'right', 'finger', 'shell']) if (m.parts[p]) m.parts[p].visible = false;
+      if (m.flash) m.flash.visible = false;
+      m.root.visible = false;
+      this.frame(m);
+      this.scene.add(m.root);
+      this.models[g] = m;
+    }
+    return true;
+  },
+  show(gun, def) {
+    if (!this.renderer) return;
+    for (const [g, m] of Object.entries(this.models)) m.root.visible = g === gun;
+    this.cur = this.models[gun];
+    vmApplyKit(this.cur, def);
+    this.frame(this.cur);
+    this.start();
+  },
+  // Frame the gun itself: visible, opaque meshes only (hands and glass excluded, attachments included).
+  frame(m) {
+    const box = new THREE.Box3(), tmp = new THREE.Box3(), was = m.root.visible;
+    m.root.visible = true; m.root.position.set(0, 0, 0);
+    m.root.updateMatrixWorld(true);
+    m.root.traverse((o) => {
+      if (!o.isMesh || o.material.transparent) return;
+      for (let p = o; p; p = p.parent) { if (!p.visible) return; if (p === m.root) break; }
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      box.union(tmp.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld));
+    });
+    m.root.visible = was;
+    if (box.isEmpty()) return;
+    const sz = box.getSize(new THREE.Vector3());
+    m.center = box.getCenter(new THREE.Vector3()); m.len = sz.z; m.h = sz.y;
+  },
+  start() { if (!this.running && this.renderer) { this.running = true; this.last = 0; this.raf = requestAnimationFrame((t) => this.loop(t)); } },
+  stop() { this.running = false; cancelAnimationFrame(this.raf); },
+  loop(now) {
+    if (!this.running) return;
+    this.raf = requestAnimationFrame((t) => this.loop(t));
+    const dt = this.last ? Math.min(0.1, (now - this.last) / 1000) : 0; this.last = now; this.t += dt;
+    const cv = this.canvas, w = cv.clientWidth, h = cv.clientHeight, m = this.cur;
+    if (!w || !h || !m) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { this.renderer.setPixelRatio(dpr); this.renderer.setSize(w, h, false); }
+    this.cam.aspect = w / h;
+    const tv = Math.tan(this.cam.fov * DEG / 2), dist = Math.max(m.len / 2 / (tv * this.cam.aspect) * 1.12, m.h / 2 / tv * 1.5);
+    const yaw = Math.PI / 2 + Math.sin(this.t * 0.45) * 0.38;
+    m.root.position.set(-m.center.x, -m.center.y, -m.center.z);
+    this.scene.rotation.set(0.12 + Math.sin(this.t * 0.31) * 0.04, yaw - Math.PI / 2, 0);
+    this.cam.position.set(dist, 0, 0); this.cam.lookAt(0, 0, 0); this.cam.updateProjectionMatrix();
+    this.renderer.render(this.scene, this.cam);
+  },
+};
+
+// ---------------------------------------------------------------------------
+const Menu = {
+  cur: null, stack: [], cfg: null, arm: { mode: 'loadout', gun: 'rifle', sel: null, fromCreate: false, msg: '' }, careerTab: 'overview',
+
+  init() {
+    $('sf-overlay').addEventListener('click', (e) => this.onClick(e));
+    $('sf-overlay').addEventListener('change', (e) => { if (e.target.id === 'cfg-ff') { this.cfg.ff = e.target.checked; this.renderCreate(); } });
+    this.bindSettings();
+    Profile.on(() => {
+      if (this.cur === 'home') this.renderHome();
+      else if (this.cur === 'armory') this.renderArmory();
+      else if (this.cur === 'career') this.renderCareer();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.code !== 'Escape' || Game.state === 'playing' || !this.cur) return;
+      if (['create', 'armory', 'career', 'settings', 'controls'].includes(this.cur)) { e.preventDefault(); this.back(); }
+    });
+  },
+  loading(label, frac) {
+    $('load-label').textContent = label;
+    $('load-pct').textContent = Math.round(frac * 100) + '%';
+    $('load-bar').style.width = (frac * 100).toFixed(1) + '%';
+  },
+  error(msg) {
+    this.show('loading', false);
+    $('load-label').textContent = 'Cannot start';
+    const n = $('load-note'); n.className = 'err'; n.textContent = msg;
+  },
+
+  show(name, push = true) {
+    if (push && this.cur && this.cur !== name && !['loading', 'ready', 'results'].includes(this.cur)) this.stack.push(this.cur);
+    this.cur = name;
+    $('sf-overlay').hidden = false;
+    $('sf-overlay').dataset.scr = name;
+    for (const s of SCREENS) { const el = $('scr-' + s); if (el) el.hidden = s !== name; }
+    const r = { home: 'renderHome', create: 'renderCreate', armory: 'renderArmory', career: 'renderCareer', pause: 'renderPause', results: 'renderResults', ready: 'renderReady' }[name];
+    if (r) this[r]();
+    if (name !== 'armory') ArmoryView.stop();
+    const focus = $('scr-' + name) && $('scr-' + name).querySelector('[data-autofocus]');
+    if (focus && !Input.touch.enabled) focus.focus({ preventScroll: true });
+  },
+  back() {
+    const prev = this.stack.pop() || (Game.state === 'paused' ? 'pause' : 'home');
+    this.show(prev, false);
+  },
+  home() { this.stack = []; this.show('home', false); },
+  hide() { $('sf-overlay').hidden = true; this.cur = null; this.stack = []; ArmoryView.stop(); },
+
+  onClick(e) {
+    const t = e.target.closest('button, [data-act]');
+    if (!t || t.disabled) return;
+    const d = t.dataset;
+    if (d.go) { Snd.init(); Snd.ui(); if (d.go === 'create') this.openCreate(); else if (d.go === 'loadout' || d.go === 'shop') this.openArmory(d.go, false); else this.show(d.go); return; }
+    if (d.back !== undefined) { Snd.ui(); this.back(); return; }
+    if (d.act) { Snd.init(); this.act(d.act, d, t); }
+  },
+
+  act(a, d) {
+    const c = this.cfg, A = this.arm;
+    switch (a) {
+      case 'cfg': {
+        const v = d.k === 'ranked' || d.k === 'ff' ? d.v === 'true' : d.v;
+        c[d.k] = v; Snd.ui(); this.renderCreate(); break;
+      }
+      case 'step': c[d.k] = (c[d.k] | 0) + Number(d.d); Snd.ui(); this.renderCreate(); break;
+      case 'create-next': Profile.v.lastCfg = Object.assign({}, this.normCfg(c)); Profile.save(true); this.openArmory('loadout', true); break;
+      case 'gun': A.gun = d.v; A.sel = null; A.msg = ''; Snd.ui(); this.renderArmory(); break;
+      case 'opt': {
+        const sel = { slot: d.slot, id: d.v || null };
+        const same = A.sel && A.sel.slot === sel.slot && A.sel.id === sel.id;
+        A.sel = sel; A.msg = '';
+        // in the loadout an owned option equips straight away; a locked one shows its Buy button
+        if (A.mode === 'loadout' && (!sel.id || this.owned(A.gun, sel)) && !same) Profile.equip(A.gun, sel.slot, sel.id);
+        Snd.ui(); this.renderArmory(); break;
+      }
+      case 'buy': {
+        const s = A.sel;
+        if (!s || !s.id) break;
+        const r = s.slot === 'camo' ? Profile.buy('camo', s.id) : Profile.buy('att', s.id, A.gun);
+        A.msg = r.msg;
+        if (r.ok) { Snd.buy(); Profile.equip(A.gun, s.slot, s.id); } else Snd.dry();
+        this.renderArmory(); break;
+      }
+      case 'equip': if (A.sel) { Profile.equip(A.gun, A.sel.slot, A.sel.id); Snd.ui(); this.renderArmory(); } break;
+      case 'unequip': if (A.sel) { Profile.equip(A.gun, A.sel.slot, null); A.sel = { slot: A.sel.slot, id: null }; Snd.ui(); this.renderArmory(); } break;
+      case 'start': Snd.ui(); launch(this.normCfg(Object.assign({}, this.cfg || Profile.v.lastCfg || this.defaultCfg()))); break;
+      case 'deploy': onPlayClicked(); break;
+      case 'resume': onPlayClicked(); break;
+      case 'leave': Snd.ui(); Session.leave(); break;
+      case 'again': Snd.ui(); launch(Session.cfg); break;
+      case 'home': Snd.ui(); Game.state = 'menu'; this.home(); break;
+      case 'career-tab': this.careerTab = d.v; Snd.ui(); this.renderCareer(); break;
+      case 'fullscreen': toggleFullscreen(); break;
+    }
+  },
+
+  // ---------------- home ----------------
+  renderHome() {
+    const v = Profile.v, lv = Profile.level(), rk = Profile.rank();
+    $('home-card').innerHTML = `
+      <div class="hc-top">${emblemSVG(rk, 64)}<div><div class="hc-rank">${escHTML(rankName(rk, v.placed))}</div><div class="hc-elo">${rk < 0 ? 'Play ranked matches to place' : `${fmtN(v.elo)} Elo · peak ${fmtN(v.peak)}`}</div></div></div>
+      <div class="hc-level">${levelBadge(lv.level)}<div class="hc-xp"><div class="hc-xpl"><span>Level ${lv.level}</span><span>${fmtN(lv.into)} / ${fmtN(lv.need)} XP</span></div>${xpBar(lv)}</div></div>
+      <div class="hc-foot">${ptsHTML(v.points)}<span class="sync">${escHTML(Profile.syncLabel())}</span></div>`;
+    $('home-points').innerHTML = `${fmtN(v.points)} points to spend`;
+    const L = Game.L;
+    $('home-map').textContent = L ? `${L.name}` : '';
+  },
+
+  // ---------------- create game ----------------
+  defaultCfg() { return { map: 'depot', mode: 'defuse', ranked: false, diff: 'normal', team: '1', allies: 4, enemies: 5, len: 'standard', ff: false }; },
+  openCreate() {
+    const last = Profile.v.lastCfg;
+    this.cfg = this.normCfg(Object.assign(this.defaultCfg(), last && typeof last === 'object' ? last : {}));
+    this.show('create');
+  },
+  normCfg(c) {
+    if (!MAPS[c.map]) c.map = 'depot';
+    if (!DIFFS[c.diff]) c.diff = 'normal';
+    if (c.mode !== 'defuse' && c.mode !== 'skirmish') c.mode = 'defuse';
+    if (c.mode !== 'defuse') c.ranked = false;
+    if (c.ranked) { c.allies = 4; c.enemies = 5; c.ff = false; if (MAPS[c.map].practice) c.map = 'depot'; }
+    c.allies = clamp(c.allies | 0, 0, 4); c.enemies = clamp(c.enemies | 0, 1, 5);
+    if (!['0', '1', 'r'].includes(String(c.team))) c.team = '1';
+    c.team = String(c.team);
+    if (c.len !== 'short') c.len = 'standard';
+    return c;
+  },
+  renderCreate() {
+    const c = this.normCfg(this.cfg), el = $('scr-create'), def = c.mode === 'defuse';
+    const seg = (key, opts, val, dis) => `<div class="seg" role="group">${opts.map(([v, label, sub]) => `<button type="button" data-act="cfg" data-k="${key}" data-v="${v}" aria-pressed="${String(val) === String(v)}"${dis ? ' disabled' : ''}><b>${label}</b>${sub ? `<small>${sub}</small>` : ''}</button>`).join('')}</div>`;
+    const maps = MAP_LIST.filter((k) => MAPS[k]).map((k) => {
+      const m = MAPS[k], dis = c.ranked && m.practice;
+      return `<button type="button" class="mapcard" data-act="cfg" data-k="map" data-v="${k}" aria-pressed="${c.map === k}"${dis ? ' disabled' : ''}><img src="${Radar.thumbURL(k)}" alt=""><b>${escHTML(m.name)}</b><small>${escHTML(m.blurb)}</small></button>`;
+    }).join('');
+    const stepper = (k, label, lo, hi) => `<div class="stepper"><span>${label}</span><button type="button" data-act="step" data-k="${k}" data-d="-1" aria-label="Fewer"${c.ranked || c[k] <= lo ? ' disabled' : ''}>−</button><b>${c[k]}</b><button type="button" data-act="step" data-k="${k}" data-d="1" aria-label="More"${c.ranked || c[k] >= hi ? ' disabled' : ''}>+</button></div>`;
+    const pv = def ? Rewards.preview(c, Profile.v.elo, Profile.v.placed) : null, placing = c.ranked && Profile.v.placed < PLACEMENTS;
+    const teamName = c.team === 'r' ? 'a random side' : `the ${TEAMS[Number(c.team)].name}`;
+    const summary = def
+      ? `<b>${c.ranked ? 'Ranked' : 'Casual'}</b> · ${escHTML(MAPS[c.map].name)} · ${1 + c.allies}v${c.enemies} · ${DIFFS[c.diff].name} bots · ${c.len === 'short' ? 'first to 9' : 'first to 16'} · you play ${teamName}<br>
+         <span class="elo-pv">Typical result: win <em class="up">${signed(pv.win)}</em> · loss <em class="down">${signed(pv.loss)}</em> Elo${placing ? ` · placement match ${Profile.v.placed + 1} of ${PLACEMENTS}` : ''}${c.ranked ? '' : ' · casual matches count a quarter'}</span>`
+      : `<b>Skirmish</b> · ${escHTML(MAPS[c.map].name)} · respawns, no rounds · ${DIFFS[c.diff].name} bots · practice XP only, no Elo`;
+    el.innerHTML = `<div class="sheet wide">
+      <header class="sheet-head"><button type="button" class="btn ghost back" data-back>‹ Back</button><h2>Create game</h2><span class="head-aside">${ptsHTML(Profile.v.points)}</span></header>
+      <div class="sheet-body">
+        <h3 class="sect">Map</h3><div class="maps">${maps}</div>
+        <div class="cfg-grid">
+          <div class="cfg"><h3 class="sect">Mode</h3>${seg('mode', [['defuse', 'Defuse', 'Rounds · money · the charge'], ['skirmish', 'Skirmish', 'Respawns · practice']], c.mode)}</div>
+          <div class="cfg"><h3 class="sect">Match type</h3>${seg('ranked', [['false', 'Casual', 'Your rules · Elo ×¼'], ['true', 'Ranked', '5v5 · full Elo']], c.ranked, !def)}</div>
+          <div class="cfg wide"><h3 class="sect">Bot difficulty</h3>${seg('diff', DIFF_ORDER.map((k) => [k, DIFFS[k].name, `Rating ${DIFFS[k].elo}`]), c.diff)}<p class="note">${DIFFS[c.diff].blurb}. Harder bots pay more XP and are worth more Elo.</p></div>
+          <div class="cfg"><h3 class="sect">Length</h3>${seg('len', [['short', 'Short', 'First to 9'], ['standard', 'Standard', 'First to 16']], c.len, !def)}</div>
+          <div class="cfg"><h3 class="sect">Your side</h3>${seg('team', [['1', 'Wardens', 'Defend'], ['0', 'Raiders', 'Attack'], ['r', 'Random', 'Either']], c.team)}</div>
+          <div class="cfg"><h3 class="sect">Players${c.ranked ? ' <small>(ranked: 5v5)</small>' : ''}</h3>${stepper('allies', 'Bot teammates', 0, 4)}${stepper('enemies', 'Bot opponents', 1, 5)}</div>
+          <div class="cfg"><h3 class="sect">Rules</h3><label class="check"><input type="checkbox" id="cfg-ff"${c.ff ? ' checked' : ''}${c.ranked ? ' disabled' : ''}> Friendly fire${c.ranked ? ' (off in ranked)' : ''}</label></div>
+        </div>
+      </div>
+      <footer class="sheet-foot"><p class="summary">${summary}</p><div class="actions"><button type="button" class="btn" data-back>Back</button><button type="button" class="btn primary" data-act="create-next" data-autofocus>Next: loadout ›</button></div></footer>
+    </div>`;
+  },
+
+  // ---------------- armory (loadout + shop) ----------------
+  openArmory(mode, fromCreate) { Object.assign(this.arm, { mode, fromCreate, sel: null, msg: '' }); this.show('armory'); },
+  owned(gun, sel) { return !sel.id || (sel.slot === 'camo' ? Profile.owns('camo', sel.id) : Profile.owns('att', `${gun}:${sel.id}`)); },
+  optionsFor(gun, slot) {
+    if (slot === 'camo') return [null, ...Object.keys(CAMOS)];
+    return [null, ...Object.values(ATTACHMENTS).filter((a) => a.slot === slot && a.guns.includes(gun)).map((a) => a.id)];
+  },
+  renderArmory() {
+    const A = this.arm, gun = A.gun, shop = A.mode === 'shop', kit = Arsenal.kitFor(gun), v = Profile.v;
+    const sel = A.sel, pkit = sel ? Object.assign({}, kit, { [sel.slot]: sel.id }) : kit;
+    const base = WEAPONS[gun], cur = Arsenal.def(gun, kit), prev = Arsenal.def(gun, pkit);
+    $('arm-title').textContent = shop ? 'Shop' : A.fromCreate ? 'Loadout for this match' : 'Loadout';
+    $('arm-points').innerHTML = ptsHTML(v.points);
+    $('arm-guns').innerHTML = ARMORY_GUNS.map((g) => {
+      const k = Arsenal.kitFor(g), n = ATT_SLOTS.filter((s) => k[s.id]).length;
+      return `<button type="button" data-act="gun" data-v="${g}" aria-pressed="${g === gun}">${WeaponIcons.img(g)}<b>${WEAPONS[g].name}</b><small>${n ? `${n} attachment${n > 1 ? 's' : ''}` : 'Stock'}${k.camo ? ` · ${CAMOS[k.camo].name}` : ''}</small></button>`;
+    }).join('');
+    // slots
+    const chip = (slot, id) => {
+      const eq = (kit[slot] || null) === id, own = this.owned(gun, { slot, id }), selc = sel && sel.slot === slot && sel.id === id;
+      const name = id ? (slot === 'camo' ? CAMOS[id].name : attName(id, gun)) : slot === 'camo' ? 'Factory finish' : 'None';
+      const price = id ? (slot === 'camo' ? CAMOS[id].price : attPrice(id, gun)) : 0;
+      const tag = eq ? 'Equipped' : own ? (shop && id ? 'Owned' : 'Equip') : `${fmtN(price)} pts`;
+      const sw = slot === 'camo' ? `<i class="sw" style="${id ? `background-image:url(${this.camoURL(id)})` : ''}"></i>` : '';
+      return `<button type="button" class="chip${eq ? ' eq' : ''}${own ? '' : ' lock'}${selc ? ' sel' : ''}" data-act="opt" data-slot="${slot}" data-v="${id || ''}" aria-pressed="${eq}">${sw}<b>${escHTML(name)}</b><small>${tag}</small></button>`;
+    };
+    const slots = ATT_SLOTS.map((s) => ({ id: s.id, name: s.name })).concat([{ id: 'camo', name: 'Camo' }]);
+    $('arm-slots').innerHTML = slots.map((s) => {
+      const opts = this.optionsFor(gun, s.id);
+      if (opts.length <= 1) return `<div class="slot"><h3 class="sect">${s.name}</h3><p class="note">No ${s.name.toLowerCase()} options for this gun.</p></div>`;
+      return `<div class="slot${s.id === 'camo' ? ' camo' : ''}"><h3 class="sect">${s.name}${s.id === 'camo' ? ' <small>unlocks for every gun</small>' : ''}</h3><div class="chips">${opts.map((id) => chip(s.id, id)).join('')}</div></div>`;
+    }).join('');
+    // detail of the selected option
+    let det = '';
+    if (sel && sel.id) {
+      const own = this.owned(gun, sel), eq = (kit[sel.slot] || null) === sel.id;
+      const price = sel.slot === 'camo' ? CAMOS[sel.id].price : attPrice(sel.id, gun);
+      let title, sub, pros = [], cons = [];
+      if (sel.slot === 'camo') { const cm = CAMOS[sel.id]; title = cm.name; sub = `${CAMO_TIERS[cm.tier]} camo · cosmetic`; }
+      else { const at = ATTACHMENTS[sel.id]; title = attName(sel.id, gun); sub = `${at.kind} · ${ATT_SLOTS.find((s) => s.id === at.slot).name}`; pros = attPros(at, gun); cons = attCons(at, gun); }
+      const btn = eq ? `<button type="button" class="btn" data-act="unequip">Remove</button>`
+        : own ? `<button type="button" class="btn primary" data-act="equip">Equip</button>`
+          : `<button type="button" class="btn primary" data-act="buy"${v.points < price ? ' disabled' : ''}>Buy · ${fmtN(price)} pts</button>`;
+      det = `<div class="det-head"><div><b>${escHTML(title)}</b><small>${escHTML(sub)}</small></div>${btn}</div>
+        <ul class="pc">${pros.map((p) => `<li class="pro">${escHTML(p)}</li>`).join('')}${cons.map((p) => `<li class="con">${escHTML(p)}</li>`).join('')}</ul>
+        ${!own && v.points < price ? `<p class="note">You need ${fmtN(price - v.points)} more points. Every level-up pays points; play matches to level up.</p>` : ''}`;
+    } else {
+      det = `<p class="note">${shop ? 'Pick an attachment or camo to see what it does, then buy it with points. Attachments are bought per gun; camos unlock for every gun.' : 'Choose what this gun carries. Owned options equip on click; locked ones show their price. Your loadout is used whenever you buy this gun.'}</p>`;
+    }
+    if (A.msg) det += `<p class="msg">${escHTML(A.msg)}</p>`;
+    $('arm-detail').innerHTML = det;
+    // stats: stock → equipped (bar) and the selection's change (delta)
+    const s0 = Arsenal.stats(base), s1 = Arsenal.stats(cur), s2 = Arsenal.stats(prev);
+    $('arm-stats').innerHTML = s0.map((st, i) => {
+      const a = s1[i].v, b = s2[i].v, w = (x) => (100 * clamp(x / st.max, 0, 1)).toFixed(1), dlt = b - a, better = st.lower ? dlt < 0 : dlt > 0;
+      const dTxt = Math.abs(dlt) > 1e-6 ? `<em class="${better ? 'up' : 'down'}">${dlt > 0 ? '+' : '−'}${String(st.fmt(Math.abs(dlt))).replace(/ (rpm|u\/s|s)$/, '')}</em>` : '';
+      return `<div class="stat-row"><span>${st.name}</span><div class="sbar"><i style="width:${w(Math.min(a, b))}%"></i><b class="${better ? 'up' : 'down'}" style="left:${w(Math.min(a, b))}%;width:${(w(Math.max(a, b)) - w(Math.min(a, b))).toFixed(1)}%"></b></div><span class="sv">${st.fmt(b)} ${dTxt}</span></div>`;
+    }).join('');
+    $('arm-name').innerHTML = `<b>${base.name}</b><small>${ATT_SLOTS.map((s) => (pkit[s.id] ? attName(pkit[s.id], gun) : '')).filter(Boolean).join(' · ') || 'Stock'}${pkit.camo ? ` · ${CAMOS[pkit.camo].name}` : ''}</small>`;
+    $('arm-foot').innerHTML = A.fromCreate
+      ? `<p class="summary">Attachments apply to the guns you buy during the match. Bots carry stock guns.</p><div class="actions"><button type="button" class="btn" data-back>Back</button><button type="button" class="btn primary" data-act="start" data-autofocus>Start match ›</button></div>`
+      : `<p class="summary">${shop ? 'Earn points by levelling up: XP comes from eliminations, damage, rounds and wins.' : 'Locked options can be bought here too.'}</p><div class="actions"><button type="button" class="btn" data-go="${shop ? 'loadout' : 'shop'}">${shop ? 'Open loadout' : 'Open shop'}</button><button type="button" class="btn primary" data-back>Done</button></div>`;
+    if (ArmoryView.init($('arm-canvas'))) ArmoryView.show(gun, prev);
+    else $('arm-canvas').hidden = true;
+  },
+  camoURL(id) {
+    if (!this.camoURLs) this.camoURLs = {};
+    if (!this.camoURLs[id]) { const cv = Arsenal.camoCanvas(id), sm = makeCanvas(64); sm.getContext('2d').drawImage(cv, 0, 0, 64, 64); this.camoURLs[id] = sm.toDataURL(); }
+    return this.camoURLs[id];
+  },
+
+  // ---------------- career ----------------
+  renderCareer() {
+    const v = Profile.v, s = v.stats, lv = Profile.level(), rk = Profile.rank(), el = $('scr-career');
+    const nextRk = rk >= 0 && rk < RANKS.length - 1 ? RANKS[rk + 1] : null, curMin = rk >= 0 ? RANKS[rk].min : 0;
+    const prog = nextRk ? clamp((v.elo - curMin) / (nextRk.min - curMin), 0, 1) : 1;
+    const kd = s.deaths ? (s.kills / s.deaths).toFixed(2) : s.kills ? '∞' : '—', adr = s.rounds ? Math.round(s.damage / s.rounds) : 0;
+    const hsp = s.kills ? Math.round(100 * s.hs / s.kills) : 0, wr = s.matches ? Math.round(100 * s.wins / s.matches) : 0;
+    const tile = (label, val) => `<div class="tile"><small>${label}</small><b>${val}</b></div>`;
+    const hist = v.history.length ? `<table class="hist"><thead><tr><th>Result</th><th>Map</th><th>Type</th><th>Score</th><th>K–D</th><th>ADR</th><th>XP</th><th>Elo</th></tr></thead><tbody>${v.history.map((h) => {
+      const res = { win: 'Win', loss: 'Loss', draw: 'Draw', left: 'Left' }[h.outcome] || h.outcome;
+      return `<tr class="${h.outcome}"><td>${res}</td><td>${escHTML(MAPS[h.map] ? MAPS[h.map].name : h.map)}</td><td>${h.ranked ? 'Ranked' : 'Casual'} · ${(DIFFS[h.diff] || DIFFS.normal).name}</td><td>${h.score ? `${h.score[0]}–${h.score[1]}` : '—'}</td><td>${h.k}–${h.d}</td><td>${h.adr}</td><td>+${fmtN(h.xp)}</td><td class="${h.elo > 0 ? 'up' : h.elo < 0 ? 'down' : ''}">${h.elo === null || h.elo === undefined ? '—' : signed(h.elo)}</td></tr>`;
+    }).join('')}</tbody></table>` : '<p class="note">No matches yet. Defuse matches show up here with their XP and Elo.</p>';
+    const ladder = RANKS.map((r, i) => `<div class="rung${i === rk ? ' on' : ''}">${emblemSVG(i, 30)}<span>${r.name}</span><small>${r.min ? fmtN(r.min) : '0'}+</small></div>`).reverse().join('');
+    el.innerHTML = `<div class="sheet wide">
+      <header class="sheet-head"><button type="button" class="btn ghost back" data-back>‹ Back</button><h2>Career</h2><span class="head-aside">${ptsHTML(v.points)}</span></header>
+      <div class="sheet-body career">
+        <div class="car-top">
+          <div class="car-rank">${emblemSVG(rk, 96)}<div><small>Rank</small><b>${escHTML(rankName(rk, v.placed))}</b><span>${rk < 0 ? `Elo ${fmtN(v.elo)} (hidden until placed)` : `${fmtN(v.elo)} Elo · peak ${fmtN(v.peak)}`}</span>
+            ${nextRk ? `<div class="xpbar rank"><i style="width:${(prog * 100).toFixed(1)}%"></i></div><small>${rk < 0 ? '' : `${fmtN(Math.max(0, nextRk.min - v.elo))} to ${nextRk.name}`}</small>` : ''}</div></div>
+          <div class="car-level">${levelBadge(lv.level)}<div><small>Level</small><b>Level ${lv.level}</b><span>${fmtN(lv.into)} / ${fmtN(lv.need)} XP · next level pays ${fmtN(LEVELS.points(lv.level + 1))} points</span>${xpBar(lv)}</div></div>
+        </div>
+        <div class="tiles">${tile('Matches', fmtN(s.matches))}${tile('Win rate', `${wr}%`)}${tile('W–L–D', `${s.wins}–${s.losses + s.left}–${s.draws}`)}${tile('Ranked played', fmtN(s.ranked))}
+          ${tile('Eliminations', fmtN(s.kills))}${tile('K/D', kd)}${tile('Damage / round', adr)}${tile('Headshot %', `${hsp}%`)}${tile('Charges planted', fmtN(s.plants))}${tile('Charges defused', fmtN(s.defuses))}</div>
+        <div class="car-cols"><div><h3 class="sect">Recent matches</h3>${hist}</div><div><h3 class="sect">Ranks</h3><div class="ladder">${ladder}</div>
+          <p class="note">Elo moves with every defuse match: winning against higher-rated bots moves it most, and your eliminations, damage and objectives add to it. Ranked matches count fully, casual ones a quarter. The first ${PLACEMENTS} ranked matches are placements and count double.</p></div></div>
+      </div>
+    </div>`;
+  },
+
+  // ---------------- pause / ready ----------------
+  renderPause() {
+    const c = Session.cfg, M = Match, me = Actors.me;
+    let info = 'Practice';
+    if (Session.active && c) {
+      info = `${c.ranked ? 'Ranked' : c.mode === 'defuse' ? 'Casual' : 'Skirmish'} · ${escHTML(Game.L.name)} · ${DIFFS[c.diff].name} bots`;
+      if (M.active) info += ` · round ${M.round} · ${M.score[me.squad]}–${M.score[1 - me.squad]}`;
+    }
+    $('pause-info').innerHTML = info;
+    const ranked = Session.active && c && c.ranked && !Session.done;
+    $('pause-warn').hidden = !ranked;
+    $('btn-leave').textContent = Session.active && !Session.done ? 'Leave match' : 'Main menu';
+  },
+  renderReady() { $('ready-map').textContent = Game.L ? Game.L.name : ''; $('ready-info').textContent = Session.cfg ? `${Session.cfg.ranked ? 'Ranked' : Session.cfg.mode === 'defuse' ? 'Casual' : 'Skirmish'} · ${DIFFS[Session.cfg.diff].name} bots` : ''; },
+
+  // ---------------- results ----------------
+  renderResults() {
+    const R0 = Session.results, el = $('scr-results');
+    if (!R0) { el.innerHTML = ''; return; }
+    const { outcome, cfg, st, xp, ups, lv0, lv1, elo } = R0;
+    const title = { win: 'Victory', loss: 'Defeat', draw: 'Draw', left: 'Match left', none: 'Match left', practice: 'Practice over' }[outcome] || 'Match over';
+    const adr = st.rounds ? Math.round(st.dmg / st.rounds) : 0, hsp = st.kills ? Math.round(100 * st.hs / st.kills) : 0;
+    const tile = (label, val) => `<div class="tile"><small>${label}</small><b>${val}</b></div>`;
+    const xpLines = xp.lines.map((l) => `<li><span>${escHTML(l.label)}</span><b>+${fmtN(l.v)}</b></li>`).join('') || '<li><span>Nothing earned</span><b>0</b></li>';
+    const lvlPct = (100 * lv1.into / lv1.need).toFixed(1), lvl0Pct = lv1.level === lv0.level ? (100 * lv0.into / lv0.need).toFixed(1) : '0';
+    const upsHTML = ups.length ? `<div class="lvlups">${ups.map((u) => `<div class="lvlup">${levelBadge(u.level)}<span class="lu-t">Level ${u.level}</span>${ptsHTML(u.points)}</div>`).join('')}</div>` : '';
+    let eloHTML = '';
+    if (elo) {
+      const rk0 = R0.rank0, rk1 = R0.rank1, up = elo.delta >= 0;
+      const partList = elo.parts.filter((p) => Math.abs(p.v) > 0.05).map((p) => `<li class="sub"><span>${escHTML(p.label)}</span><b>${signed(p.v, 1)}</b></li>`).join('');
+      eloHTML = `<div class="res-box"><h3 class="sect">Rank · ${escHTML(elo.modeLabel)}</h3>
+        <div class="res-rank">${emblemSVG(rk0, 56)}<span class="arrow">›</span>${emblemSVG(rk1, 72)}<div><b>${escHTML(rankName(rk1, R0.placed1))}</b><span>${fmtN(R0.elo0)} → ${fmtN(R0.elo1)} Elo <em class="${up ? 'up' : 'down'}">${signed(elo.delta)}</em></span>${rk1 > rk0 && rk0 >= 0 ? '<span class="promo">Promoted</span>' : rk1 < rk0 && rk1 >= 0 ? '<span class="demo">Demoted</span>' : rk0 < 0 && rk1 >= 0 ? '<span class="promo">Placed</span>' : ''}</div></div>
+        <ul class="lines">${elo.lines.map((l) => `<li><span>${escHTML(l.label)}</span><b>${signed(l.v, 1)}</b></li>`).join('')}${partList}<li class="tot"><span>Elo change</span><b>${signed(elo.delta)}</b></li></ul></div>`;
+    }
+    el.innerHTML = `<div class="sheet wide results ${outcome}">
+      <header class="res-head"><div><small>${escHTML(MAPS[cfg.map] ? MAPS[cfg.map].name : '')} · ${cfg.mode === 'defuse' ? (cfg.ranked ? 'Ranked' : 'Casual') : 'Skirmish'} · ${DIFFS[cfg.diff].name} bots</small><h2>${title}</h2></div>${st.score ? `<div class="res-score">${st.score[0]}<i>–</i>${st.score[1]}</div>` : ''}</header>
+      <div class="sheet-body">
+        <div class="tiles">${tile('Eliminations', st.kills)}${tile('Deaths', st.deaths)}${tile('Damage / round', adr)}${tile('Headshot %', `${hsp}%`)}${cfg.mode === 'defuse' ? tile('Rounds won', st.roundsWon) + tile('Planted', st.plants) + tile('Defused', st.defuses) : ''}</div>
+        <div class="res-cols">
+          <div class="res-box"><h3 class="sect">Experience · ${xp.mults.map(escHTML).join(' · ')}</h3><ul class="lines">${xpLines}<li class="tot"><span>Total XP${xp.k !== 1 ? ` (×${xp.k.toFixed(2)})` : ''}</span><b>+${fmtN(xp.total)}</b></li></ul>
+            <div class="res-level">${levelBadge(lv1.level)}<div><div class="hc-xpl"><span>Level ${lv1.level}</span><span>${fmtN(lv1.into)} / ${fmtN(lv1.need)} XP</span></div><div class="xpbar anim"><i style="--from:${lvl0Pct}%;width:${lvlPct}%"></i></div></div></div>
+            ${upsHTML}<p class="note">Points: ${ptsHTML(R0.pointsNow)} · spend them in the shop.</p></div>
+          ${eloHTML || `<div class="res-box"><h3 class="sect">Rank</h3><p class="note">${cfg.mode === 'defuse' ? 'This match ended before it started, so your rating did not change.' : 'Skirmish is practice: it pays some XP but never changes your Elo. Play a defuse match to move your rank.'}</p></div>`}
+        </div>
+      </div>
+      <footer class="sheet-foot"><p class="summary">${outcome === 'left' && cfg.ranked ? 'Leaving a ranked match counts as a loss.' : ''}</p><div class="actions"><button type="button" class="btn" data-go="shop">Shop</button><button type="button" class="btn" data-act="home">Main menu</button><button type="button" class="btn primary" data-act="again" data-autofocus>Play again</button></div></footer>
+    </div>`;
+  },
+
+  // ---------------- settings (same controls as before) ----------------
+  bindSettings() {
+    const s = Settings.v;
+    const range = (id, key, fmt, scale = 1) => {
+      const el = $(id), out = $('out-' + id.slice(4));
+      el.value = s[key] * scale; if (out) out.textContent = fmt(s[key]);
+      el.addEventListener('input', () => { const v = parseFloat(el.value) / scale; Settings.set(key, v); if (out) out.textContent = fmt(v); });
+    };
+    const check = (id, key) => { const el = $(id); el.checked = s[key]; el.addEventListener('change', () => Settings.set(key, el.checked)); };
+    const select = (id, key, num) => { const el = $(id); el.value = String(s[key]); el.addEventListener('change', () => Settings.set(key, num ? parseFloat(el.value) : el.value)); };
+    range('set-sens', 'sensitivity', (v) => v.toFixed(2));
+    check('set-invert', 'invertY'); check('set-raw', 'rawInput');
+    range('set-fov', 'fov', (v) => `${Math.round(v)}°`);
+    select('set-aspect', 'aspect');
+    range('set-vmfov', 'vmFov', (v) => `${Math.round(v)}°`);
+    range('set-rscale', 'renderScale', (v) => `${Math.round(v)}%`);
+    select('set-dpr', 'maxDpr', true);
+    select('set-xhstyle', 'xhStyle'); select('set-xhcolor', 'xhColor');
+    range('set-xhsize', 'xhSize', (v) => `${v}px`); range('set-xhgap', 'xhGap', (v) => `${v}px`); range('set-xhthick', 'xhThick', (v) => `${v}px`);
+    check('set-xhdot', 'xhDot'); check('set-xhoutline', 'xhOutline'); check('set-xhrecoil', 'xhRecoil');
+    range('set-vol', 'volume', (v) => `${Math.round(v)}%`);
+    check('set-fps', 'showFps'); check('set-speed', 'showSpeed');
+    Settings.on((k) => {
+      if (['fov', 'aspect', 'vmFov', 'renderScale', 'maxDpr'].includes(k)) R.resize();
+      if (k.startsWith('xh')) HUD.applyCrosshairStyle();
+      if (k === 'volume') Snd.setVolume();
+      if (k === 'showFps' || k === 'showSpeed' || k === 'showHints') HUD.applyToggles();
+      // the old Match-tab options still work from the test hooks
+      if (k === 'team') Actors.setTeam(Settings.v.team);
+      if (k === 'ff') Actors.ff = !!Settings.v.ff;
+      if (k === 'mode') Match.setMode(Settings.v.mode);
+      if (k === 'matchLen' && Match.active) Match.startMatch();
+    });
+  },
+};
+
+function toggleFullscreen() {
+  (async () => {
+    try {
+      if (!document.fullscreenElement) { await document.documentElement.requestFullscreen(); if (navigator.keyboard && navigator.keyboard.lock) navigator.keyboard.lock().catch(() => {}); }
+      else await document.exitFullscreen();
+    } catch (e) { HUD.note('Fullscreen is not available here'); }
+  })();
+}
+
 // ==== 30-main.js ====
 // Boot sequence, fixed-tick simulation (64 Hz) with interpolated rendering, game state.
 
@@ -7944,14 +9706,14 @@ function fireShot(actor, w, e) {
   let mz;
   if (actor.isMe) {
     Ents.stats.shots++;
-    Snd.shot(def.sound);
+    Snd.shot(def.sound, null, def.suppressed);
     Viewmodel.onShot(w);
     mz = Viewmodel.anchorWorld('muzzle', 22, [0, 0, 0]) || [eye[0] + dir[0] * 22, eye[1] + dir[1] * 22, eye[2] + dir[2] * 22];
   } else {
     actor.model.fire();
     mz = actor.model.muzzleWorld([0, 0, 0]);
-    Snd.shot(def.sound, mz);
-    FX.worldFlash(mz, dir, def.flash);
+    Snd.shot(def.sound, mz, def.suppressed);
+    if (!def.suppressed) FX.worldFlash(mz, dir, def.flash);
   }
   if (!def.ejectOn) ejectShell(actor, w);
   DLights.add(mz[0], mz[1], mz[2], [1.0, 0.62, 0.3], 240 * def.flash + 40, 0.06);
@@ -8092,6 +9854,7 @@ function deathCam(me, cam, eye) {
 
 function frame(now) {
   requestAnimationFrame(frame);
+  if (Game.state === 'loading' || !Game.L || !Game.L.probes) { Game.last = 0; return; }   // a map is being built
   const t = now / 1000;
   const dt = Math.min(Game.last ? t - Game.last : 1 / 60, 0.1);
   Game.last = t;
@@ -8109,7 +9872,8 @@ function frame(now) {
   } else { Game.look[0] = Game.look[1] = 0; }
   Game.acc += dt;
   let n = 0;
-  const paused = Game.freeze || (Match.active && Game.state !== 'playing');
+  const inMenu = Game.state === 'menu' || Game.state === 'results' || Game.state === 'loading';
+  const paused = Game.freeze || inMenu || (Match.active && Game.state !== 'playing');
   const ts = performance.now();
   while (!paused && Game.acc >= TICK && n < 8) { simTick(TICK); Game.acc -= TICK; n++; }
   const simT = performance.now() - ts;
@@ -8120,7 +9884,8 @@ function frame(now) {
   const w = Game.loadout.active, vf = w.kind === 'gun' ? w.def.recoil.viewFrac : 0;
   pl.updateView(dt);
   const eye = pl.eye(Game.alpha, Game.eye), cam = R.camera;
-  if (Game.spectate) {
+  if (inMenu) MenuCam.update(dt, cam);
+  else if (Game.spectate) {
     const sv = Game.spectate;
     if (sv.follow) { const f = sv.follow.player.pos; sv.pos = [f[0] + sv.off[0], f[1] + sv.off[1], f[2] + sv.off[2]]; }
     cam.position.set(sv.pos[0], sv.pos[1], sv.pos[2]); cam.rotation.set(sv.pitch, sv.yaw, 0);
@@ -8138,6 +9903,7 @@ function frame(now) {
   Ents.render(Game.alpha);
   Items.render(); Bomb.render();
   Grenades.render(Game.alpha);
+  Actors.hidden = inMenu;
   Actors.render(dt, Game.alpha);
   if (window.__SF) for (const mq of window.__SF.mannequins) {
     mq.pm.update(dt, mq.st);
@@ -8145,7 +9911,8 @@ function frame(now) {
   }
   const zf = me.alive && !Game.spectate && w.kind === 'gun' ? w.scopeFov() : 0;   // after this frame's ticks
   R.setZoom(zf); HUD.scope(zf);
-  Viewmodel.rig.visible = me.alive && !Game.spectate && !zf;
+  Viewmodel.rig.visible = me.alive && !Game.spectate && !zf && !inMenu;
+  if (!inMenu) $('sf-fade').style.opacity = '0';
   Viewmodel.update(dt, pl, w, Game.look, eye, Game.alpha);
   FX.update(Game.freezeFx ? 0 : dt);
   const f = viewDir(pl);
@@ -8159,7 +9926,7 @@ function frame(now) {
     if (Bomb.canDefuse(me) && Bomb.defuser !== me) prompt = `Hold E to defuse the charge (${me.kit ? 5 : 10} s)`;
     else if (!prompt && hw.kind === 'charge' && hw.state !== 'plant') prompt = Bomb.siteAt(me.player.pos) ? 'Hold Mouse 1 to plant the charge' : 'Carry the charge to site A or B';
   }
-  HUD.update(dt, pl, Game.loadout, prompt, cam);
+  if (!inMenu) HUD.update(dt, pl, Game.loadout, prompt, cam);
   const tR = performance.now();
   R.render();
   const t1 = performance.now();
@@ -8176,14 +9943,20 @@ function startPlaying() {
   if (Input.touch.enabled) $('sf-touch').hidden = false;
 }
 
+function releasePointer() {
+  Input.active = false; Input.releaseAll(); Input.exitLock();
+  document.body.classList.remove('playing');
+  $('sf-touch').hidden = true;
+  HUD.show(false);
+}
+
 function pause() {
   if (Game.state !== 'playing') return;
   if (BuyMenu.open) BuyMenu.toggle(false);
   Game.state = 'paused';
-  Input.active = false; Input.releaseAll();
-  document.body.classList.remove('playing');
-  $('sf-touch').hidden = true;
-  Menu.showMain(true);
+  releasePointer();
+  Menu.stack = [];
+  Menu.show('pause', false);
 }
 
 function onPlayClicked() {
@@ -8200,6 +9973,134 @@ function populateBots() {
   for (let i = 0; i < (defuse ? 4 : 2); i++) Actors.addBot(mine);
 }
 
+// Build, light and upload a map in place (no page reload). from/to map the progress bar.
+async function loadMap(key, from = 0, to = 1) {
+  if (!MAPS[key]) key = 'depot';
+  const def = MAPS[key], first = !Game.L, P = (f) => from + (to - from) * f;
+  Game.state = 'loading';
+  Menu.show('loading', false);
+  $('load-map').textContent = def.name;
+  $('load-note').className = 'note'; $('load-note').textContent = `${def.name}: ${def.blurb}.`;
+  if (!first) { if (BuyMenu.open) BuyMenu.toggle(false); Items.clear(); Grenades.clear(); Bomb.reset(); Actors.removeBots(); R.newScene(); }
+  Menu.loading(`Building ${def.name}`, P(0.02)); await yieldUI();
+  const L = compileLevel(def.build(), Game.tex);
+  L.name = def.name; L.key = key;
+  Game.L = L;
+  const bake = await bakeLighting(L, (f) => Menu.loading('Compiling lighting', P(0.04 + f * 0.84)));
+  L.probes = bake.probes; L.bakeStats = bake.stats;
+  Menu.loading('Mapping bot routes', P(0.9)); await yieldUI();
+  Nav.build(L);
+  Radar.build(L);
+  Menu.loading('Uploading to the GPU', P(0.96)); await yieldUI();
+  R.buildWorld(L, bake);
+  FX.init(L); Ents.init(L); Grenades.init(L); Items.init();
+  if (first) {
+    Viewmodel.build(); WeaponIcons.build();
+    Game.player = new Player(L.cw);
+    Game.loadout = new Loadout(undefined, (id) => Arsenal.def(id));
+  } else Game.player.cw = L.cw;
+  Actors.init();
+  Game.player.maxSpeed = Game.loadout.active.def.maxSpeed;
+  MenuCam.reset(L);
+  HUD.el['hud-tag'].textContent = L.name;
+  Menu.loading('Ready', P(1));
+}
+
+// One match as the player set it up in Create Game: roster, side, rules; rewards at the end.
+const Session = {
+  active: false, cfg: null, done: false, results: null, resultsT: 0,
+  stats(me) {
+    const M = Match;
+    return { kills: me.kills, deaths: me.deaths, hs: me.hs, dmg: me.dmg, plants: me.plants, defuses: me.defuses,
+      rounds: M.active ? M.history.length : 0, roundsWon: M.active ? M.score[me.squad] : 0,
+      score: M.active ? [M.score[me.squad], M.score[1 - me.squad]] : null };
+  },
+  // Map already loaded: sets everything up synchronously (so the click can still capture the mouse).
+  begin(cfg) {
+    cfg = Object.assign({}, cfg);
+    const team = cfg.team === 'r' ? (Math.random() < 0.5 ? 0 : 1) : Number(cfg.team);
+    Object.assign(Settings.v, { botSkill: cfg.diff, mode: cfg.mode, matchLen: cfg.len, ff: !!cfg.ff, team, map: cfg.map }); Settings.save();
+    clearTimeout(this.resultsT);
+    if (BuyMenu.open) BuyMenu.toggle(false);
+    Actors.removeBots(); Actors.ff = !!cfg.ff;
+    const me = Actors.me;
+    if (me.team !== team) Actors.setSide(me, team);
+    for (let i = 0; i < cfg.enemies; i++) Actors.addBot(1 - team);
+    for (let i = 0; i < cfg.allies; i++) Actors.addBot(team);
+    for (const a of Actors.list) { a.kills = 0; a.deaths = 0; a.dmg = 0; a.hs = 0; a.plants = 0; a.defuses = 0; }
+    Game.spectate = null; Game.freeze = false; Game.botsFrozen = false;
+    Match.setMode(cfg.mode);
+    if (cfg.mode !== 'defuse') { Actors.feed = []; Actors.score = [0, 0]; }
+    this.active = true; this.cfg = cfg; this.done = false; this.results = null;
+  },
+  matchOver(outcome) {
+    if (!this.active || this.done) return;
+    this.done = true; Match.hold = true;
+    this.results = Profile.applyMatch(this.cfg, this.stats(Actors.me), outcome);
+    clearTimeout(this.resultsT);
+    this.resultsT = setTimeout(() => this.showResults(), 5500);
+  },
+  showResults() {
+    if (!this.results) return;
+    if (Game.state === 'playing') releasePointer();
+    if (BuyMenu.open) BuyMenu.toggle(false);
+    Game.state = 'results';
+    Menu.stack = [];
+    Menu.show('results', false);
+  },
+  // Leaving from the pause menu: a ranked match that has started counts as a loss.
+  leave() {
+    if (this.active && !this.done) {
+      const c = this.cfg, me = Actors.me, st = this.stats(me);
+      let outcome = 'practice';
+      if (c.mode === 'defuse') outcome = Match.round > 1 || Match.phase !== 'freeze' || st.kills ? 'left' : 'none';
+      this.done = true;
+      this.results = Profile.applyMatch(c, st, outcome);
+      if (outcome !== 'none' || this.results.xp.total > 0) { this.showResults(); return; }
+    }
+    this.active = false;
+    Game.state = 'menu';
+    Menu.home();
+  },
+};
+
+// Start a configured match: straight away on the loaded map, or after loading another one.
+async function launch(cfg) {
+  if (!cfg) return;
+  Session.active = false;
+  if (Game.L && Game.L.key === cfg.map) { Session.begin(cfg); onPlayClicked(); return; }
+  await loadMap(cfg.map);
+  Session.begin(cfg);
+  Game.state = 'menu';
+  Menu.show('ready', false);
+}
+
+// Main-menu background: slow dolly shots through the loaded map, with a dip to black between them.
+const MenuCam = {
+  shots: null, i: 0, t: 0, dur: 13,
+  reset(L) {
+    this.shots = L.menuShots && L.menuShots.length ? L.menuShots : this.auto(L);
+    this.i = 0; this.t = 0;
+  },
+  auto(L) {
+    const lo = L.bounds.lo, hi = L.bounds.hi, c = [(lo[0] + hi[0]) / 2, 0, (lo[2] + hi[2]) / 2];
+    return (L.sites && L.sites.length ? L.sites : [{ center: c }]).map((s) => ({ from: [s.center[0] - 420, 300, s.center[2] + 380], to: [s.center[0] - 220, 280, s.center[2] + 460], look: [s.center[0], 30, s.center[2]] }));
+  },
+  update(dt, cam) {
+    if (!this.shots) return;
+    this.t += dt;
+    if (this.t >= this.dur) { this.t = 0; this.i = (this.i + 1) % this.shots.length; }
+    const s = this.shots[this.i], k = smoothstep(0, 1, this.t / this.dur);
+    const p = [lerp(s.from[0], s.to[0], k), lerp(s.from[1], s.to[1], k), lerp(s.from[2], s.to[2], k)];
+    const lk = s.lookTo ? [lerp(s.look[0], s.lookTo[0], k), lerp(s.look[1], s.lookTo[1], k), lerp(s.look[2], s.lookTo[2], k)] : s.look;
+    const dx = lk[0] - p[0], dy = lk[1] - p[1], dz = lk[2] - p[2];
+    cam.position.set(p[0], p[1], p[2]);
+    cam.rotation.set(Math.atan2(dy, Math.hypot(dx, dz)), Math.atan2(-dx, -dz), 0);
+    const fade = Math.min(1, this.t / 0.7, (this.dur - this.t) / 0.7);
+    $('sf-fade').style.opacity = (1 - clamp(fade, 0, 1)).toFixed(2);
+  },
+};
+
 async function boot(hot) {
   HUD.init(); Menu.init();
   const canvas = $('sf-canvas');
@@ -8209,30 +10110,16 @@ async function boot(hot) {
   await yieldUI();
   const tex = await generateTextures((f) => Menu.loading('Generating textures', f * 0.26));
   R.makeTextures(tex);
-  // ?map=range (or depot) in the page address overrides the saved choice
+  Game.tex = tex;
+  // ?map=key in the page address overrides the last map played
   let qmap = null;
   try { qmap = new URLSearchParams(location.search).get('map'); } catch (e) { qmap = null; }
-  const mapKey = MAPS[qmap] ? qmap : MAPS[Settings.v.map] ? Settings.v.map : 'depot', mapDef = MAPS[mapKey];
-  Menu.loading(`Building ${mapDef.name}`, 0.28); await yieldUI();
-  const L = compileLevel(mapDef.build(), tex);
-  L.name = mapDef.name; L.key = mapKey;
-  Game.L = L;
-  const bake = await bakeLighting(L, (f) => Menu.loading('Compiling lighting', 0.29 + f * 0.62));
-  L.probes = bake.probes; L.bakeStats = bake.stats;
-  Menu.loading('Mapping bot routes', 0.93); await yieldUI();
-  Nav.build(L);
-  Radar.build(L);
-  Menu.loading('Uploading to the GPU', 0.97); await yieldUI();
-  R.buildWorld(L, bake);
-  FX.init(L); Ents.init(L); Grenades.init(L); Items.init(); Viewmodel.build(); WeaponIcons.build();
-  Game.player = new Player(L.cw);
-  Game.loadout = new Loadout();
-  Actors.init();
-  Game.player.maxSpeed = Game.loadout.active.def.maxSpeed;
+  const last = Profile.v.lastCfg && Profile.v.lastCfg.map;
+  const mapKey = MAPS[qmap] ? qmap : MAPS[last] ? last : MAPS[Settings.v.map] ? Settings.v.map : 'depot';
+  await loadMap(mapKey, 0.27, 1);
   if (hot && Array.isArray(hot.pos)) { Game.player.spawn(hot.pos, hot.yaw || 0); Game.player.pitch = hot.pitch || 0; }
   populateBots();
   Match.setMode(Settings.v.mode);
-  Menu.updateBots();
 
   Input.init(canvas);
   Input.onLockChange = (locked, fallback) => {
@@ -8240,25 +10127,21 @@ async function boot(hot) {
     else if (fallback) { HUD.note('Mouse capture unavailable here: aim with the cursor or arrow keys'); startPlaying(); }
     else pause();
   };
-  $('btn-play').addEventListener('click', onPlayClicked);
-  $('btn-full').addEventListener('click', async () => {
-    try {
-      if (!document.fullscreenElement) { await document.documentElement.requestFullscreen(); if (navigator.keyboard && navigator.keyboard.lock) navigator.keyboard.lock().catch(() => {}); }
-      else await document.exitFullscreen();
-    } catch (e) { $('menu-note').textContent = 'Fullscreen is not available here. Crouch with C.'; }
-  });
   $('t-menu').addEventListener('click', pause);
   $('buy-menu').addEventListener('click', (e) => { const b = e.target.closest('button[data-id]'); if (b && !b.disabled) BuyMenu.buy(b.dataset.id); });
   window.addEventListener('resize', () => R.resize());
   window.addEventListener('beforeunload', (e) => { if (Game.state === 'playing') { e.preventDefault(); e.returnValue = ''; } });
   document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
   R.resize();
-  Menu.showMain(false);
+  Game.state = 'menu';
+  Menu.home();
   requestAnimationFrame(frame);
+  Profile.connect();
 
   // Test/debug hooks (harmless in normal play).
   window.__SF = {
     Game, R, Ents, FX, Input, Ballistics, Grenades, Settings, Viewmodel, Snd, Actors, Nav, Bots, Items, Bomb, Match, SHOP, Tactics, BuyMenu, Radar, MAPS,
+    Profile, Arsenal, Session, Menu, Rewards, ArmoryView, launch, loadMap,
     setView(x, y, z, yawDeg, pitchDeg) {
       const p = Game.player; p.spawn([x, y, z], yawDeg * DEG); p.pitch = (pitchDeg || 0) * DEG;
       const w = Game.loadout.active; if (w.state === 'draw') { w.state = 'idle'; w.anim = 'idle'; }

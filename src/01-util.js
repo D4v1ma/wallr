@@ -1,7 +1,7 @@
 // Core helpers: math, deterministic noise, settings persistence.
 // All game modules share this IIFE scope; keep names stable.
 
-const GAME_VERSION = 'stage-5';
+const GAME_VERSION = 'stage-6';
 const DEG = Math.PI / 180;
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);

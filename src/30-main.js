@@ -36,14 +36,14 @@ function fireShot(actor, w, e) {
   let mz;
   if (actor.isMe) {
     Ents.stats.shots++;
-    Snd.shot(def.sound);
+    Snd.shot(def.sound, null, def.suppressed);
     Viewmodel.onShot(w);
     mz = Viewmodel.anchorWorld('muzzle', 22, [0, 0, 0]) || [eye[0] + dir[0] * 22, eye[1] + dir[1] * 22, eye[2] + dir[2] * 22];
   } else {
     actor.model.fire();
     mz = actor.model.muzzleWorld([0, 0, 0]);
-    Snd.shot(def.sound, mz);
-    FX.worldFlash(mz, dir, def.flash);
+    Snd.shot(def.sound, mz, def.suppressed);
+    if (!def.suppressed) FX.worldFlash(mz, dir, def.flash);
   }
   if (!def.ejectOn) ejectShell(actor, w);
   DLights.add(mz[0], mz[1], mz[2], [1.0, 0.62, 0.3], 240 * def.flash + 40, 0.06);
@@ -184,6 +184,7 @@ function deathCam(me, cam, eye) {
 
 function frame(now) {
   requestAnimationFrame(frame);
+  if (Game.state === 'loading' || !Game.L || !Game.L.probes) { Game.last = 0; return; }   // a map is being built
   const t = now / 1000;
   const dt = Math.min(Game.last ? t - Game.last : 1 / 60, 0.1);
   Game.last = t;
@@ -201,7 +202,8 @@ function frame(now) {
   } else { Game.look[0] = Game.look[1] = 0; }
   Game.acc += dt;
   let n = 0;
-  const paused = Game.freeze || (Match.active && Game.state !== 'playing');
+  const inMenu = Game.state === 'menu' || Game.state === 'results' || Game.state === 'loading';
+  const paused = Game.freeze || inMenu || (Match.active && Game.state !== 'playing');
   const ts = performance.now();
   while (!paused && Game.acc >= TICK && n < 8) { simTick(TICK); Game.acc -= TICK; n++; }
   const simT = performance.now() - ts;
@@ -212,7 +214,8 @@ function frame(now) {
   const w = Game.loadout.active, vf = w.kind === 'gun' ? w.def.recoil.viewFrac : 0;
   pl.updateView(dt);
   const eye = pl.eye(Game.alpha, Game.eye), cam = R.camera;
-  if (Game.spectate) {
+  if (inMenu) MenuCam.update(dt, cam);
+  else if (Game.spectate) {
     const sv = Game.spectate;
     if (sv.follow) { const f = sv.follow.player.pos; sv.pos = [f[0] + sv.off[0], f[1] + sv.off[1], f[2] + sv.off[2]]; }
     cam.position.set(sv.pos[0], sv.pos[1], sv.pos[2]); cam.rotation.set(sv.pitch, sv.yaw, 0);
@@ -230,6 +233,7 @@ function frame(now) {
   Ents.render(Game.alpha);
   Items.render(); Bomb.render();
   Grenades.render(Game.alpha);
+  Actors.hidden = inMenu;
   Actors.render(dt, Game.alpha);
   if (window.__SF) for (const mq of window.__SF.mannequins) {
     mq.pm.update(dt, mq.st);
@@ -237,7 +241,8 @@ function frame(now) {
   }
   const zf = me.alive && !Game.spectate && w.kind === 'gun' ? w.scopeFov() : 0;   // after this frame's ticks
   R.setZoom(zf); HUD.scope(zf);
-  Viewmodel.rig.visible = me.alive && !Game.spectate && !zf;
+  Viewmodel.rig.visible = me.alive && !Game.spectate && !zf && !inMenu;
+  if (!inMenu) $('sf-fade').style.opacity = '0';
   Viewmodel.update(dt, pl, w, Game.look, eye, Game.alpha);
   FX.update(Game.freezeFx ? 0 : dt);
   const f = viewDir(pl);
@@ -251,7 +256,7 @@ function frame(now) {
     if (Bomb.canDefuse(me) && Bomb.defuser !== me) prompt = `Hold E to defuse the charge (${me.kit ? 5 : 10} s)`;
     else if (!prompt && hw.kind === 'charge' && hw.state !== 'plant') prompt = Bomb.siteAt(me.player.pos) ? 'Hold Mouse 1 to plant the charge' : 'Carry the charge to site A or B';
   }
-  HUD.update(dt, pl, Game.loadout, prompt, cam);
+  if (!inMenu) HUD.update(dt, pl, Game.loadout, prompt, cam);
   const tR = performance.now();
   R.render();
   const t1 = performance.now();
@@ -268,14 +273,20 @@ function startPlaying() {
   if (Input.touch.enabled) $('sf-touch').hidden = false;
 }
 
+function releasePointer() {
+  Input.active = false; Input.releaseAll(); Input.exitLock();
+  document.body.classList.remove('playing');
+  $('sf-touch').hidden = true;
+  HUD.show(false);
+}
+
 function pause() {
   if (Game.state !== 'playing') return;
   if (BuyMenu.open) BuyMenu.toggle(false);
   Game.state = 'paused';
-  Input.active = false; Input.releaseAll();
-  document.body.classList.remove('playing');
-  $('sf-touch').hidden = true;
-  Menu.showMain(true);
+  releasePointer();
+  Menu.stack = [];
+  Menu.show('pause', false);
 }
 
 function onPlayClicked() {
@@ -292,6 +303,134 @@ function populateBots() {
   for (let i = 0; i < (defuse ? 4 : 2); i++) Actors.addBot(mine);
 }
 
+// Build, light and upload a map in place (no page reload). from/to map the progress bar.
+async function loadMap(key, from = 0, to = 1) {
+  if (!MAPS[key]) key = 'depot';
+  const def = MAPS[key], first = !Game.L, P = (f) => from + (to - from) * f;
+  Game.state = 'loading';
+  Menu.show('loading', false);
+  $('load-map').textContent = def.name;
+  $('load-note').className = 'note'; $('load-note').textContent = `${def.name}: ${def.blurb}.`;
+  if (!first) { if (BuyMenu.open) BuyMenu.toggle(false); Items.clear(); Grenades.clear(); Bomb.reset(); Actors.removeBots(); R.newScene(); }
+  Menu.loading(`Building ${def.name}`, P(0.02)); await yieldUI();
+  const L = compileLevel(def.build(), Game.tex);
+  L.name = def.name; L.key = key;
+  Game.L = L;
+  const bake = await bakeLighting(L, (f) => Menu.loading('Compiling lighting', P(0.04 + f * 0.84)));
+  L.probes = bake.probes; L.bakeStats = bake.stats;
+  Menu.loading('Mapping bot routes', P(0.9)); await yieldUI();
+  Nav.build(L);
+  Radar.build(L);
+  Menu.loading('Uploading to the GPU', P(0.96)); await yieldUI();
+  R.buildWorld(L, bake);
+  FX.init(L); Ents.init(L); Grenades.init(L); Items.init();
+  if (first) {
+    Viewmodel.build(); WeaponIcons.build();
+    Game.player = new Player(L.cw);
+    Game.loadout = new Loadout(undefined, (id) => Arsenal.def(id));
+  } else Game.player.cw = L.cw;
+  Actors.init();
+  Game.player.maxSpeed = Game.loadout.active.def.maxSpeed;
+  MenuCam.reset(L);
+  HUD.el['hud-tag'].textContent = L.name;
+  Menu.loading('Ready', P(1));
+}
+
+// One match as the player set it up in Create Game: roster, side, rules; rewards at the end.
+const Session = {
+  active: false, cfg: null, done: false, results: null, resultsT: 0,
+  stats(me) {
+    const M = Match;
+    return { kills: me.kills, deaths: me.deaths, hs: me.hs, dmg: me.dmg, plants: me.plants, defuses: me.defuses,
+      rounds: M.active ? M.history.length : 0, roundsWon: M.active ? M.score[me.squad] : 0,
+      score: M.active ? [M.score[me.squad], M.score[1 - me.squad]] : null };
+  },
+  // Map already loaded: sets everything up synchronously (so the click can still capture the mouse).
+  begin(cfg) {
+    cfg = Object.assign({}, cfg);
+    const team = cfg.team === 'r' ? (Math.random() < 0.5 ? 0 : 1) : Number(cfg.team);
+    Object.assign(Settings.v, { botSkill: cfg.diff, mode: cfg.mode, matchLen: cfg.len, ff: !!cfg.ff, team, map: cfg.map }); Settings.save();
+    clearTimeout(this.resultsT);
+    if (BuyMenu.open) BuyMenu.toggle(false);
+    Actors.removeBots(); Actors.ff = !!cfg.ff;
+    const me = Actors.me;
+    if (me.team !== team) Actors.setSide(me, team);
+    for (let i = 0; i < cfg.enemies; i++) Actors.addBot(1 - team);
+    for (let i = 0; i < cfg.allies; i++) Actors.addBot(team);
+    for (const a of Actors.list) { a.kills = 0; a.deaths = 0; a.dmg = 0; a.hs = 0; a.plants = 0; a.defuses = 0; }
+    Game.spectate = null; Game.freeze = false; Game.botsFrozen = false;
+    Match.setMode(cfg.mode);
+    if (cfg.mode !== 'defuse') { Actors.feed = []; Actors.score = [0, 0]; }
+    this.active = true; this.cfg = cfg; this.done = false; this.results = null;
+  },
+  matchOver(outcome) {
+    if (!this.active || this.done) return;
+    this.done = true; Match.hold = true;
+    this.results = Profile.applyMatch(this.cfg, this.stats(Actors.me), outcome);
+    clearTimeout(this.resultsT);
+    this.resultsT = setTimeout(() => this.showResults(), 5500);
+  },
+  showResults() {
+    if (!this.results) return;
+    if (Game.state === 'playing') releasePointer();
+    if (BuyMenu.open) BuyMenu.toggle(false);
+    Game.state = 'results';
+    Menu.stack = [];
+    Menu.show('results', false);
+  },
+  // Leaving from the pause menu: a ranked match that has started counts as a loss.
+  leave() {
+    if (this.active && !this.done) {
+      const c = this.cfg, me = Actors.me, st = this.stats(me);
+      let outcome = 'practice';
+      if (c.mode === 'defuse') outcome = Match.round > 1 || Match.phase !== 'freeze' || st.kills ? 'left' : 'none';
+      this.done = true;
+      this.results = Profile.applyMatch(c, st, outcome);
+      if (outcome !== 'none' || this.results.xp.total > 0) { this.showResults(); return; }
+    }
+    this.active = false;
+    Game.state = 'menu';
+    Menu.home();
+  },
+};
+
+// Start a configured match: straight away on the loaded map, or after loading another one.
+async function launch(cfg) {
+  if (!cfg) return;
+  Session.active = false;
+  if (Game.L && Game.L.key === cfg.map) { Session.begin(cfg); onPlayClicked(); return; }
+  await loadMap(cfg.map);
+  Session.begin(cfg);
+  Game.state = 'menu';
+  Menu.show('ready', false);
+}
+
+// Main-menu background: slow dolly shots through the loaded map, with a dip to black between them.
+const MenuCam = {
+  shots: null, i: 0, t: 0, dur: 13,
+  reset(L) {
+    this.shots = L.menuShots && L.menuShots.length ? L.menuShots : this.auto(L);
+    this.i = 0; this.t = 0;
+  },
+  auto(L) {
+    const lo = L.bounds.lo, hi = L.bounds.hi, c = [(lo[0] + hi[0]) / 2, 0, (lo[2] + hi[2]) / 2];
+    return (L.sites && L.sites.length ? L.sites : [{ center: c }]).map((s) => ({ from: [s.center[0] - 420, 300, s.center[2] + 380], to: [s.center[0] - 220, 280, s.center[2] + 460], look: [s.center[0], 30, s.center[2]] }));
+  },
+  update(dt, cam) {
+    if (!this.shots) return;
+    this.t += dt;
+    if (this.t >= this.dur) { this.t = 0; this.i = (this.i + 1) % this.shots.length; }
+    const s = this.shots[this.i], k = smoothstep(0, 1, this.t / this.dur);
+    const p = [lerp(s.from[0], s.to[0], k), lerp(s.from[1], s.to[1], k), lerp(s.from[2], s.to[2], k)];
+    const lk = s.lookTo ? [lerp(s.look[0], s.lookTo[0], k), lerp(s.look[1], s.lookTo[1], k), lerp(s.look[2], s.lookTo[2], k)] : s.look;
+    const dx = lk[0] - p[0], dy = lk[1] - p[1], dz = lk[2] - p[2];
+    cam.position.set(p[0], p[1], p[2]);
+    cam.rotation.set(Math.atan2(dy, Math.hypot(dx, dz)), Math.atan2(-dx, -dz), 0);
+    const fade = Math.min(1, this.t / 0.7, (this.dur - this.t) / 0.7);
+    $('sf-fade').style.opacity = (1 - clamp(fade, 0, 1)).toFixed(2);
+  },
+};
+
 async function boot(hot) {
   HUD.init(); Menu.init();
   const canvas = $('sf-canvas');
@@ -301,30 +440,16 @@ async function boot(hot) {
   await yieldUI();
   const tex = await generateTextures((f) => Menu.loading('Generating textures', f * 0.26));
   R.makeTextures(tex);
-  // ?map=range (or depot) in the page address overrides the saved choice
+  Game.tex = tex;
+  // ?map=key in the page address overrides the last map played
   let qmap = null;
   try { qmap = new URLSearchParams(location.search).get('map'); } catch (e) { qmap = null; }
-  const mapKey = MAPS[qmap] ? qmap : MAPS[Settings.v.map] ? Settings.v.map : 'depot', mapDef = MAPS[mapKey];
-  Menu.loading(`Building ${mapDef.name}`, 0.28); await yieldUI();
-  const L = compileLevel(mapDef.build(), tex);
-  L.name = mapDef.name; L.key = mapKey;
-  Game.L = L;
-  const bake = await bakeLighting(L, (f) => Menu.loading('Compiling lighting', 0.29 + f * 0.62));
-  L.probes = bake.probes; L.bakeStats = bake.stats;
-  Menu.loading('Mapping bot routes', 0.93); await yieldUI();
-  Nav.build(L);
-  Radar.build(L);
-  Menu.loading('Uploading to the GPU', 0.97); await yieldUI();
-  R.buildWorld(L, bake);
-  FX.init(L); Ents.init(L); Grenades.init(L); Items.init(); Viewmodel.build(); WeaponIcons.build();
-  Game.player = new Player(L.cw);
-  Game.loadout = new Loadout();
-  Actors.init();
-  Game.player.maxSpeed = Game.loadout.active.def.maxSpeed;
+  const last = Profile.v.lastCfg && Profile.v.lastCfg.map;
+  const mapKey = MAPS[qmap] ? qmap : MAPS[last] ? last : MAPS[Settings.v.map] ? Settings.v.map : 'depot';
+  await loadMap(mapKey, 0.27, 1);
   if (hot && Array.isArray(hot.pos)) { Game.player.spawn(hot.pos, hot.yaw || 0); Game.player.pitch = hot.pitch || 0; }
   populateBots();
   Match.setMode(Settings.v.mode);
-  Menu.updateBots();
 
   Input.init(canvas);
   Input.onLockChange = (locked, fallback) => {
@@ -332,25 +457,21 @@ async function boot(hot) {
     else if (fallback) { HUD.note('Mouse capture unavailable here: aim with the cursor or arrow keys'); startPlaying(); }
     else pause();
   };
-  $('btn-play').addEventListener('click', onPlayClicked);
-  $('btn-full').addEventListener('click', async () => {
-    try {
-      if (!document.fullscreenElement) { await document.documentElement.requestFullscreen(); if (navigator.keyboard && navigator.keyboard.lock) navigator.keyboard.lock().catch(() => {}); }
-      else await document.exitFullscreen();
-    } catch (e) { $('menu-note').textContent = 'Fullscreen is not available here. Crouch with C.'; }
-  });
   $('t-menu').addEventListener('click', pause);
   $('buy-menu').addEventListener('click', (e) => { const b = e.target.closest('button[data-id]'); if (b && !b.disabled) BuyMenu.buy(b.dataset.id); });
   window.addEventListener('resize', () => R.resize());
   window.addEventListener('beforeunload', (e) => { if (Game.state === 'playing') { e.preventDefault(); e.returnValue = ''; } });
   document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
   R.resize();
-  Menu.showMain(false);
+  Game.state = 'menu';
+  Menu.home();
   requestAnimationFrame(frame);
+  Profile.connect();
 
   // Test/debug hooks (harmless in normal play).
   window.__SF = {
     Game, R, Ents, FX, Input, Ballistics, Grenades, Settings, Viewmodel, Snd, Actors, Nav, Bots, Items, Bomb, Match, SHOP, Tactics, BuyMenu, Radar, MAPS,
+    Profile, Arsenal, Session, Menu, Rewards, ArmoryView, launch, loadMap,
     setView(x, y, z, yawDeg, pitchDeg) {
       const p = Game.player; p.spawn([x, y, z], yawDeg * DEG); p.pitch = (pitchDeg || 0) * DEG;
       const w = Game.loadout.active; if (w.state === 'draw') { w.state = 'idle'; w.anim = 'idle'; }

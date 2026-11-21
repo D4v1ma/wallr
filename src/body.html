@@ -58,89 +58,62 @@
     <button type="button" class="btn tmenu" id="t-menu">Menu</button>
   </div>
 
-  <div id="sf-overlay">
-    <section class="panel" aria-labelledby="sf-title">
-      <header class="panel-head">
-        <div class="brand" id="sf-title">Short<span>·</span>Fuse</div>
-        <div class="stagecode"><b>Stage 5</b>Saltpan Depot</div>
-      </header>
-      <div class="panel-body">
-        <div id="sf-loading">
+  <div id="sf-fade" aria-hidden="true"></div>
+  <div id="sf-overlay" data-scr="loading">
+    <section id="scr-loading" class="scr scr-center" aria-labelledby="sf-title">
+      <div class="sheet narrow">
+        <header class="sheet-head brandhead">
+          <div class="brand" id="sf-title">Short<span>·</span>Fuse</div>
+          <div class="stagecode"><b>Stage 6</b><span id="load-map">Loading</span></div>
+        </header>
+        <div class="sheet-body">
           <div class="load-line"><span id="load-label">Preparing</span><b id="load-pct">0%</b></div>
           <div class="bar"><i id="load-bar"></i></div>
-          <p class="note" id="load-note">Generating textures and compiling lighting for the test range.</p>
+          <p class="note" id="load-note">Generating textures and compiling lighting.</p>
         </div>
+      </div>
+    </section>
 
-        <div id="sf-menu" hidden>
-          <div class="actions">
-            <button type="button" class="btn primary" id="btn-play">Play</button>
-            <button type="button" class="btn" id="btn-full">Fullscreen</button>
-          </div>
-          <p class="note" id="menu-note">Click Play to capture the mouse; <b>Esc</b> brings you back here. Crouch is on <b>C</b>. <b>Ctrl</b> also crouches in fullscreen, where the browser can't close the tab on Ctrl+W.</p>
-          <div class="tabs" role="tablist">
-            <button type="button" role="tab" aria-selected="true" data-tab="controls" id="tab-controls">Controls</button>
-            <button type="button" role="tab" aria-selected="false" data-tab="settings" id="tab-settings">Settings</button>
-            <button type="button" role="tab" aria-selected="false" data-tab="bots" id="tab-bots">Match</button>
-          </div>
+    <section id="scr-home" class="scr scr-home" hidden>
+      <div class="home-left">
+        <div class="home-brand"><div class="brand big">Short<span>·</span>Fuse</div><div class="tagline">Tactical defuse shooter · 5v5 with bots</div></div>
+        <nav class="home-nav" aria-label="Main menu">
+          <button type="button" class="hn primary" data-go="create" id="btn-play" data-autofocus><b>Play</b><small>Create a match: map, bots, casual or ranked</small></button>
+          <button type="button" class="hn" data-go="loadout"><b>Loadout</b><small>Attachments and camos for every gun</small></button>
+          <button type="button" class="hn" data-go="shop"><b>Shop</b><small id="home-points">Points to spend</small></button>
+          <button type="button" class="hn" data-go="career"><b>Career</b><small>Rank, level, stats, match history</small></button>
+          <div class="hn-row"><button type="button" class="hn small" data-go="settings"><b>Settings</b></button><button type="button" class="hn small" data-go="controls"><b>Controls</b></button><button type="button" class="hn small" data-act="fullscreen" id="btn-full"><b>Fullscreen</b></button></div>
+        </nav>
+        <p class="home-foot">An original browser shooter. No accounts, no ads. <span class="stagecode-inline">Stage 6</span></p>
+      </div>
+      <aside class="home-card" id="home-card" aria-label="Your profile"></aside>
+      <div class="home-map"><small>Now showing</small><b id="home-map"></b></div>
+    </section>
 
-          <div id="pane-controls" role="tabpanel" aria-labelledby="tab-controls">
-            <div class="keys">
-              <div><span>Move</span><span><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></span></div>
-              <div><span>Jump</span><span><kbd>Space</kbd></span></div>
-              <div><span>Crouch</span><span><kbd>C</kbd> / <kbd>Ctrl</kbd></span></div>
-              <div><span>Walk (silent)</span><span><kbd>Shift</kbd></span></div>
-              <div><span>Fire / slash / throw</span><span><kbd>Mouse 1</kbd></span></div>
-              <div><span>Stab / underhand lob</span><span><kbd>Mouse 2</kbd></span></div>
-              <div><span>Reload</span><span><kbd>R</kbd></span></div>
-              <div><span>Weapon slots (5 = the charge)</span><span><kbd>1</kbd> – <kbd>5</kbd></span></div>
-              <div><span>Buy menu (buy time, near spawn)</span><span><kbd>B</kbd>, then <kbd>1</kbd> – <kbd>9</kbd></span></div>
-              <div><span>Drop weapon</span><span><kbd>G</kbd></span></div>
-              <div><span>Plant the charge (in A or B)</span><span>hold <kbd>Mouse 1</kbd></span></div>
-              <div><span>Defuse the charge</span><span>hold <kbd>E</kbd></span></div>
-              <div><span>Scoped zoom</span><span><kbd>Mouse 2</kbd></span></div>
-              <div><span>Last weapon / cycle</span><span><kbd>Q</kbd> / <kbd>Wheel</kbd></span></div>
-              <div><span>Inspect weapon</span><span><kbd>F</kbd></span></div>
-              <div><span>Open door / pick up weapon</span><span><kbd>E</kbd></span></div>
-              <div><span>Noclip fly</span><span><kbd>V</kbd></span></div>
-              <div><span>Debug readout</span><span><kbd>F1</kbd> / <kbd>`</kbd></span></div>
-              <div><span>Hide hints</span><span><kbd>H</kbd></span></div>
-              <div><span>Scoreboard</span><span><kbd>Tab</kbd></span></div>
-            </div>
-            <p class="note">Stop before you shoot: standing still is accurate, running is not. Hold Mouse 1 on the paper board 256 units downrange to see the rifle's spray pattern (up, then left, then right); pull down against it. Shoot the red plate beside the board to wipe it. Doors, the board and the shed's thin walls can be shot through. Jump boxes in the hall: 48 clears with a jump, 64 needs a crouch-jump, 72 is out of reach.</p>
-          </div>
+    <section id="scr-create" class="scr" hidden aria-label="Create game"></section>
 
-          <div id="pane-bots" role="tabpanel" aria-labelledby="tab-bots" hidden>
-            <div class="sets">
-              <div class="set"><label for="set-map">Map</label>
-                <select id="set-map"><option value="depot">Saltpan Depot (A: Platform 2, B: Shed 4)</option><option value="range">Hall B (practice range)</option></select>
-              </div>
-              <div class="set"><label for="set-mode">Mode</label>
-                <select id="set-mode"><option value="defuse">Defuse (rounds, money, the charge)</option><option value="skirmish">Skirmish (respawns, practice)</option></select>
-              </div>
-              <div class="set"><label for="set-matchlen">Match length</label>
-                <select id="set-matchlen"><option value="standard">Standard: first to 16</option><option value="short">Short: first to 9</option></select>
-              </div>
-            </div>
-            <div class="actions">
-              <button type="button" class="btn" id="match-restart">Restart match</button>
-              <button type="button" class="btn" id="bot-add-0">Add Raider</button>
-              <button type="button" class="btn" id="bot-add-1">Add Warden</button>
-              <button type="button" class="btn" id="bot-clear">Remove all bots</button>
-            </div>
-            <div class="sets">
-              <div class="set"><label for="set-botskill">Bot difficulty</label>
-                <select id="set-botskill"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select>
-              </div>
-              <div class="set"><label for="set-team">Your team</label>
-                <select id="set-team"><option value="1">Wardens (defenders)</option><option value="0">Raiders (attackers)</option></select>
-              </div>
-              <div class="set check"><input type="checkbox" id="set-ff"><label for="set-ff">Friendly fire</label></div>
-            </div>
-            <p class="note" id="bot-status"></p>
-            <p class="note">Defuse: Raiders carry the charge to site A (the range) or B (the container yard) and plant it; Wardens stop them or defuse it (5 s with a kit, 10 s without). Rounds last 1:55 after 10 s of buy time; the charge burns 40 s. Money comes from kills and rounds; the dead lose their gear. Sides swap at halftime. Changing team, mode or bots restarts the match. Hold <b>Tab</b> for the scoreboard.</p>
+    <section id="scr-armory" class="scr" hidden aria-label="Loadout and shop">
+      <div class="sheet wide armory">
+        <header class="sheet-head"><button type="button" class="btn ghost back" data-back>‹ Back</button><h2 id="arm-title">Loadout</h2><span class="head-aside" id="arm-points"></span></header>
+        <div class="arm-guns" id="arm-guns" role="group" aria-label="Guns"></div>
+        <div class="sheet-body arm-body">
+          <div class="arm-main">
+            <div class="arm-view"><canvas id="arm-canvas" aria-label="Gun preview"></canvas><div class="arm-name" id="arm-name"></div></div>
+            <div class="arm-stats" id="arm-stats"></div>
+            <div class="arm-detail" id="arm-detail"></div>
           </div>
+          <div class="arm-slots" id="arm-slots"></div>
+        </div>
+        <footer class="sheet-foot" id="arm-foot"></footer>
+      </div>
+    </section>
 
-          <div id="pane-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+    <section id="scr-career" class="scr" hidden aria-label="Career"></section>
+
+    <section id="scr-settings" class="scr" hidden aria-label="Settings">
+      <div class="sheet">
+        <header class="sheet-head"><button type="button" class="btn ghost back" data-back>‹ Back</button><h2>Settings</h2></header>
+        <div class="sheet-body">
             <div class="sets">
               <div class="sect">Mouse</div>
               <div class="set"><label for="set-sens">Sensitivity <output id="out-sens"></output></label><input type="range" id="set-sens" min="0.2" max="8" step="0.05"></div>
@@ -184,10 +157,68 @@
               <div class="set check"><input type="checkbox" id="set-fps"><label for="set-fps">Show frame rate</label></div>
               <div class="set check"><input type="checkbox" id="set-speed"><label for="set-speed">Show speed (units/s)</label></div>
             </div>
-          </div>
         </div>
       </div>
     </section>
+
+    <section id="scr-controls" class="scr" hidden aria-label="Controls">
+      <div class="sheet">
+        <header class="sheet-head"><button type="button" class="btn ghost back" data-back>‹ Back</button><h2>Controls</h2></header>
+        <div class="sheet-body">
+            <div class="keys">
+              <div><span>Move</span><span><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></span></div>
+              <div><span>Jump</span><span><kbd>Space</kbd></span></div>
+              <div><span>Crouch</span><span><kbd>C</kbd> / <kbd>Ctrl</kbd></span></div>
+              <div><span>Walk (silent)</span><span><kbd>Shift</kbd></span></div>
+              <div><span>Fire / slash / throw</span><span><kbd>Mouse 1</kbd></span></div>
+              <div><span>Stab / underhand lob</span><span><kbd>Mouse 2</kbd></span></div>
+              <div><span>Reload</span><span><kbd>R</kbd></span></div>
+              <div><span>Weapon slots (5 = the charge)</span><span><kbd>1</kbd> – <kbd>5</kbd></span></div>
+              <div><span>Buy menu (buy time, near spawn)</span><span><kbd>B</kbd>, then <kbd>1</kbd> – <kbd>9</kbd></span></div>
+              <div><span>Drop weapon</span><span><kbd>G</kbd></span></div>
+              <div><span>Plant the charge (in A or B)</span><span>hold <kbd>Mouse 1</kbd></span></div>
+              <div><span>Defuse the charge</span><span>hold <kbd>E</kbd></span></div>
+              <div><span>Scoped zoom</span><span><kbd>Mouse 2</kbd></span></div>
+              <div><span>Last weapon / cycle</span><span><kbd>Q</kbd> / <kbd>Wheel</kbd></span></div>
+              <div><span>Inspect weapon</span><span><kbd>F</kbd></span></div>
+              <div><span>Open door / pick up weapon</span><span><kbd>E</kbd></span></div>
+              <div><span>Noclip fly</span><span><kbd>V</kbd></span></div>
+              <div><span>Debug readout</span><span><kbd>F1</kbd> / <kbd>`</kbd></span></div>
+              <div><span>Hide hints</span><span><kbd>H</kbd></span></div>
+              <div><span>Scoreboard</span><span><kbd>Tab</kbd></span></div>
+            </div>
+          <p class="note">Stop before you shoot: standing still is accurate, running is not. Rifles climb, then pull left and right; pull down against it. Doors, thin walls and crates can be shot through. Raiders carry the charge to A or B and hold Mouse 1 to plant; Wardens hold E on a planted charge to defuse (5 s with a kit, 10 s without). Hall B is a practice range with jump boxes and a spray board.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="scr-pause" class="scr scr-center" hidden aria-label="Paused">
+      <div class="sheet narrow">
+        <header class="sheet-head"><h2>Paused</h2><span class="head-aside" id="pause-info"></span></header>
+        <div class="sheet-body">
+          <div class="pause-nav">
+            <button type="button" class="btn primary" data-act="resume" data-autofocus>Resume</button>
+            <button type="button" class="btn" data-go="settings">Settings</button>
+            <button type="button" class="btn" data-go="controls">Controls</button>
+            <button type="button" class="btn danger" data-act="leave" id="btn-leave">Leave match</button>
+          </div>
+          <p class="note warn" id="pause-warn" hidden>Leaving a ranked match that has started counts as a loss.</p>
+          <p class="note">Click Resume to capture the mouse again. <b>Esc</b> brings you back here.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="scr-ready" class="scr scr-center" hidden aria-label="Ready">
+      <div class="sheet narrow">
+        <header class="sheet-head"><h2 id="ready-map"></h2><span class="head-aside" id="ready-info"></span></header>
+        <div class="sheet-body">
+          <p class="note">The map is built and lit. Click Deploy to capture the mouse and start the first round.</p>
+          <div class="actions"><button type="button" class="btn" data-act="home">Main menu</button><button type="button" class="btn primary" data-act="deploy" id="btn-deploy" data-autofocus>Deploy</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="scr-results" class="scr" hidden aria-label="Match results"></section>
   </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>

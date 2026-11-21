@@ -6,6 +6,7 @@ const BOT_SKILL = {
   easy: { react: 0.62, aimErr: 4.5, turn: 210, recoil: 0.25, head: 0.08, burst: [2, 4], fov: 100, settle: 1.2 },
   normal: { react: 0.36, aimErr: 2.4, turn: 330, recoil: 0.55, head: 0.25, burst: [3, 6], fov: 110, settle: 1.9 },
   hard: { react: 0.2, aimErr: 1.1, turn: 520, recoil: 0.85, head: 0.55, burst: [4, 8], fov: 120, settle: 2.8 },
+  expert: { react: 0.13, aimErr: 0.7, turn: 700, recoil: 0.95, head: 0.7, burst: [5, 10], fov: 126, settle: 3.5 },
 };
 
 const Bots = {

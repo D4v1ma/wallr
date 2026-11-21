@@ -51,10 +51,11 @@ const Match = {
     Actors.feed = []; Actors.score = [0, 0];
     for (const a of Actors.list) {
       a.squad = a.team === Actors.me.team ? 0 : 1;
-      a.money = MATCH.start; a.kills = 0; a.deaths = 0; a.kit = false;
+      a.money = MATCH.start; a.kills = 0; a.deaths = 0; a.kit = false; a.dmg = 0; a.hs = 0; a.plants = 0; a.defuses = 0;
       a.alive = false;                       // everyone starts the first round fresh
     }
     if (Actors.me) Actors.me.squad = 0;
+    this.hold = false;
     this.startRound();
   },
 
@@ -152,7 +153,7 @@ const Match = {
         if (this.t <= 0) this.nextRound();
         break;
       case 'over':
-        if (this.t <= 0) this.startMatch();
+        if (this.t <= 0 && !this.hold) this.startMatch();
         break;
     }
   },
@@ -168,13 +169,14 @@ const Match = {
 
   onPlant(actor, site) {
     if (!this.active || this.phase !== 'live') return;
-    this.planted = true; this.phase = 'planted';
+    this.planted = true; this.phase = 'planted'; actor.plants++;
     actor.money = Math.min(MATCH.max, actor.money + MATCH.plantReward);
     this.banner = { title: `Charge planted at ${site.name}`, sub: Actors.me.team === TEAM.WARDENS ? 'Get there and defuse it (hold E)' : 'Guard it until it blows', t: 3, kind: 'plant' };
     if (typeof Tactics !== 'undefined') Tactics.onPlant(site);
   },
   onDefuse(a) {
     if (!this.active) return;
+    a.defuses++;
     a.money = Math.min(MATCH.max, a.money + MATCH.defuseReward);
     this.endRound(TEAM.WARDENS, 'defuse');
   },
@@ -216,9 +218,11 @@ const Match = {
     this.phase = 'post'; this.t = MATCH.post;
     if (this.score[win] >= this.len.win) {
       this.phase = 'over'; this.t = MATCH.over; this.draw = false;
+      if (typeof Session !== 'undefined') Session.matchOver(mine ? 'win' : 'loss');
       this.banner = { title: `${TEAMS[side].name} win the match`, sub: `${this.score[win]} – ${this.score[lose]}`, t: MATCH.over, kind: mine ? 'win' : 'lose', side, final: true };
     } else if (this.round >= this.len.max) {
       this.phase = 'over'; this.t = MATCH.over; this.draw = true;
+      if (typeof Session !== 'undefined') Session.matchOver('draw');
       this.banner = { title: 'Draw', sub: `${this.score[0]} – ${this.score[1]}`, t: MATCH.over, kind: 'draw', final: true };
     } else if (this.round === this.len.half) {
       this.halftimeNext = true; this.t = MATCH.halftime;

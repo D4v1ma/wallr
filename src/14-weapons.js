@@ -321,14 +321,14 @@ class Charge extends Weapon {
 }
 
 const WEAPON_CLASS = { gun: Gun, knife: Knife, grenade: Grenade, charge: Charge };
-const makeWeapon = (id) => new WEAPON_CLASS[WEAPONS[id].kind](WEAPONS[id]);
+const makeWeapon = (id, def = WEAPONS[id]) => new WEAPON_CLASS[def.kind](def);
 
 // Slots: 1 primary, 2 pistol, 3 knife, 4 grenade, 5 charge. One weapon per slot.
 class Loadout {
-  constructor(ids = ['rifle', 'pistol', 'knife', 'smoke']) { this.listShowT = 0; this.restock = true; this.active = null; this.setKit(ids); }
+  constructor(ids = ['rifle', 'pistol', 'knife', 'smoke'], defOf = null) { this.listShowT = 0; this.restock = true; this.active = null; this.defOf = defOf || ((id) => WEAPONS[id]); this.setKit(ids); }
   setKit(ids) {
     if (this.active) this.active.holster();
-    this.list = ids.map(makeWeapon); this.sort();
+    this.list = ids.map((id) => makeWeapon(id, this.defOf(id))); this.sort();
     this.active = this.list[0]; this.prev = this.list[1] || this.list[0];
     this.active.draw();
   }
@@ -357,7 +357,7 @@ class Loadout {
   // Adds a weapon (an id or a weapon object, e.g. picked up with its ammo). Returns the weapon it
   // pushed out of the same slot so the caller can drop it, null if none, or false if refused.
   give(item, autoSwitch = true) {
-    const w = typeof item === 'string' ? makeWeapon(item) : item;
+    const w = typeof item === 'string' ? makeWeapon(item, this.defOf(item)) : item;
     if (w.kind === 'grenade') {
       const g = this.byId(w.def.id);
       if (g) { if (g.count > 0) return false; g.count = 1; return null; }

@@ -21,14 +21,10 @@ const wait = (ms) => page.waitForTimeout(ms);
 await ev(() => { __SF.Settings.set('mode', 'skirmish'); __SF.Actors.removeBots(); for (let i = 0; i < 3; i++) __SF.Actors.addBot(0); for (let i = 0; i < 2; i++) __SF.Actors.addBot(1); });
 const n0 = await ev(() => __SF.Actors.list.map((a) => [a.name, a.team, a.isBot]));
 check('skirmish lobby: you plus five bots, three a side', n0.length === 6 && n0.filter((a) => a[1] === 0).length === 3, JSON.stringify(n0));
-// bots menu buttons
-await page.click('#tab-bots');
-await page.click('#bot-clear');
-let c = await ev(() => __SF.Actors.list.length);
-check('Remove all bots leaves only you', c === 1, `actors=${c}`);
-await page.click('#bot-add-0'); await page.click('#bot-add-1');
-const status = await page.textContent('#bot-status');
-check('Add Raider / Add Warden buttons work', status.startsWith('1 Raider bot and 1 Warden bot'), status);
+// a skirmish set up the way Create Game does it: one bot teammate, one bot opponent
+await ev(() => __SF.Session.begin({ map: 'range', mode: 'skirmish', ranked: false, diff: 'normal', team: '1', allies: 1, enemies: 1, len: 'standard', ff: false }));
+const roster = await ev(() => __SF.Actors.list.map((a) => [a.team, a.isBot]));
+check('Create Game roster: you, one Warden bot, one Raider bot', roster.length === 3 && roster.filter((a) => a[1] && a[0] === 0).length === 1 && roster.filter((a) => a[1] && a[0] === 1).length === 1, JSON.stringify(roster));
 await page.mouse.move(640, 360);
 await ev(() => { __SF.play(); __SF.Input.freeMouse = true; });
 // 1) shoot an enemy bot held in place

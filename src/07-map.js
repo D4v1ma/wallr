@@ -201,6 +201,8 @@ function buildTestRange() {
 
 // Map registry: the defuse map and the practice range.
 const MAPS = {
-  depot: { name: 'Saltpan Depot', build: buildDepot, blurb: 'Defuse map: Platform 2 (A) and Shed 4 (B)' },
-  range: { name: 'Hall B', build: buildTestRange, blurb: 'Practice range: plates, step and jump tests' },
+  depot: { name: 'Saltpan Depot', build: buildDepot, blurb: 'Salt-works rail yard · A Platform 2, B Shed 4' },
+  kiln: { name: 'Kilnworks', build: buildKilnworks, blurb: 'Brick works on a clay quarry · A Kiln Yard, B Press Hall' },
+  frost: { name: 'Frostline', build: buildFrostline, blurb: 'Mountain radar station in snow · A Hangar 2, B Dish Array' },
+  range: { name: 'Hall B', build: buildTestRange, blurb: 'Small practice hall · plates, spray board, jump boxes', practice: true },
 };

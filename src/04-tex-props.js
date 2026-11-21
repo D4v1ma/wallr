@@ -499,6 +499,23 @@ const TEX_DEFS = {
   sign_culvert:   { gen: () => texSign(['CULVERT', 'FLOOD RISK · KEEP OUT'], [0.8, 0.22, 0.14], [0.95, 0.92, 0.86], 84), fit: true, surf: 'metal' },
   sign_salt:      { gen: () => texSign(['SALT STORE', 'NO NAKED FLAMES'], [0.5, 0.47, 0.42], [0.1, 0.09, 0.08], 85), fit: true, surf: 'metal' },
   site_b:         { gen: () => texSiteSign('B', 59), fit: true, surf: 'metal' },
+  // Kilnworks
+  firebrick:      { gen: () => texBrickVariant(101, [[0.42, 0.2, 0.13], [0.36, 0.17, 0.12], [0.48, 0.25, 0.16], [0.3, 0.15, 0.11]], [0.42, 0.39, 0.35], 0.55), world: 112, surf: 'brick' },
+  brick_yellow:   { gen: () => texBrickVariant(102, [[0.72, 0.6, 0.4], [0.66, 0.55, 0.36], [0.78, 0.66, 0.45], [0.62, 0.5, 0.33], [0.7, 0.56, 0.38]], [0.62, 0.6, 0.55], 0.12), world: 112, surf: 'brick' },
+  clay:           { gen: () => texClay(103), world: 192, surf: 'sand' },
+  sign_kiln:      { gen: () => texSign(['KILN YARD', 'HOT SURFACES · KEEP CLEAR'], [0.8, 0.22, 0.14], [0.95, 0.92, 0.86], 104), fit: true, surf: 'metal' },
+  sign_press:     { gen: () => texSign(['PRESS HALL', 'EAR PROTECTION REQUIRED'], [0.13, 0.2, 0.32], [0.9, 0.88, 0.82], 105), fit: true, surf: 'metal' },
+  sign_kilnworks: { gen: () => texSign(['KILNWORKS', 'BRICK & TILE · GATE 2'], [0.24, 0.16, 0.12], [0.94, 0.82, 0.62], 106), fit: true, surf: 'metal' },
+  sign_pits:      { gen: () => texSign(['CLAY PITS', 'DANGER · SOFT GROUND'], [0.86, 0.66, 0.12], [0.08, 0.07, 0.06], 107), fit: true, surf: 'metal' },
+  // Frostline
+  snow:           { gen: () => texSnow(111), world: 224, surf: 'sand' },
+  rock:           { gen: () => texRock(112), world: 256, surf: 'concrete' },
+  hangar:         { gen: () => texCorrugated(113, [0.66, 0.69, 0.7]), world: 128, surf: 'metal' },
+  paint_white:    { gen: () => texMetalPanel(114, [0.74, 0.76, 0.76]), world: 128, surf: 'metal' },
+  paint_orange:   { gen: () => texMetalPanel(115, [0.8, 0.36, 0.12]), world: 128, surf: 'metal' },
+  sign_hangar:    { gen: () => texSign(['HANGAR 2', 'NO OPEN FLAMES'], [0.13, 0.2, 0.32], [0.9, 0.88, 0.82], 116), fit: true, surf: 'metal' },
+  sign_dish:      { gen: () => texSign(['DISH ARRAY', 'RF HAZARD · NO ENTRY'], [0.8, 0.22, 0.14], [0.95, 0.92, 0.86], 117), fit: true, surf: 'metal' },
+  sign_frost:     { gen: () => texSign(['FROSTLINE STATION', 'ELEVATION 2140 M'], [0.18, 0.24, 0.3], [0.9, 0.92, 0.94], 118), fit: true, surf: 'metal' },
   jump32:         { gen: () => texLabelBox('32', 50), fit: true, surf: 'concrete' },
   jump48:         { gen: () => texLabelBox('48', 51), fit: true, surf: 'concrete' },
   jump64:         { gen: () => texLabelBox('64', 52), fit: true, surf: 'concrete' },
@@ -507,6 +524,7 @@ const TEX_DEFS = {
   step18:         { gen: () => texLabelBox('18', 55), fit: true, surf: 'concrete' },
   step20:         { gen: () => texLabelBox('20', 56), fit: true, surf: 'concrete' },
   lamp:           { fullbright: [1.0, 0.92, 0.74], surf: 'metal' },
+  screen_glow:    { fullbright: [0.42, 0.9, 0.62], surf: 'metal' },
 };
 
 // Non-world textures (sprites, decals, weapon skins).

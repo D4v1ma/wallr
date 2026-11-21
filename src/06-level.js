@@ -249,5 +249,5 @@ function compileLevel(map, tex) {
   for (const b of cw.brushes) for (let i = 0; i < 3; i++) { lo[i] = Math.min(lo[i], b.min[i]); hi[i] = Math.max(hi[i], b.max[i]); }
 
   return { cw, faces, luxels, atlasW, atlasH, groups, entGroups, lights: map.lights, doors: map.doors, targets: map.targets, spawns: map.spawns,
-    teamSpawns: map.teamSpawns, hotspots: map.hotspots, sites: map.sites, areas: map.areas, tactics: map.tactics, env: map.env, bounds: { lo, hi }, tex };
+    teamSpawns: map.teamSpawns, hotspots: map.hotspots, sites: map.sites, areas: map.areas, tactics: map.tactics, menuShots: map.menuShots || null, env: map.env, bounds: { lo, hi }, tex };
 }

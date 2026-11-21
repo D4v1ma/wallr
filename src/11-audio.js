@@ -231,9 +231,23 @@ const Snd = {
   },
 
   // Gunshot by sound id; positional when pos is given (other players), direct for your own gun.
-  shot(kind, pos) {
+  shot(kind, pos, supp) {
+    if (supp) { this.suppShot(pos, kind); return; }
     if (kind === 'pistol') this.pistolShot(pos); else if (kind === 'smg') this.smgShot(pos);
     else if (kind === 'shotgun') this.shotgunShot(pos); else if (kind === 'sniper') this.sniperShot(pos); else this.rifleShot(pos);
+  },
+
+  // Suppressed: a dull cough and the action cycling, little echo.
+  suppShot(pos, kind) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime, o = this.dest(pos || null, 0.45), dry = pos ? o : [this.master], p = 0.94 + Math.random() * 0.1;
+    const heavy = kind === 'sniper' ? 1.35 : kind === 'pistol' ? 0.8 : 1;
+    this.nz(t, o, { type: 'bandpass', f: 1050 * p / heavy, q: 0.8, g: 0.42 * heavy, d: 0.05 * heavy });
+    this.nz(t, o, { type: 'lowpass', f: 520 * p, q: 0.5, g: 0.35 * heavy, d: 0.07 * heavy });
+    this.tone(t, dry, { f0: 150 * p / heavy, f1: 55, dur: 0.06 * heavy, g: 0.32 });
+    this.nz(t + 0.012, dry, { type: 'bandpass', f: 3400 * p, q: 3, g: 0.22, d: 0.02 });
+    this.nz(t + 0.03, dry, { type: 'bandpass', f: 2200 * p, q: 2.5, g: 0.14, d: 0.025 });
+    this.nz(t + 0.01, [this.revSend], { type: 'lowpass', f: 700, q: 0.4, g: 0.12, a: 0.01, d: 0.2 });
   },
 
   smgShot(pos) {

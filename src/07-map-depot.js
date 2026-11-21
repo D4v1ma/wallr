@@ -289,6 +289,13 @@ function buildDepot() {
     ['Plaza', -200, -300, 500, 300], ['Back Alley', 200, 300, 500, 1000], ['Shed 4', 500, 700, 1300, 1450], ['Culvert', -1100, 1150, 500, 1330],
     ['Sluice Yard', -1950, 500, -900, 1450], ['Service Road', 1300, -1450, 1650, 1450], ['Warden Yard', 1650, -500, 1950, 500]]) M.area(n, x0, z0, x1, z1);
 
+  // main-menu fly-through: over the Scales Yard toward Platform 2, down the street, inside Shed 4
+  M.menuShots = [
+    { from: [560, 330, -360], to: [1180, 320, -420], look: [880, 10, -1080], lookTo: [1040, 10, -1060] },
+    { from: [-1260, 120, 60], to: [-760, 130, 40], look: [200, 40, -20] },
+    { from: [580, 250, 760], to: [880, 240, 740], look: [960, 30, 1260], lookTo: [1060, 30, 1220] },
+  ];
+
   // ---------------- bot tactics ----------------
   M.tactics = {
     routes: {
@@ -298,6 +305,7 @@ function buildDepot() {
       culvert: { stack: [-1150, 0, 880], yaw: Math.PI, via: [200, -48, 1240] },
     },
     siteRoutes: { A: ['cut', 'office'], B: ['culvert', 'alley'] },
+    mid: [-200, -300, 500, 300],
     sites: {
       A: { hold: [[700, 0, -1060, 100], [1250, 0, -1160, 90], [960, 0, -860, 160], [1310, -48, -1270, 90], [1100, 0, -1210, 95]],
         plant: [[820, 0, -1000], [1080, 0, -940], [960, -48, -1350]], smoke: [[780, 0, -790], [540, -48, -1350]] },

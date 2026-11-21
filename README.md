@@ -1,19 +1,21 @@
-# Short Fuse — Stage 5: Saltpan Depot
+# Short Fuse — Stage 6: menus, progression, three maps
 
-An original round-based tactical shooter for the browser, built in five stages: movement and
+An original round-based tactical shooter for the browser, built in six stages: movement and
 shooting (1), weapons, viewmodels and effects (2), player models and bots (3), rounds, money and
-the charge (4), and now (5) **Saltpan Depot**, an original two-site defuse map, with a
-rotating **radar**, location names, weapon icons and HUD polish.
+the charge (4), Saltpan Depot and the radar (5), and now (6) a **main menu** with a
+**Create Game** screen, **two new maps**, **levels and shop points**, a **shop** of attachments
+and camos, a per-gun **loadout** chosen before each match, and **ranks** with an Elo rating.
 Everything is original: procedural canvas textures, synthesized WebAudio sound, brush
 geometry, models and code. three.js r128 is the only dependency, loaded from cdnjs.
 
 ## Run it
 
 Open `index.html` in a desktop browser. It needs internet access for three.js (cdnjs) and the
-two UI fonts (Google Fonts, optional). Click **Play** to capture the mouse, **Esc** for the
-menu (a defuse match pauses while the menu is open). Loading takes a few seconds: textures are
-generated, the lighting is baked and bot routes are mapped. `index.html?map=range` opens the
-Hall B practice range instead; the Match tab in the menu switches maps too.
+two UI fonts (Google Fonts, optional). Loading takes a few seconds: textures are generated, the
+lighting is baked and bot routes are mapped. You land in the **main menu**, over a slow
+fly-through of the last map you played. **Play** → Create Game → loadout → **Start match**.
+**Esc** pauses a match. `index.html?map=kiln` (or `frost`, `depot`, `range`) picks the map shown
+first.
 
 | Action | Keys |
 | --- | --- |
@@ -27,31 +29,121 @@ Hall B practice range instead; the Match tab in the menu switches maps too.
 | Drop the weapon in hand | G |
 | Door, pick up or swap a weapon / defuse (hold) | E |
 | Scoreboard (hold) | Tab |
+| Pause menu | Esc |
 | Noclip fly / debug readout / hints | V / F1 or ` / H |
 
 Touch devices get an on-screen stick, look pad and buttons (JUMP, DUCK, RELOAD, USE, SWAP, BUY,
-FIRE). The keyboard hints fade after 30 s of play (H brings them back).
+FIRE); the menus fit a phone held sideways.
 
-## Saltpan Depot
+## The front end
 
-A salt works' rail depot. Raiders spawn in the **West Yard**, Wardens in the **Warden Yard**
-east of the service road, between the two sites.
+- **Main menu:** Play, Loadout, Shop, Career, Settings, Controls, Fullscreen. A profile card
+  shows your rank emblem, Elo, level, XP bar and points.
+- **Create Game:** pick the map (cards with overviews), **Defuse** or **Skirmish**,
+  **Casual** or **Ranked**, the **bot difficulty** (Easy 750, Normal 1050, Hard 1350, Expert
+  1650 rating), match length (first to 9 or 16), your side (Wardens, Raiders or random), bot
+  teammates (0–4) and opponents (1–5), friendly fire. Ranked fixes 5v5 with friendly fire off.
+  The summary shows roughly what a win and a loss would do to your Elo.
+- **Loadout for this match:** the next step. For each gun in the buy menu (Wasp 9, Swift SMG,
+  Bison 12, Kestrel AR, Osprey LR) choose a muzzle, optic, magazine, grip/stock and camo from
+  what you own, with a turning 3D preview and stat bars showing the change. **Start match**
+  builds the map in place if it differs (no page reload) and shows **Deploy**.
+- **In the match:** guns you buy come with your attachments and camo (bots carry stock guns).
+  **Esc** opens the pause menu: Resume, Settings, Controls, Leave match.
+- **Results:** victory, defeat or draw, your stats, the XP breakdown with the level bar and any
+  level-ups, and the Elo change line by line. Then Play again, Shop or Main menu.
+- **Career:** rank and Elo (and peak), level, lifetime stats (win rate, K/D, damage per round,
+  headshot %, plants, defuses), the last 15 matches and the rank ladder.
 
-- **A — Platform 2.** A station platform with two freight wagons on the track, a canopy and a
-  signal hut you can go into. Entrances: the sunken **Rail Cut** from the North Yard (you arrive
-  at track level and climb the steps or hop up), the **Scales gate** from the Scales Yard, and
-  the service road (Wardens).
-- **B — Shed 4.** A warehouse with two containers, crates, steel pillars, skylights and a
-  foreman's office. Entrances: the dark **Culvert** from the Sluice Yard (steps up into the
-  shed), the west door from the **Back Alley**, and the loading bay (Wardens).
-- **Mid.** The **Street** leads to the **Plaza**. On its north side the two-floor
-  **Weighbridge** office has an upper window over the Scales Yard and the A gate. A
-  side passage leads to the Scales Yard, and the Back Alley leads to Shed 4.
+## Levels, points and the shop
 
-Measured with the navigation graph at 250 u/s: every Raider route reaches its site in 13–15 s
-(rail cut 12.7 s, office 13.7 s, alley 13.8 s, culvert 14.9 s). Wardens reach A in 4.6 s and
-B in 7.8 s, and rotate between the sites in about 10 s. Neither spawn can see the other, and
-nobody in mid can see the Raider spawn.
+XP comes from every match: 100 per elimination, 30 per headshot, 0.5 per point of damage, 60 per
+round won, 80 per plant, 120 per defuse, 600 for a win (300 for a draw) and 400 for finishing.
+Bot difficulty multiplies it (Easy ×0.8 … Expert ×1.5) and ranked adds ×1.25. Skirmish pays
+practice XP (40 per elimination, 0.2 per damage). Level 2 needs 800 XP and each level 150 more.
+**Every level-up pays shop points** (160 at level 2, +10 per level, +500 every tenth level); a
+new profile starts with 600.
+
+The **shop** sells attachments per gun and camos for every gun:
+
+| Slot | Attachments (what they do) |
+| --- | --- |
+| Muzzle | **Hush Can** suppressor: enemies hear you a third as far, almost no flash, −6% damage · **Ridge Brake**: −18% climb, −15% kick, louder and brighter · **Full Choke** (Bison): −28% pellet spread |
+| Optic | **Pip Reflex**: −15% standing inaccuracy · **Halo Holo**: −10% standing and moving inaccuracy · **Fieldglass 4×** (Osprey): wider scope, faster scoped movement, less magnification |
+| Magazine | **Long Mag** / Long Tube: +33% rounds (+2 shells), slower reload · **Quick Mag** / Side Saddle: −22% reload time, fewer rounds · **Hollow Points**: +10% damage, less armor and wall penetration |
+| Grip / stock | **Vertical Grip**: −30% sideways recoil · **Laser Module**: −20% inaccuracy on the move · **Skeleton Stock**: +10 speed, faster draw, more recoil · **Stippled Grip** (Wasp 9): −12% recoil |
+
+Prices run 180–500 points (base 250–450; pistol ×0.7, SMG and shotgun ×0.9, sniper ×1.1). Attachments show
+on the viewmodel (suppressor, brake, choke, sights with lit reticles, longer magazines, pull
+loops, side saddle, grip, laser) and reload and draw animations speed up or slow down with
+them. Twelve procedural camos (Fieldworks, Dune Drift, Gridlock, Nightfall, Hoarfrost, Ember
+Stripe, Crimson Web, Hexcore, Carbon Weave, Cobalt Anodize, Signal Flare, Gilded Scroll; 150–1,500
+points) are box-projected over the whole gun.
+
+## Rank and Elo
+
+Every defuse match moves your rating:
+
+- **Result:** Elo-style against the bots' rating (difficulty, plus 40 per extra opponent).
+  Ranked uses K = 32, casual K = 8, so a ranked win is worth about four times a casual one.
+- **Performance:** +0.9 per elimination, +0.15 per headshot, ±0.12 per point of damage per round
+  above or below 75, −0.6 per death, +0.5 per plant and +1 per defuse. Favourites gain less and
+  lose more (scaled by the expected score). Ranked counts it fully (capped at ±24), casual a
+  quarter (±6).
+- **Placements:** the first 3 ranked matches count double; your rank shows after them.
+- **Leaving** a ranked match that has started counts as a loss. Short matches count 70%.
+  Skirmish never changes Elo.
+
+Ranks: Spark I–III (from 0, 700, 800), Flint I–III (900–1100), Fuse I–III (1200–1400),
+Charge I–III (1500–1700), Blast I–III (1800–2000), Shockwave (2200) and Short Fuse (2400). A new
+profile starts at 1000.
+
+**Saving:** the profile is kept on this device (localStorage). When the page runs as a
+claude.ai artifact it is also saved to your account in a private per-user document (only you
+can read it), so progress follows you between devices; the card says which applies.
+
+## The maps
+
+All three defuse maps have two plant sites, four Raider routes and tactical data for the bots;
+Hall B stays as a practice range.
+
+**Saltpan Depot** (Stage 5): a salt works' rail depot. A is Platform 2 (freight wagons, canopy,
+signal hut), B is Shed 4 (containers, foreman's office); mid is the street, plaza and the
+two-floor weighbridge office.
+
+**Kilnworks** (new): a brick-and-tile works on a clay quarry, low warm sun. Raiders come up from
+the quarry gate (south), Wardens hold the office court (north).
+- **A — Kiln Yard:** a big kiln with a firing arch and a tall chimney, a round updraught kiln,
+  brick stacks. In through the gate from the **Clay Pits** (west lane) or **Kiln Alley** off mid.
+- **B — Press Hall:** two hydraulic presses you can see under, a conveyor, a raised control
+  booth reached by a ramp, skylights. In through the roller door from the **Rail Siding** (east
+  lane, a parked wagon) or the **Conveyor Room** off mid.
+- **Mid — Clay Court:** split by the pug-mill house, drying racks, closed to the north by the
+  works office. A weighbridge office screens the Raider spawn from the court.
+
+**Frostline** (new): a mountain radar station in snow under a grey sky. Raiders come in from
+the drop zone (west), Wardens from Barracks Row (east).
+- **A — Hangar 2:** indoor, a parked survey plane (fuselage, wings, tail), tool chests; in
+  through the big hangar door from the **Fuel Depot** (north lane: tanks, a pipe rack, a
+  bowser) or the south door from the **Radio Path**.
+- **B — Dish Array:** an outdoor platform raised 96 units with two dishes on pedestals (walk
+  under the bowls) and a control hut; up the long ramp from the **Ice Cut** (south lane) or the
+  stairs from the **Generator Path**; Wardens use the east stairs.
+- **Mid — the Pass:** between two rock ridges into the **comms block**, whose loop corridor
+  feeds the Radio and Generator paths. A wall of supply containers keeps the Pass from seeing
+  the Raider spawn.
+
+Measured with the navigation graph at 250 u/s:
+
+| | Raider routes to the site | Wardens to A / B | A↔B rotation |
+| --- | --- | --- | --- |
+| Saltpan Depot | 11.3–13.2 s | 4.6 / 5.0 s | 10.4 s |
+| Kilnworks | 11.3–12.3 s | 4.9 / 4.6 s | 10.8 s |
+| Frostline | 11.1–15.0 s | 5.0 / 4.8 s | 12.1 s |
+
+On every map neither spawn can see the other and nobody in mid can see a spawn point. In 16
+bot-only rounds the charge was planted 16 times on Kilnworks (8 A, 8 B) and 15 times on
+Frostline (8 A, 7 B).
 
 ## The radar and HUD
 
@@ -59,7 +151,7 @@ nobody in mid can see the Raider spawn.
   always face up. It shows teammates with their facing, enemies only while you or a teammate can
   see them, the A/B letters, the charge's carrier (orange ring), the dropped charge (Raiders)
   and the planted charge (everyone, blinking). Dead, it follows whoever you spectate.
-- **Location** under the radar: Platform 2, Rail Cut, Weighbridge, Plaza, Shed 4, Culvert…
+- **Location** under the radar: Platform 2, Kiln Yard, Press Hall, Hangar 2, Dish Array, the Pass…
 - **Weapon icons**: silhouettes of the actual weapon models in the kill feed, the weapon list
   and the buy menu.
 - Low health (25 or less) pulses red. Everything from Stage 4 is still there: money with
@@ -119,7 +211,7 @@ two routes from the map's tactical data. They gather out of sight beside the spa
 push together (one in three flanks by the other route) with smokes, plant, then guard the
 charge. Wardens split between A and B on posts facing the approaches, converge after a plant
 and defuse. Vision cones, walls and smoke block sight, they hear gunfire and running, and
-there are three difficulty levels.
+there are four difficulty levels (Easy, Normal, Hard and, new in Stage 6, Expert).
 
 ## Project layout
 
@@ -127,38 +219,44 @@ there are three difficulty levels.
 index.html            single-file build (open this)
 dist/artifact.html    same page without the <html> wrapper (for hosted embeds)
 build.mjs             zero-dependency build: concatenates src/NN-*.js into one inline script
-src/head.html, body.html   page shell, HUD and menu markup, CSS tokens
+src/head.html, body.html   page shell, HUD and menu screens, CSS tokens
 src/01-util.js        math, seeded noise, settings persistence
 src/02-pix.js         float RGB pixel buffer + canvas stamping helpers
-src/03-tex-world.js   tiling 256px world textures (now with asphalt and rail ballast)
-src/04-tex-props.js   props, signs, site plates, wagons, windows, weapon skins, registry
+src/03-tex-world.js   tiling 256px world textures
+src/04-tex-maps.js    Kilnworks/Frostline textures: sooty firebrick, yellow brick, clay, snow, granite
+src/04-tex-props.js   props, signs, site plates, wagons, windows, weapon skins, the texture registry
 src/05-collision.js   convex brushes with bevel planes, BVH, box sweeps, rays
-src/06-level.js       map DSL + compiler (faces, UVs, lightmap atlas, spawns, sites, areas)
-src/07-map-depot.js   Saltpan Depot: geometry, lights, spawns, sites, places, bot tactics
+src/06-level.js       map DSL + compiler (faces, UVs, lightmap atlas, spawns, sites, areas, menu shots)
+src/07-map-depot.js   Saltpan Depot
+src/07-map-frost.js   Frostline
+src/07-map-kiln.js    Kilnworks
 src/07-map.js         the Hall B practice range, and the map registry
 src/08-bake.js        lightmap + light-probe baker (per-map texel size, probe step, ray count)
-src/09-render.js      world shader, skybox cubemap, viewmodel pass, FOV/aspect modes, scope zoom
+src/09-render.js      world shader, per-map sky, viewmodel pass, FOV/aspect modes, scope zoom, map swap
 src/10-fx.js          decals, particles, dynamic lights, tracers, casings, smoke, blood, the blast
-src/11-audio.js       WebAudio synthesis (every gun, pumps and bolts, the charge, round cues)
+src/11-audio.js       WebAudio synthesis (every gun, suppressed shots, the charge, round cues)
 src/12-input.js       keyboard / pointer lock / free cursor / wheel / touch
 src/13-player.js      movement physics (shared by you and bots)
 src/14-weapons.js     weapon definitions, spray patterns, guns/knife/grenade/charge, loadout
+src/15-arsenal.js     attachments (stat changes), camo painters, the player's modified weapon defs
 src/15-ballistics.js  bullets and pellets with penetration, knife traces, range plates
 src/16-grenades.js    grenade physics, smoke clouds, smoke line-of-sight test
-src/17-vm-models.js   viewmodel geometry: six guns, knife, smoke grenade, the charge, hands
-src/18-viewmodel.js   keyframed clips + procedural motion
+src/17-vm-models.js   viewmodel geometry: guns, knife, smoke, the charge, hands, attachment meshes
+src/18-viewmodel.js   keyframed clips + procedural motion, per-gun materials, camo UVs, kits
 src/19-entities.js    hinged doors and knock-down plates
 src/20-models.js      faction textures, skinned player models, procedural animation, hitboxes
 src/21-nav.js         waypoint graph builder, walkability tests, A*
-src/22-actors.js      players and bots: spawn, damage, death, money, sides, hit resolution
-src/23-bots.js        bot perception, aiming, combat, navigation, orders, planting, defusing
+src/22-actors.js      players and bots: spawn, damage (and damage dealt), death, money, sides
+src/23-bots.js        bot perception, aiming, combat, navigation, orders; four skill levels
 src/24-items.js       weapons on the ground: drops, physics, pickups and swaps
 src/25-bomb.js        the charge: sites, carrier, planting, fuse, defusing, the blast
 src/26-match.js       defuse rounds, economy, buying, halftime, match end
+src/26-profile.js     career profile: XP, levels, points, shop, kit, Elo and ranks, saving
 src/27-tactics.js     bot team play from the map's tactical data
-src/28-radar.js       radar overview + rotating radar, spotting, weapon silhouette icons
-src/29-hud.js         HUD, buy menu, pause menu
-src/30-main.js        boot, 64 Hz fixed tick with interpolated rendering, spectator camera
+src/28-radar.js       radar overview + rotating radar, map thumbnails, weapon silhouette icons
+src/29-hud.js         HUD and the buy menu
+src/29-menus.js       main menu, Create Game, loadout/shop with 3D preview, career, pause, results
+src/30-main.js        boot, in-place map loading, match sessions, menu camera, 64 Hz tick
 docs/ENGINE_AND_NETCODE.md   the path to Godot/Unity and to multiplayer
 tools/                headless checks and screenshot harnesses (see below)
 ```
@@ -172,79 +270,79 @@ node build.mjs
 Headless checks (Node only; those taking a path need the three.js UMD build for bone math):
 
 ```bash
-node tools/node-move-check.mjs
+node tools/node-profile-check.mjs path/to/three.js
 ```
 
 ```bash
-node tools/node-weapon-check.mjs
+node tools/node-map-check.mjs path/to/three.js kiln 16
 ```
 
 ```bash
-node tools/node-bake-check.mjs depot
+node tools/node-map-check.mjs path/to/three.js frost 16
 ```
 
 ```bash
-node tools/node-nav-check.mjs path/to/three.js
+node tools/node-map-check.mjs path/to/three.js depot 8
 ```
 
 ```bash
-node tools/node-bot-check.mjs path/to/three.js
+node tools/node-bake-check.mjs kiln
 ```
 
 ```bash
 node tools/node-match-check.mjs path/to/three.js 6
 ```
 
-```bash
-node tools/node-depot-check.mjs path/to/three.js 8
-```
+The Stage 1–4 suites still apply: `node-move-check`, `node-weapon-check`, `node-nav-check`,
+`node-bot-check` (the last two take the three.js path).
 
 Browser checks need Playwright and a local copy of three.js r128 (the file cdnjs serves, e.g.
 from `npm pack three@0.128.0`, `package/build/three.min.js`):
 
 ```bash
+node tools/gameplay6-check.mjs path/to/three.min.js shots
+```
+
+```bash
 node tools/gameplay5-check.mjs path/to/three.min.js shots
 ```
 
-```bash
-node tools/gameplay4-check.mjs path/to/three.min.js shots
-```
-
-```bash
-node tools/stage5-shots.mjs path/to/three.min.js shots
-```
-
-- `node-depot-check`: the navigation graph covers every place and tactical spot from both
-  spawns; route timings; no spawn-to-spawn or mid-to-Raider-spawn sightlines; a bot walks every
-  route and the Warden rotation with the real movement code; bots play full rounds (plants
-  happen).
-- `gameplay5-check`: the depot loads by default, the radar draws, the location name follows
-  you, enemies appear on the radar only when seen, kill feed icons, planting on Platform 2,
-  switching maps reloads into Hall B, frame cost with 10 players.
-- `node-match-check`, `gameplay4-check`: Stage 4 rules (run on Hall B, as do the Stage 1–3
-  suites `gameplay3/2-check`, `gameplay-check`, `node-nav-check`, `node-bot-check`).
-- `stage5-shots`: a camera tour of every area of the depot; `stage4/3/2-shots`, `browser-check`:
-  earlier screenshot harnesses.
+- `node-profile-check`: levels and points, shop rules (per-gun attachments, camos for every
+  gun), attachments changing weapon stats (and bots staying stock), XP lines and multipliers,
+  Elo (ranked vs casual, difficulty, performance, placements, leaving early), a whole ranked
+  match folded into the profile, sanitising saved data.
+- `node-map-check <map>`: spawns stand clear; every place and tactical spot reachable from both
+  spawns; plant spots inside their sites; route timings; no spawn-to-spawn or mid-to-spawn
+  sightlines; a bot walks every route, every Warden post and the rotation; bots play full rounds
+  with plants.
+- `gameplay6-check`: main menu and profile card, Create Game (ranked locks 5v5), buying and
+  equipping in the pre-match loadout, the 3D preview, Kilnworks built in place without a reload,
+  the bought rifle carrying its suppressor, the pause menu, results with XP, points and Elo,
+  career history, and the phone layout.
+- `gameplay`–`gameplay5-check`, `node-match-check`: the Stage 1–5 rules, still passing.
 
 ## Against the CS 1.6 graphics bar
 
 | Requirement | Status |
 | --- | --- |
-| Textured world, tiling procedural textures | Brick, plaster, concrete, corrugated sheds, asphalt with aggregate and cracks, rail ballast, timber sleepers, tiles, wood floors, freight wagon sides with stencilled marks, windows, signs (Saltpan Depot, Weighbridge, Platform 2, Shed 4, Culvert, Salt Store) |
-| Baked lighting + skybox | Low afternoon sun with long shadows, sky and one bounce; lamps in the office, shed, hut, culvert and on street poles; sunlight through Shed 4's skylights. 160k lightmap texels baked in ~3.5 s at load |
-| One original map with two sites | Saltpan Depot, above; Hall B kept as a practice range |
-| Player models, viewmodels, effects | Stages 2–4 (unchanged) |
-| HUD: health, armor, ammo, money, timer, killfeed, radar | All present; radar and location names new in Stage 5, weapon icons in the kill feed |
-| 60+ FPS | 10 players on the depot: ~65 draw calls, ~15k triangles; about 1.3 ms of game JavaScript per 60 FPS frame (one 64 Hz tick ≈ 0.45 ms, frame prep ≈ 0.8 ms). GPU frame rate isn't measured here (this container renders in software) |
+| Textured world, tiling procedural textures | Stage 6 adds sooty firebrick, yellow stock brick, sun-cracked clay, packed snow with blue hollows, faceted granite with frost and lichen, painted station panels, hangar sheeting and new signs, on top of Stage 5's brick, plaster, concrete, asphalt, ballast, corrugated steel, timber and wagons |
+| Baked lighting + skybox | Per-map light: warm low sun on Kilnworks, cold overcast on Frostline (snowy mountains in the sky); interior lamps in the Press Hall, Conveyor Room, comms block and hangar. 131k (Kilnworks) and 156k (Frostline) lightmap texels baked in 2–3 s |
+| Maps with two sites | Saltpan Depot, Kilnworks, Frostline |
+| Player models, viewmodels, effects | Stages 2–4, plus attachments and camos on the viewmodels |
+| HUD and menus | Stage 5 HUD; Stage 6 main menu over a map fly-through, Create Game, loadout/shop with a 3D gun preview, career, results and pause screens |
+| 60+ FPS | Unchanged from Stage 5 (about 1.3 ms of game JavaScript per frame with 10 players); the menus add a second small renderer only while the loadout/shop preview is open |
 
 ## Known limitations
 
-- In bot-only rounds on the depot the charge gets planted every round, but Wardens then win
-  most retakes (5 and 6 of 8 in two samples): attackers guard the planted charge loosely.
+- Bot balance varies by map and sample: in 16-round bot-only samples Raiders won 10 on
+  Kilnworks and 11 on Frostline; on Saltpan Depot Wardens win most retakes.
+- Your attachments and camo show in first person only; the third-person and dropped models stay
+  stock. Bots never use attachments.
+- Rating against bots is a single-player measure: there is no matchmaking against people yet.
 - Bots don't use cover deliberately; no fall damage; ragdolls are scripted falls.
-- Lighting is baked at load; a map change reloads the page.
 
 ## Next
 
 See [docs/ENGINE_AND_NETCODE.md](docs/ENGINE_AND_NETCODE.md) for the path to Godot or Unity and
-to multiplayer with server authority, client prediction and lag compensation.
+to multiplayer with server authority, client prediction and lag compensation; the profile and
+Elo would then move to the server.

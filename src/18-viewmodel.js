@@ -169,6 +169,66 @@ function sampleKeys(keys, t, out) {
 }
 const inWindows = (wins, t) => !!wins && wins.some(([a, b]) => t >= a && t < b);
 
+// Box-projected UVs (per triangle, along its dominant axis) so a tiling camo wraps every part evenly.
+function camoUV(g, k = 1 / 7) {
+  const p = g.attributes.position.array, n = p.length / 3, uv = new Float32Array(n * 2);
+  for (let t = 0; t + 2 < n; t += 3) {
+    const a = t * 3, ux = p[a + 3] - p[a], uy = p[a + 4] - p[a + 1], uz = p[a + 5] - p[a + 2], vx = p[a + 6] - p[a], vy = p[a + 7] - p[a + 1], vz = p[a + 8] - p[a + 2];
+    const nx = Math.abs(uy * vz - uz * vy), ny = Math.abs(uz * vx - ux * vz), nz = Math.abs(ux * vy - uy * vx);
+    for (let v = t; v < t + 3; v++) {
+      const x = p[v * 3], y = p[v * 3 + 1], z = p[v * 3 + 2];
+      let s, q;
+      if (nx >= ny && nx >= nz) { s = z; q = y; } else if (ny >= nz) { s = x; q = z; } else { s = x; q = y; }
+      uv[v * 2] = s * k + 0.37; uv[v * 2 + 1] = q * k + 0.61;
+    }
+  }
+  return new THREE.BufferAttribute(uv, 2);
+}
+
+// Per-gun materials (so each gun can wear its own camo), attachment meshes, remembered base state.
+function vmPrepareKit(m, Mg) {
+  m.mats = { metal: Mg.metal, poly: Mg.poly, tan: Mg.tan, wood: Mg.wood };
+  m.matBase = {};
+  for (const [k, mat] of Object.entries(m.mats)) m.matBase[k] = { map: mat.map, shininess: mat.shininess, specular: mat.specular.clone() };
+  vmBuildAttachments(m, Mg);
+  const body = new Set(Object.values(m.mats));
+  m.bodyMeshes = [];
+  m.root.traverse((o) => { if (o.isMesh && body.has(o.material)) { o.geometry.userData.uvBase = o.geometry.attributes.uv; m.bodyMeshes.push(o); } });
+  m.muzzleBase = m.anchors.muzzle ? m.anchors.muzzle.position.z : 0;
+  m.flashBase = m.flash ? m.flash.position.z : 0;
+  m.flashBaseScale = m.flashScale || 1;
+  m.kitSig = '';
+}
+function vmMatsFor(M) {
+  return Object.assign({}, M, { metal: M.metal.clone(), poly: M.poly.clone(), tan: M.tan.clone(), wood: M.wood.clone() });
+}
+
+// Show a weapon def's attachments and camo on its viewmodel (stock defs show neither).
+function vmApplyKit(m, def) {
+  if (!m.mats) return;
+  const kit = def.kit || null, sig = def.kitSig || '';
+  if (m.kitSig === sig) return;
+  m.kitSig = sig;
+  const on = new Set(kit ? [kit.muzzle, kit.optic, kit.mag, kit.grip].filter(Boolean) : []);
+  for (const [id, g] of Object.entries(m.att || {})) g.visible = on.has(id);
+  const ext = kit && kit.muzzle && m.attExt ? m.attExt[kit.muzzle] || 0 : 0;
+  if (m.anchors.muzzle) m.anchors.muzzle.position.z = m.muzzleBase - ext;
+  if (m.flash) m.flash.position.z = m.flashBase - ext;
+  const stock = WEAPONS[m.id];
+  m.flashScale = m.flashBaseScale * (stock && stock.flash ? def.flash / stock.flash : 1);
+  const camo = kit && kit.camo ? CAMOS[kit.camo] : null, tex = camo ? Arsenal.camoTexture(kit.camo) : null;
+  for (const mesh of m.bodyMeshes) {
+    const g = mesh.geometry;
+    if (tex) { if (!g.userData.uvCamo) g.userData.uvCamo = camoUV(g); g.setAttribute('uv', g.userData.uvCamo); }
+    else g.setAttribute('uv', g.userData.uvBase);
+  }
+  for (const [k, mat] of Object.entries(m.mats)) {
+    const b = m.matBase[k];
+    if (tex) { mat.map = tex; mat.shininess = camo.shine; mat.specular.setScalar(camo.spec); }
+    else { mat.map = b.map; mat.shininess = b.shininess; mat.specular.copy(b.specular); }
+  }
+}
+
 const Viewmodel = {
   rig: null, models: {}, cur: null, tris: 0,
   bob: 0, swayX: 0, swayY: 0, kick: 0, kickRoll: 0, flashT: 0, time: 0,
@@ -179,7 +239,10 @@ const Viewmodel = {
     this.M = M;
     this.rig = new THREE.Group();
     for (const fn of [buildRifleVM, buildPistolVM, buildKnifeVM, buildSmokeVM, buildSmgVM, buildShotgunVM, buildSniperVM, buildChargeVM]) {
-      const m = fn(M);
+      const gun = fn === buildRifleVM || fn === buildPistolVM || fn === buildSmgVM || fn === buildShotgunVM || fn === buildSniperVM;
+      const Mg = gun ? vmMatsFor(M) : M;
+      const m = fn(Mg);
+      if (gun) vmPrepareKit(m, Mg);
       m.root.visible = false;
       this.models[m.id] = m;
       this.rig.add(m.root);
@@ -229,6 +292,7 @@ const Viewmodel = {
     this.show(w.def.id);
     const m = this.cur;
     if (!m) return;
+    vmApplyKit(m, w.def);
     this.time += dt;
     // --- procedural layer on the rig
     let x = 0, y = 0, rx = 0, ry = 0, rz = 0;
@@ -244,7 +308,8 @@ const Viewmodel = {
     this.rig.position.set(x, y, 0);
     this.rig.rotation.set(rx, ry, rz);
     // --- weapon pose: base + clip + kick
-    const t = w.animTime() + alpha * TICK, clips = VM_CLIPS[m.id], clip = clips[w.anim], s = this.s6, b = m.base;
+    const rate = (w.anim.startsWith('reload') && w.def.reloadRate) || (w.anim === 'draw' && w.def.drawRate) || 1;
+    const t = (w.animTime() + alpha * TICK) * rate, clips = VM_CLIPS[m.id], clip = clips[w.anim], s = this.s6, b = m.base;
     sampleKeys(clip ? clip.root : null, t, s);
     this.kick = damp(this.kick, 0, 15, dt);
     m.root.position.set(b.x + s[0], b.y + s[1] + this.kick * 0.12, b.z + s[2] + this.kick * 1.15);
