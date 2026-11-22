@@ -17,7 +17,7 @@ The port kept the shape that makes networking an addition rather than a rewrite:
   `Loadout.tick(cmd, …)`, `Combat`, `Ballistics`, `Actors.hitscan`. A bot's `BotBrain.think()`
   returns the same command a keyboard does.
 - The whole game runs headless (`godot --headless`): the match suite plays complete bot rounds
-  without a window, at 0.8–1.0 ms per tick for 10 players.
+  without a window, at about 2 ms per tick for 16 players (8v8 on the big maps).
 - Randomness in the simulation is already seeded (`U.Rng`, mulberry32): `Gun.rnd` per weapon,
   `Ballistics.rnd`, `Bots.rnd`, `Tactics.rnd`.
 
@@ -146,8 +146,8 @@ complaints are its known trade-off.
    jitter and loss (100–200 ms, 2–5%).
 4. Lag compensation with hitbox history; a debug overlay comparing the client's hitboxes with
    the server's rewound ones.
-5. Web export over WebRTC; lobby and matchmaking (rooms of 10, bots filling empty slots, which
-   already works); accounts, profiles and Elo on a server.
+5. Web export over WebRTC; lobby and matchmaking (rooms of up to 16, bots filling empty slots, which
+   already works; up to 16 per match); accounts, profiles and Elo on a server.
 
 Each milestone gets a suite in `tests/`: for example a server and two clients in one process
 over ENet on localhost, checking that a predicted position matches the server's within a unit
@@ -158,31 +158,33 @@ after scripted input, and that a lag-compensated shot at 150 ms hits.
 ## The engine port (done)
 
 Godot 4 was the recommendation (MIT licence, no royalties or runtime fees, small desktop and web
-exports) and is what the game now runs on: Godot 4.7, the Compatibility renderer (OpenGL 3.3 /
-WebGL 2) and Jolt physics. Where the result differs from the original plan, it's to keep the
-game identical:
+exports) and is what the game now runs on: Godot 4.7 and Jolt physics. The port started on the
+Compatibility renderer (OpenGL 3.3 / WebGL 2) to match the browser version pixel for pixel; the
+graphics overhaul since then moved it to Forward+ (physically based materials, a real-time sun
+with shadows, new models, maps ten times larger), with Compatibility kept for the Web export and
+as a fallback. Where the port differs from the original plan, it was to keep the game identical:
 
 | Area | Planned | Done |
 | --- | --- | --- |
 | Assets | Run the generators once to write PNGs, WAVs and glTF | `tools/godot-export.mjs` runs the original generators in headless Chromium and writes PNG, WAV, JSON and binary files into `godot/assets/` |
 | Maps | Export to `.map`, edit in TrenchBroom, import with func_godot | The compiled levels (faces, UVs, lightmap atlas, brushes, entities, nav graph, tactical data) are exported directly, so geometry is identical and no plugin is needed. A `.map`/TrenchBroom workflow is still the way to give mappers a real editor |
-| Lighting | LightmapGI and LightmapProbes | The original baker's lightmaps and probes: pixel-matched to the browser version, no bake step |
+| Lighting | LightmapGI and LightmapProbes | The exporter's own baker: lightmaps (bounce light, lamps, sky visibility) and probes, no bake step in the editor; since the overhaul the sun is a real-time light with shadows |
 | Movement and collision | Our own accelerate/friction on a 64 Hz tick, `cast_motion` traces | As planned: one convex Jolt body per brush, `cast_motion`, then an exact clip against the brush planes (Quake 3 style) for the fraction and the plane; the movement suite checks the same numbers |
 | Navigation | NavigationServer3D navmesh | `AStar3D` over the exported waypoint graph, keeping the routes and timings the tactics were tuned on |
 | Models | glTF, `AnimationPlayer` | The generated meshes are rebuilt into `ArrayMesh` and `Skeleton3D` in code; viewmodel keyframes and procedural motion run in script as before |
-| Viewmodel | Second camera or SubViewport | A SubViewport with its own world, field of view and 2× MSAA |
+| Viewmodel | Second camera or SubViewport | A SubViewport with its own world, field of view, sun and MSAA |
 | Sound | Pre-rendered WAV, `AudioStreamPlayer3D` | As planned, with buses (compressor and limiter) |
 | HUD, radar, menus | `Control` nodes | `Control` menus built in code; the HUD draws immediate-mode; the radar is the exported overview in a shader |
-| Tests | GUT or C# unit tests | A small runner (`tests/runner.tscn`) with 75 checks plus the match and screenshot suites |
+| Tests | GUT or C# unit tests | A small runner (`tests/runner.tscn`) with 87 checks (including the map layout checks) plus the match and screenshot suites |
 
 ### Where each browser module went
 
 | Browser (`src/`) | Godot (`godot/scripts/`) |
 | --- | --- |
 | `01-util.js` | `core/u.gd`, `core/settings.gd` |
-| `02-pix.js`, `03/04-tex-*.js` | generated into `assets/textures/`; loaded by `world/assets.gd` |
+| `02-pix.js`, `03/04-tex-*.js` | generated into `assets/textures/` (the PBR materials from `assetgen/04-tex-pbr.js`); loaded by `world/assets.gd` |
 | `05-collision.js` | `world/collision.gd`, `world/trace.gd` |
-| `06-level.js`, `07-map*.js`, `08-bake.js` | generated into `assets/maps/<map>/`; loaded by `world/level.gd` |
+| `06-level.js`, `07-map*.js`, `08-bake.js` | generated into `assets/maps/<map>/` (the big maps, the map kit and the baker from `assetgen/`); loaded by `world/level.gd` |
 | `09-render.js` | `shaders/`, `world/level.gd`, `view/viewmodel.gd`, `main.gd` (camera) |
 | `10-fx.js` | `fx/fx.gd` |
 | `11-audio.js` | generated into `assets/sounds/`; played by `audio/snd.gd` |
@@ -192,10 +194,10 @@ game identical:
 | `15-arsenal.js` | `weapons/arsenal.gd` (`assets/data/arsenal.json`) |
 | `15-ballistics.js` | `weapons/ballistics.gd` |
 | `16-grenades.js` | `weapons/grenades.gd`, `weapons/smoke_cloud.gd` |
-| `17-vm-models.js`, `18-viewmodel.js` | generated into `assets/models/` and `assets/data/vm_clips.json`; `models/models.gd`, `view/viewmodel.gd` |
+| `17-vm-models.js`, `18-viewmodel.js` | generated into `assets/models/` (rebuilt in `assetgen/17-vm-models.js`) and `assets/data/vm_clips.json`; `models/models.gd`, `view/viewmodel.gd` |
 | `19-entities.js` | `world/ents.gd` |
-| `20-models.js` | `models/player_model.gd`, `models/models.gd` |
-| `21-nav.js` | generated into `assets/maps/<map>/nav.json`; `bots/nav.gd` |
+| `20-models.js` | `models/player_model.gd`, `models/models.gd` (characters and world weapons rebuilt in `assetgen/20-models.js`) |
+| `21-nav.js` | generated into `assets/maps/<map>/nav.bin` (`assetgen/21-nav.js`); `bots/nav.gd` |
 | `22-actors.js` | `actors/actors.gd`, `actors/actor.gd`, `actors/combat.gd` |
 | `22-wallbang.js` | `weapons/wallbang.gd` |
 | `23-bots.js` | `bots/bots.gd`, `bots/bot_brain.gd` |

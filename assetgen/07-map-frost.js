@@ -77,6 +77,9 @@ function buildFrostline() {
   K.block(-6000, -300, -5880, 300, 180, 'paint_white', 'roof');
   plate(-5880, 110, -120, -5876, 170, 120, 'e', 'sign_frost');
   for (const z of [-900, 900]) K.pole(-5300, z, 260, lampC);
+  // a screen of stacked containers: nobody in the Pass sees into the Drop Zone
+  for (const [z, tex] of [[-800, 'container'], [-400, 'container_blue'], [0, 'container'], [400, 'container_blue']]) K.container(-4950, z, 'z', tex, 0, 400);
+  K.container(-4950, -700, 'z', 'container_blue', 104, 600); K.container(-4950, 100, 'z', 'container', 104, 600);
 
   // =========================================================== North Slope and the Fuel Depot (north lane to A)
   bld(-4400, -3600, -3900, -3100, { h: 160, wall: 'paint_white', inner: 'plywood', roof: 'roof', floor: 'wood_floor',
@@ -155,10 +158,19 @@ function buildFrostline() {
   for (const x of [-1700, 0, 1500]) { K.pole(x, 2520, 260, lampC); K.pole(x + 600, 4700, 260, lampC); }
 
   // =========================================================== Hangar 2 (A)
-  bld(2400, -4600, 5200, -2000, { h: 440, wall: 'hangar', inner: 'hangar', roof: 'shed_roof', ceiling: 'steel', floor: 'concrete_floor',
+  bld(2400, -4600, 5200, -2000, { h: 440, wall: 'hangar', inner: 'hangar', roof: null, floor: 'concrete_floor',
     doors: [{ side: 'w', at: -3500, w: 720, h: 380 }, { side: 's', at: 3000, w: 128, h: 144 }, { side: 's', at: 4600, w: 128, h: 144 }],
     windows: [{ side: 'n', at: 3200, w: 320, y0: 320, y1: 410 }, { side: 'n', at: 4400, w: 320, y0: 320, y1: 410 }, { side: 's', at: 3800, w: 320, y0: 320, y1: 410 }],
-    lamps: [[3200, -3900], [4400, -3900], [3200, -2700], [4400, -2700]], lampCol: lampC, lampK: 1.4, lampR: 720 });
+    lamps: [[3200, -3800], [4400, -3800], [3200, -2900], [4400, -2900]], lampCol: lampC, lampK: 1.4, lampR: 720 });
+  // the roof, with three skylights across it (glazing bars every 300) that let the sun onto the floor
+  {
+    const RF = { top: 'shed_roof', bottom: 'steel', sides: 'hangar' }, zs = [-4600, -4150, -4000, -3450, -3300, -2750, -2600, -2000];
+    for (let i = 0; i < zs.length; i += 2) M.box(2400, 440, zs[i], 5200, 452, zs[i + 1], RF);
+    for (let i = 1; i < zs.length - 1; i += 2) {
+      M.box(2400, 440, zs[i], 2700, 452, zs[i + 1], RF); M.box(4900, 440, zs[i], 5200, 452, zs[i + 1], RF);
+      for (let x = 3000; x < 4900; x += 300) M.box(x - 6, 440, zs[i], x + 6, 452, zs[i + 1], 'steel', K.ND);
+    }
+  }
   // the survey plane: fuselage and nose, wings, tailplane and fin, two engines, landing gear
   M.obb(3800, 110, -3300, 90, 70, 620, 0, { sides: 'paint_white', top: 'paint_white', bottom: 'steel' });
   M.obb(3800, 100, -3940, 60, 50, 40, 0, 'paint_white');

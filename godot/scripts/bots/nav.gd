@@ -19,24 +19,36 @@ func build(level: Level) -> void:
 	cells.clear()
 	jumps.clear()
 	astar.clear()
-	STEP = float(level.nav.get("step", 40.0))
-	var raw: Array = level.nav.nodes
-	var links: Array = level.nav.links
-	astar.reserve_space(raw.size())
-	for i in raw.size():
-		var n: Array = raw[i]
-		var p := Vector3(n[0], n[1], n[2])
-		nodes.append(p)
+	var b := level.nav_bin
+	if b.size() < 16 or b.slice(0, 4).get_string_from_ascii() != "NAV2":
+		push_error("nav.bin missing or not NAV2")
+		return
+	var n := b.decode_s32(4)
+	var m := b.decode_s32(8)
+	STEP = b.decode_float(12)
+	var o := 16
+	var pos := b.slice(o, o + 12 * n).to_float32_array()
+	o += 12 * n
+	var cel := b.slice(o, o + 8 * n).to_int32_array()
+	o += 8 * n
+	var off := b.slice(o, o + 4 * (n + 1)).to_int32_array()
+	o += 4 * (n + 1)
+	var lk := b.slice(o, o + 4 * m).to_int32_array()
+	astar.reserve_space(n)
+	nodes.resize(n)
+	for i in n:
+		var p := Vector3(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2])
+		nodes[i] = p
 		astar.add_point(i, p)
-		var k := _key(int(n[3]), int(n[4]))
+		var k := _key(cel[i * 2], cel[i * 2 + 1])
 		if not cells.has(k):
 			cells[k] = []
 		(cells[k] as Array).append(i)
-	for i in links.size():
-		for l: Array in links[i]:
-			var to := int(l[0])
+	for i in n:
+		for j in range(off[i], off[i + 1]):
+			var to := lk[j] & 0x3fffffff
 			astar.connect_points(i, to, false)
-			if int(l[2]) == 1:
+			if lk[j] & 0x40000000:
 				jumps[i * 65536 + to] = true
 
 

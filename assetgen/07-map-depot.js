@@ -42,6 +42,9 @@ function buildDepot() {
   K.truck(-5240, -640, -0.4); K.truck(-5250, 700, 0.5, 'container');
   K.crates(-6260, 320, 4, 11); K.barrels(-6300, 740, 4, 12); K.pallet(-5640, -860); K.pallet(-5600, 880, 0, 0.4);
   K.pole(-5780, -760); K.pole(-5780, 760);
+  // a screen of stacked containers: nobody in the Street or the Plaza sees into the yard
+  K.container(-5480, -600, 'z', 'container', 0, 600); K.container(-5480, 0, 'z', 'container_blue', 0, 600);
+  K.container(-5480, -560, 'z', 'container_blue', 104, 520); K.container(-5480, 40, 'z', 'container', 104, 520);
   plate(-5036, 160, -120, -5032, 210, 40, 'w', 'sign_depot');
 
   // =========================================================== North Yard
@@ -112,7 +115,10 @@ function buildDepot() {
   for (let x = 3100; x <= 4500; x += 350) { M.prism(x, -3600, 40, 236, 7, 8, 'steel'); }
   M.box(2980, 236, -3800, 4620, 248, -3400, { top: 'roof', bottom: 'steel', sides: 'steel' });
   for (const x of [3300, 4300]) K.lamp(x, 228, -3600, lampW, 1.0, 460, 0);
-  K.wagon(3100, -4300, 560, 'wagon'); K.wagon(3900, -4300, 480, 'wagon_blue'); K.wagon(3500, -2800, 520, 'wagon');
+  K.wagon(3640, -4300, 520, 'wagon'); K.wagon(4220, -4300, 520, 'wagon_blue'); K.wagon(3500, -2800, 520, 'wagon');
+  // the track up the ramp out of the cut: sleepers on the slope, the rails tilted with it
+  for (let x = 3220; x < 3600; x += 40) { const y = -64 + (x - 3200) * 0.16; M.box(x - 8, y - 1, -4346, x + 8, y + 3, -4254, { top: 'timber', sides: 'timber' }, Object.assign({ lm: 32 }, K.ND)); }
+  for (const s of [-1, 1]) K.tiltBox(3400, -25, -4300 + s * 30, 202, 3, 2, 0, 0, Math.atan2(64, 400), 'steel', Object.assign({ lm: 32 }, K.ND));
   K.building(4160, -3200, 4460, -2900, { y: 4, h: 140, wall: 'panel', inner: 'plywood', roof: 'roof', floor: 'wood_floor', doors: [{ side: 'w', at: -3050 }], windows: [{ side: 'n', at: 4310, w: 96 }], lamps: [[4310, -3050]], lampK: 0.7, lampR: 220 });
   K.crates(4500, -2450, 3, 41); K.barrels(3080, -2400, 3, 42); K.sandbags(3700, -3280, 3900, -3220, 44);
   plate(3600, 180, -3796, 3800, 220, -3792, 's', 'sign_platform'); plate(3600, 120, -2204, 3700, 220, -2200, 's', 'site_a');
@@ -209,7 +215,7 @@ function buildDepot() {
     K.crates(3200, 2900, 4, 91); K.crates(4300, 4200, 3, 92); K.barrels(2800, 4300, 5, 93); K.pallet(3500, 2200); K.pallet(3600, 4300, 0, 0.3);
     // foreman's office in the north-east corner with a catwalk over it and stairs
     K.building(4140, 1816, 4584, 2200, { y: 4, h: 128, wall: 'panel', inner: 'plywood', roof: 'steel', floor: 'wood_floor', doors: [{ side: 's', at: 4300 }], windows: [{ side: 'w', at: 2000, w: 96 }, { side: 's', at: 4480 }], lamps: [[4360, 2000]], lampK: 0.7, lampR: 220 });
-    K.catwalk(2616, 1816, 4100, 1960, 176, { rails: ['s'] });
+    K.catwalk(2616, 1816, 4100, 1960, 176, {}); K.railing('x', 2616, 3900, 1958, 176);    // open where the stairs come up
     K.stairs(3900, 1960, 4100, 2280, 0, 176, 'n', 'diamond', 'steel');
     plate(2604, 200, 3200, 2600, 280, 3360, 'w', 'sign_shed4'); plate(3400, 160, 4588, 3560, 260, 4584, 'n', 'site_b');
   }
@@ -267,6 +273,9 @@ function buildDepot() {
   K.fence('z', -2200, -1600, 5000, 140); K.fence('z', 1600, 2200, 5000, 140);
   K.truck(6100, -700, Math.PI); K.truck(6100, 750, Math.PI, 'container_blue'); K.crates(5600, -900, 3, 131); K.barrels(5600, 860, 4, 132);
   for (const z of [-3600, -1800, 0, 1800, 3600]) K.pole(5380, z, 240);
+  // a screen of stacked containers in the Warden Yard: mid can't see the spawn down the Lorry Park
+  K.container(5500, -700, 'z', 'container_blue', 0, 700); K.container(5500, 0, 'z', 'container', 0, 700);
+  K.container(5500, -660, 'z', 'container', 104, 620); K.container(5500, 40, 'z', 'container_blue', 104, 620);
   plate(5404, 160, -100, 5408, 210, 60, 'e', 'sign_depot');
 
   K.ground(G, 'concrete', 0);
@@ -310,8 +319,8 @@ function buildDepot() {
     siteRoutes: { A: ['scales', 'pans'], B: ['alley', 'culvert'] },
     mid: [-1200, -1400, 1200, 1400],
     sites: {
-      A: { hold: [[4350, 0, -2820, 135], [3200, 40, -3500, 120], [4500, 40, -3600, 90], [3100, 0, -2400, 160], [4100, 0, -4600, 70], [3800, 0, -2700, 100], [4650, 0, -2400, 120], [3300, 0, -4100, 60]],
-        plant: [[3600, 40, -3600], [4000, 0, -2700], [3400, 0, -4500]], smoke: [[3000, 0, -2500], [3300, -64, -4100]] },
+      A: { hold: [[4350, 0, -2820, 135], [3200, 40, -3500, 120], [4500, 40, -3600, 90], [3100, 0, -2400, 160], [4100, 0, -4600, 70], [3800, 0, -2700, 100], [4650, 0, -2400, 120], [3100, -64, -4100, 60]],
+        plant: [[3600, 40, -3600], [4000, 0, -2700], [3400, -32, -4500]], smoke: [[3000, 0, -2500], [3300, -64, -4100]] },
       B: { hold: [[4300, 0, 2400, 80], [3000, 0, 2700, 100], [4400, 0, 3800, 60], [3400, 176, 1890, 150], [2900, 0, 4420, 30], [3900, 0, 4400, 40], [4450, 0, 2950, 90], [3500, 0, 2100, 120]],
         plant: [[3400, 0, 3200], [4300, 0, 3900], [3000, 0, 2600]], smoke: [[2700, 0, 2350], [2700, 0, 4300]] },
     },

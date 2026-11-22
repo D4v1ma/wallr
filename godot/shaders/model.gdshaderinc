@@ -18,9 +18,16 @@ uniform float emit = 0.0;
 uniform vec3 irr = vec3(0.45);
 uniform float sky_vis = 0.5;
 uniform mat3 to_world = mat3(1.0);
-// set per MeshInstance with set_instance_shader_parameter (x < 0 = use the material's irr/sky_vis)
+// set per MeshInstance with set_instance_shader_parameter (x < 0 = use the material's irr/sky_vis).
+// The Compatibility renderer keeps instance uniforms for only 256 instances, fewer than an 8v8
+// match has, so there each instance gets its own copies of its materials (Models.light_inst).
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+const vec3 irr_i = vec3(-1.0);
+const float sky_i = -1.0;
+#else
 instance uniform vec3 irr_i = vec3(-1.0);
 instance uniform float sky_i = -1.0;
+#endif
 
 global uniform sampler2D sky_pano : source_color, filter_linear_mipmap, repeat_enable;
 global uniform float refl_k;

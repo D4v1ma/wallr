@@ -93,10 +93,30 @@ static func light(mat: ShaderMaterial, c: Color) -> void:
 	mat.set_shader_parameter("sky_vis", c.a)
 
 
-## The same, per mesh instance (all its surfaces), so instances can share materials.
+## The same, per mesh instance (all its surfaces), so instances can share materials. On the
+## Compatibility renderer (no room for that many instance uniforms) the instance gets its own
+## copies of its surface materials the first time instead.
 static func light_inst(gi: GeometryInstance3D, c: Color) -> void:
-	gi.set_instance_shader_parameter("irr_i", Vector3(c.r, c.g, c.b))
-	gi.set_instance_shader_parameter("sky_i", c.a)
+	if not _compat:
+		gi.set_instance_shader_parameter("irr_i", Vector3(c.r, c.g, c.b))
+		gi.set_instance_shader_parameter("sky_i", c.a)
+		return
+	var mi := gi as MeshInstance3D
+	if mi == null or mi.mesh == null:
+		return
+	if not mi.has_meta("own_mats"):
+		mi.set_meta("own_mats", true)
+		for s in mi.mesh.get_surface_count():
+			var m := mi.mesh.surface_get_material(s)
+			if m is ShaderMaterial:
+				mi.set_surface_override_material(s, m.duplicate())
+	for s in mi.mesh.get_surface_count():
+		var m := mi.get_surface_override_material(s) as ShaderMaterial
+		if m != null:
+			light(m, c)
+
+
+static var _compat: bool = RenderingServer.get_current_rendering_method() == "gl_compatibility"
 
 
 ## An indexed copy of a triangle soup with tangents and automatic LODs (characters, world guns).

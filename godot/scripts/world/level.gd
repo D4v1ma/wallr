@@ -28,7 +28,7 @@ var radar: Texture2D
 var materials: Dictionary = {}
 var ent_groups: Dictionary = {}       ## brush index -> Array of group dictionaries
 var bin := PackedByteArray()
-var nav: Dictionary = {}
+var nav_bin := PackedByteArray()      ## the bots' graph (format in tools/godot-export.mjs, navBin)
 var spawns: Array = []
 var team_spawns: Array = []
 var hotspots: Array = []
@@ -79,7 +79,7 @@ func _load(map_key: String, parent: Node3D) -> void:
 	pr_valid = Assets.blob(bin, meta.probeValid)
 	lightmap = load(dir + "lightmap.png")
 	radar = load(dir + "radar.png")
-	nav = Assets.read_json(dir + "nav.json")
+	nav_bin = FileAccess.get_file_as_bytes(dir + "nav.bin")
 
 	root = Node3D.new()
 	root.name = "Level_" + key

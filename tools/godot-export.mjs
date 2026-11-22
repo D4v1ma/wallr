@@ -40,6 +40,20 @@ function pngRGBA(w, h, rgba) {
 }
 const put = (rel, data) => { const p = `${OUT}/${rel}`; mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, data); };
 const json = (v) => JSON.stringify(v, (k, x) => (typeof x === 'number' ? Math.round(x * 1e5) / 1e5 : x));
+// The bots' graph as little-endian binary (godot/scripts/bots/nav.gd reads it): "NAV2", node count N,
+// link count M, grid step; then float32 x, y, z per node; int32 grid column x, z per node; int32 link
+// offsets (N + 1); int32 link targets, bit 30 set on jump links.
+const navBin = (nav) => {
+  const N = nav.nodes.length, M = nav.links.reduce((s, l) => s + l.length, 0);
+  const b = Buffer.alloc(16 + 12 * N + 8 * N + 4 * (N + 1) + 4 * M);
+  b.write('NAV2', 0, 'ascii'); b.writeInt32LE(N, 4); b.writeInt32LE(M, 8); b.writeFloatLE(nav.step, 12);
+  let o = 16, k = 0;
+  for (const n of nav.nodes) { b.writeFloatLE(n[0], o); b.writeFloatLE(n[1], o + 4); b.writeFloatLE(n[2], o + 8); o += 12; }
+  for (const n of nav.nodes) { b.writeInt32LE(n[3], o); b.writeInt32LE(n[4], o + 4); o += 8; }
+  for (let i = 0; i <= N; i++) { b.writeInt32LE(k, o); o += 4; if (i < N) k += nav.links[i].length; }
+  for (const ls of nav.links) for (const l of ls) { b.writeInt32LE(l[0] | (l[2] ? 1 << 30 : 0), o); o += 4; }
+  return b;
+};
 const t0 = Date.now();
 const log = (...a) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1)}s]`, ...a);
 
@@ -354,7 +368,7 @@ if (want.has('maps')) {
     put(`maps/${key}/level.json`, json(level));
     put(`maps/${key}/level.bin`, Buffer.concat(bin.parts));
     put(`maps/${key}/brushes.json`, json(r.brushes));
-    put(`maps/${key}/nav.json`, json(r.nav));
+    put(`maps/${key}/nav.bin`, navBin(r.nav));
     put(`maps/${key}/lightmap.png`, pngRGBA(r.meta.atlasW, r.meta.atlasH, Buffer.from(r.lightmap, 'base64')));
     writeB64(`maps/${key}/radar.png`, r.radar);
     log(`map ${key}:`, r.brushes.length, 'brushes,', r.nav.nodes.length, 'nav nodes,', `atlas ${r.meta.atlasW}x${r.meta.atlasH},`, `bake ${r.meta.bakeStats.ms} ms`);

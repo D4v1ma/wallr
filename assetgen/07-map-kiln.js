@@ -47,7 +47,10 @@ function buildKilnworks() {
   M.ramp(-400, 2800, 400, 3600, -96, 0, 'n', { top: 'clay', sides: 'rock' });
   M.ramp(1400, 3800, 2400, 4400, -96, 0, 'e', { top: 'clay', sides: 'rock' });
   for (const [x, z, r, h] of [[-1100, 4650, 220, 260], [1150, 4600, 200, 240], [-700, 3700, 120, 120], [800, 3720, 140, 110], [0, 4780, 260, 200]]) K.heap(x, z, r, h, 'rock', r * 0.35, -96);
-  K.block(-1360, 3620, -1180, 3760, 64, 'steel', 'steel', -96); K.crates(500, 4200, 3, 11, -96); K.barrels(-450, 4300, 4, 12, -96);
+  K.block(-1360, 3620, -1180, 3760, 64, 'steel', 'steel', -96);
+  // the tool sheds: a long low screen, so nobody in the Clay Court sees down into the spawn
+  K.block(-850, 3900, 850, 4020, 200, 'shed', 'shed_roof', -96);
+  for (const x of [-560, 0, 560]) K.win(x - 60, 14, 4020, x + 60, 64, 4022, 's'); K.crates(500, 4200, 3, 11, -96); K.barrels(-450, 4300, 4, 12, -96);
   for (const [x, z] of [[-900, 4100], [900, 4100]]) K.lamp(x, 140, z, lampW, 1.0, 520, 0);
   // the rim: rock outcrops along the south edge
   for (let x = -5200; x <= 5200; x += 800) if (Math.abs(x) > 2600) K.heap(x, 4600, 320, 300, 'rock', 120);
@@ -101,8 +104,8 @@ function buildKilnworks() {
   bld(800, -2400, 1800, -1400, { h: 220, wall: 'brick_yellow', inner: 'concrete', roof: 'roof', floor: 'concrete_floor',
     doors: [{ side: 's', at: 1300, w: 128, h: 144 }, { side: 'e', at: -2000, w: 128, h: 160 }, { side: 'n', at: 1000 }],
     windows: [{ side: 'w', at: -2000, w: 96 }, { side: 's', at: 1650 }], lamps: [[1300, -1900]], lampCol: lampC });
-  K.catwalk(820, -2000, 1780, -1900, 70, { rails: [], posts: true });                            // the belt into the press hall
-  M.box(820, 70, -1990, 1780, 80, -1910, { top: 'steel', sides: 'steel', bottom: null }, K.ND);
+  K.catwalk(820, -2000, 1600, -1900, 70, { rails: [], posts: true });                            // the belt toward the press hall
+  M.box(820, 70, -1990, 1600, 80, -1910, { top: 'steel', sides: 'steel', bottom: null }, K.ND);
   K.crates(-1200, -2200, 3, 31); K.barrels(1000, -1600, 3, 32);
 
   // =========================================================== Kiln Yard (A)
@@ -129,6 +132,8 @@ function buildKilnworks() {
     stairs: { x0: 560, z0: -4880, x1: 780, z1: -4560, up: 'n' }, lamps: [[-300, -4550], [300, -4550, 1]], lampCol: lampW });
   for (const x of [-1100, 1100]) { M.box(x - 60, 0, -3000, x + 60, 64, -2800, { top: 'sand', sides: 'brick', bottom: null }); K.pole(x, -2700, 240); }
   K.truck(1500, -3400, Math.PI / 2 + 0.1, 'container_blue'); K.crates(-1200, -4600, 3, 51);
+  // a garden wall: the lane from the court's west side can't see the spawn
+  K.wall(-1400, -3150, -100, -3110, 220, 'brick_yellow', 0, 'concrete_plain');
   plate(-200, 150, -4204, 200, 200, -4200, 's', 'sign_kilnworks');
 
   // =========================================================== Press Hall (B)
@@ -144,8 +149,12 @@ function buildKilnworks() {
     for (const dx of [-210, 210]) M.box(x + dx - 20, 104, z - 20, x + dx + 20, 320, z + 20, 'paint_orange');
     M.box(x - 230, 320, z - 60, x + 230, 380, z + 60, { sides: 'paint_orange', top: 'steel', bottom: 'steel' });
   }
-  K.catwalk(1820, -2100, 4980, -1950, 64, { rails: [], posts: true });                                     // the conveyor line
-  M.box(1820, 64, -2090, 4980, 74, -1960, { top: 'steel', sides: 'steel', bottom: null }, K.ND);
+  // the conveyor line, broken where the walkways cross it from the west door, the south door and
+  // the roller door
+  for (const [a, b] of [[2000, 2520], [2680, 3920], [4080, 4980]]) {
+    K.catwalk(a, -2100, b, -1950, 64, { rails: [], posts: true });
+    M.box(a, 64, -2090, b, 74, -1960, { top: 'steel', sides: 'steel', bottom: null }, K.ND);
+  }
   // control booth on a mezzanine in the south-east corner, up a ramp
   K.catwalk(4300, -2460, 4980, -1620, 176, { rails: ['w', 'n'] });
   K.building(4500, -2400, 4960, -1980, { y: 176, h: 128, wall: 'panel', inner: 'plywood', roof: 'steel', floor: null, doors: [{ side: 'w', at: -2200 }],

@@ -25,6 +25,7 @@ var last_shots := 0
 var strafe := 0.0
 var strafe_t := 0.0
 var stuck_t := 0.0
+var ledge_t := 0.0
 var anchor: Variant = null
 var anchor_t := 0.0
 var door_t := 0.0
@@ -482,6 +483,10 @@ func fight(dt: float, c: Dictionary, sk: Dictionary, w: Weapon) -> void:
 			if absf(lat) > 40.0:
 				c.side = -signf(lat)
 		c.duck = crouch_pref
+	elif dist > 1600.0 and not order.is_empty() and order.kind != "hold" and order.kind != "guard" and order.kind != "stack":
+		# a long way off and somewhere to be: keep walking the route between bursts, so a far
+		# exchange of fire on a big map doesn't pin both sides in place
+		follow_path(dt, c)
 	else:
 		strafe_t -= dt
 		if strafe_t <= 0.0:
@@ -515,6 +520,20 @@ func pick_goal() -> Variant:
 
 
 func roam(dt: float, c: Dictionary, _sk: Dictionary) -> void:
+	var to: Variant = follow_path(dt, c)
+	if to == null:
+		return
+	var pl := a.player
+	want_yaw = float(look_yaw) if look_yaw != null else yaw_to(to)
+	if look_yaw != null and absf(U.wrap_angle(float(look_yaw) - pl.yaw)) < 0.1:
+		look_yaw = null
+	want_pitch = 0.0
+
+
+## Walk the path to the current goal: repath now and then, string-pull, jump, open doors and get
+## unstuck. Sets the move keys relative to where the bot faces (so it can aim elsewhere) and
+## returns the offset to the next waypoint, or null when there is none.
+func follow_path(dt: float, c: Dictionary) -> Variant:
 	var pl := a.player
 	var p := pl.pos
 	if via != null and flat_dist(p, via) < 130.0:
@@ -530,7 +549,7 @@ func roam(dt: float, c: Dictionary, _sk: Dictionary) -> void:
 		repath_t = 5.0 + Bots.r() * 3.0
 		if path.is_empty():
 			goal = null
-			return
+			return null
 	# string pulling: skip ahead while a straight walk is clear
 	pull_t -= dt
 	if pull_t <= 0.0:
@@ -555,13 +574,17 @@ func roam(dt: float, c: Dictionary, _sk: Dictionary) -> void:
 	if n == null:
 		goal = null
 		path = []
-		return
+		return null
+	# knocked off a ledge: the next waypoint is high above and can't be walked to, so plan again
+	# (string pulling can rightly aim higher than that up a ramp or steep stairs)
+	ledge_t -= dt
+	if ledge_t <= 0.0 and pl.on_ground and n.p.y - p.y > 60.0:
+		ledge_t = 0.5
+		if Nav.walk(p, n.p).is_empty():
+			path = []
+			return null
 	var to: Vector3 = n.p - p
 	var d2 := Vector2(to.x, to.z).length()
-	want_yaw = float(look_yaw) if look_yaw != null else yaw_to(to)
-	if look_yaw != null and absf(U.wrap_angle(float(look_yaw) - pl.yaw)) < 0.1:
-		look_yaw = null
-	want_pitch = 0.0
 	# move toward the waypoint regardless of where we look
 	var rel := yaw_to(to) - pl.yaw
 	c.fwd = cos(rel)
@@ -589,6 +612,7 @@ func roam(dt: float, c: Dictionary, _sk: Dictionary) -> void:
 			goal = null
 			path = []
 			stuck_t = 0.0
+	return to
 
 
 func turn(dt: float, sk: Dictionary, combat: bool) -> void:

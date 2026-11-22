@@ -1,17 +1,21 @@
 # wallr
 
 An original round-based tactical shooter where **wallbanging** is the point: load a wallbang
-round and your next shot goes through every wall in its way. You play 5v5 against bots on three
-two-site defuse maps, with rounds, money, a buy menu, attachments and camos, levels, ranks and
-accounts saved on your computer.
+round and your next shot goes through every wall in its way. You play up to 8v8 against bots on
+three large two-site defuse maps, with rounds, money, a buy menu, attachments and camos, levels,
+ranks and accounts saved on your computer.
 
-The game runs in **Godot 4.7** (the `godot/` folder). It began as a browser game, built in
+The game runs in **Godot 4.7** (the `godot/` folder) on the Forward+ renderer: physically based
+materials, a real-time sun with soft shadows over baked indirect light, ambient occlusion,
+volumetric fog, ACES tone mapping and four quality presets. It began as a browser game, built in
 seven stages: movement and shooting, weapons and effects, player models and bots, rounds and
 money, maps and the radar, menus and progression, and wallbangs. That version is still here
 (`index.html`, `src/`), and its generators are where the Godot version's assets come from:
 `tools/godot-export.mjs` runs them and writes the textures, sounds, maps and models into
-`godot/assets/`. Everything is original: procedural textures, synthesized sounds, brush
-geometry, models and code. There are no third-party assets, plugins or add-ons.
+`godot/assets/`, with the newer generators in `assetgen/` (materials, weapon and character
+models, the large maps) taking the place of their originals. Everything is original: procedural
+textures, synthesized sounds, brush geometry, models and code. There are no third-party assets,
+plugins or add-ons.
 
 ## Play it
 
@@ -38,7 +42,7 @@ and gives it back. **F11** (or Alt+Enter) switches fullscreen.
 To go straight into a match without the menus (as a guest, so nothing is saved):
 
 ```bash
-godot --path godot -- --menu=0 --map=kiln --mode=defuse --bots=5 --allies=4 --diff=hard
+godot --path godot -- --menu=0 --map=kiln --mode=defuse --bots=8 --allies=7 --diff=hard
 ```
 
 `--map` is `depot`, `kiln`, `frost` or `range` (the Hall B practice range); `--mode` is
@@ -60,7 +64,8 @@ mkdir -p godot/build/linux
 godot --headless --path godot --export-release "Linux" build/linux/wallr.x86_64
 ```
 
-Builds go to `godot/build/`, which git ignores. The game's data packs into a 16 MB `.pck`.
+Builds go to `godot/build/`, which git ignores. The game's data packs into a 76 MB `.pck`
+(textures about half of it, then the models and the three big maps).
 
 ## Controls
 
@@ -130,7 +135,7 @@ own computer.
 - **Create Game:** pick the map (cards with overviews), **Defuse** or **Skirmish**,
   **Casual** or **Ranked**, the **bot difficulty** (Easy 750, Normal 1050, Hard 1350, Expert
   1650 rating), match length (first to 9 or 16), your side (Wardens, Raiders or random), bot
-  teammates (0–4) and opponents (1–5), friendly fire. Ranked fixes 5v5 with friendly fire off.
+  teammates (0–7) and opponents (1–8), friendly fire. Ranked fixes 8v8 with friendly fire off.
   The summary shows roughly what a win and a loss would do to your Elo.
 - **Loadout for this match:** the next step. For each gun in the buy menu (Wasp 9, Swift SMG,
   Bison 12, Kestrel AR, Osprey LR) choose a muzzle, optic, magazine, grip/stock and camo from
@@ -143,8 +148,9 @@ own computer.
 - **Career:** rank and Elo (and peak), level, lifetime stats (win rate, K/D, damage per round,
   headshot %, plants, defuses), the last 15 matches and the rank ladder.
 - **Settings:** mouse sensitivity and invert, field of view and weapon field of view,
-  fullscreen, volume, HUD readouts, the crosshair (style, colour, size, gap, thickness, dot,
-  outline, follow recoil), the controls, and Admin.
+  fullscreen, graphics quality (Low, Medium, High, Ultra) and brightness, volume, HUD readouts,
+  the crosshair (style, colour, size, gap, thickness, dot, outline, follow recoil), the
+  controls, and Admin.
 
 ## Levels, points and the shop
 
@@ -223,46 +229,56 @@ leaves the computer.
 
 ## The maps
 
-All three defuse maps have two plant sites, four Raider routes and tactical data for the bots;
-Hall B stays as a practice range.
+Three defuse maps, each about 12,000 × 9,800 units, ten times the area of the browser version's
+maps. Each has two plant sites, four Raider routes, eight spawn points a side and tactical data
+for the bots. The round length (2:55), fuse (45 s), buy zone and radar scale come from the level
+file. Hall B stays as a small practice range.
 
-**Saltpan Depot** (Stage 5): a salt works' rail depot. A is Platform 2 (freight wagons, canopy,
-signal hut), B is Shed 4 (containers, foreman's office); mid is the street, plaza and the
-two-floor weighbridge office.
+**Saltpan Depot:** a salt works' rail depot under a warm afternoon sun. Raiders start in the
+West Yard, Wardens in the Warden Yard off the Service Road (east).
+- **A — Platform 2** (north-east): a raised platform under a canopy between two tracks, freight
+  wagons and a signal hut; one track climbs out of the sunken **Rail Cut**. In from the **Salt
+  Pans** and the **Brine House** (north lane) or through the **Scales Yard** gate off mid.
+- **B — Shed 4** (south-east): a tall warehouse with stacked containers, a loading dock and a
+  catwalk over the foreman's office. In from the covered **Culvert** (south lane, past the Sluice
+  Yard, the Pump House and the Evaporator Sheds) or from the **Back Alley** and **Lorry Park**.
+- **Mid:** the **Street** between warehouses and canteens, the **Plaza** with the salt monument,
+  the Weighbridge Office and the Stores block.
 
-**Kilnworks** (new): a brick-and-tile works on a clay quarry, low warm sun. Raiders come up from
-the quarry gate (south), Wardens hold the office court (north).
-- **A — Kiln Yard:** a big kiln with a firing arch and a tall chimney, a round updraught kiln,
-  brick stacks. In through the gate from the **Clay Pits** (west lane) or **Kiln Alley** off mid.
-- **B — Press Hall:** two hydraulic presses you can see under, a conveyor, a raised control
-  booth reached by a ramp, skylights. In through the roller door from the **Rail Siding** (east
-  lane, a parked wagon) or the **Conveyor Room** off mid.
-- **Mid — Clay Court:** split by the pug-mill house, drying racks, closed to the north by the
-  works office. A weighbridge office screens the Raider spawn from the court.
+**Kilnworks:** a brick-and-tile works on a clay quarry, low warm sun. Raiders climb out of the
+**Quarry** (south), Wardens hold the **Office Court** (north).
+- **A — Kiln Yard** (north-west): a firing kiln with an arch, a round updraught kiln and the big
+  chimney. In from the terraced **Clay Pits** (west lane, a conveyor gantry) or **Kiln Alley**.
+- **B — Press Hall** (north-east, indoor): two hydraulic presses you can see under, a conveyor
+  line with walkways across it, a control booth up a ramp. In through the roller door from the
+  **Rail Siding** (east lane: tracks, wagons, a gantry crane) or from the **Conveyor Room**.
+- **Mid — Clay Court:** the pug-mill house, drying racks and the **Tile Store**, with the drying
+  sheds to the west.
 
-**Frostline** (new): a mountain radar station in snow under a grey sky. Raiders come in from
-the drop zone (west), Wardens from Barracks Row (east).
-- **A — Hangar 2:** indoor, a parked survey plane (fuselage, wings, tail), tool chests; in
-  through the big hangar door from the **Fuel Depot** (north lane: tanks, a pipe rack, a
-  bowser) or the south door from the **Radio Path**.
-- **B — Dish Array:** an outdoor platform raised 96 units with two dishes on pedestals (walk
-  under the bowls) and a control hut; up the long ramp from the **Ice Cut** (south lane) or the
-  stairs from the **Generator Path**; Wardens use the east stairs.
-- **Mid — the Pass:** between two rock ridges into the **comms block**, whose loop corridor
-  feeds the Radio and Generator paths. A wall of supply containers keeps the Pass from seeing
-  the Raider spawn.
+**Frostline:** a mountain radar station in snow under a grey sky, ringed by cliffs. Raiders come
+in from the **Drop Zone** (west), Wardens from **Barracks Row** (east).
+- **A — Hangar 2** (north-east, indoor): a parked survey plane, a tow tractor, tool chests and a
+  mezzanine office under three skylights. In through the big hangar door from the **Fuel Depot** (north lane: tanks, a
+  pipe-rack walkway, lorries) or the south doors from the **Radio Path**.
+- **B — Dish Array** (south-east): a platform raised 96 units with two tilted dishes (walk under
+  the bowls) and a control hut. Up the long ramp out of the **Ice Cut** (south lane, a trench with
+  a footbridge), the stairs from the **Generator Path**, or the Wardens' stairs on the east side.
+- **Mid — the Pass:** between two rock ridges into the **Comms Block** (a radome on the roof),
+  whose halls feed the Radio Path, the Generator Path and the **Parade Ground** by the Mess Hall.
 
-Measured with the navigation graph at 250 u/s:
+Measured on the bots' navigation graph at knife speed (250 units/s; a rifle is about 12%
+slower), from spawn along each route to the site:
 
-| | Raider routes to the site | Wardens to A / B | A↔B rotation |
+| | Raider routes | Wardens to A / B | A↔B rotation |
 | --- | --- | --- | --- |
-| Saltpan Depot | 11.3–13.2 s | 4.6 / 5.0 s | 10.4 s |
-| Kilnworks | 11.3–12.3 s | 4.9 / 4.6 s | 10.8 s |
-| Frostline | 11.1–15.0 s | 5.0 / 4.8 s | 12.1 s |
+| Saltpan Depot | 45–52 s | 17 / 21 s | 29 s |
+| Kilnworks | 37–40 s | 11 / 18 s | 29 s |
+| Frostline | 44–50 s | 12 / 22 s | 27 s |
 
-On every map neither spawn can see the other and nobody in mid can see a spawn point. In 16
-bot-only rounds the charge was planted 16 times on Kilnworks (8 A, 8 B) and 15 times on
-Frostline (8 A, 7 B).
+`--test=mapcheck` (see Tests) checks every map: neither spawn can see the other, nobody in mid can
+see into a spawn (stacked containers, a tool shed and a garden wall screen them), and the bots can
+walk to every spawn point, plant spot and hold spot. In 8v8 bot-only test matches the charge was
+planted in most rounds on every map.
 
 ## The radar and HUD
 
@@ -281,10 +297,10 @@ Frostline (8 A, 7 B).
 ## A round
 
 1. **Buy time (10 s):** everyone stands at spawn. Press **B** and buy with **1–9**. You can
-   keep buying for 20 s into the round if you stay within 520 units of your spawn.
-2. **The round (1:55):** Raiders carry the charge to A or B and plant it by holding Mouse 1
+   keep buying for 20 s into the round if you stay within 900 units of your spawn.
+2. **The round (2:55):** Raiders carry the charge to A or B and plant it by holding Mouse 1
    with the charge (slot 5) for 3.2 s.
-3. **Planted:** the fuse burns 40 s and beeps faster as it runs down. Wardens hold **E** on it
+3. **Planted:** the fuse burns 45 s and beeps faster as it runs down. Wardens hold **E** on it
    to defuse: 10 s, or 5 s with a defuse kit. Letting go resets the progress.
 4. **Round over:** elimination, the charge exploding (Raiders), defusing it (Wardens), or time
    running out without a plant (Wardens). Survivors keep their gear; the dead come back with a
@@ -328,7 +344,9 @@ They buy by economy (armor or smoke on pistol rounds, rifles from $3,350, the sn
 then, force buys after losses, kits for Wardens). Each round the Raiders pick a site and its
 two routes from the map's tactical data, gather out of sight, push together (one in three flanks)
 with smokes, plant, then guard the charge. Wardens split between A and B on posts facing the
-approaches, converge after a plant and defuse.
+approaches, converge after a plant and defuse. On the big maps a bot that is on its way somewhere
+and spots someone far off (beyond 1,600 units) keeps walking its route between bursts instead of
+stopping to trade shots it can hardly land.
 
 **What a bot knows** (Stage 7 rework: before, bots heard every footstep and shot at its exact
 spot, knew exactly who had shot them, and kept seeing their current target in every
@@ -354,23 +372,29 @@ wallbang rounds.
 
 ```
 godot/
-  project.godot        Compatibility renderer (OpenGL 3.3 / WebGL 2), Jolt physics at 64 Hz, autoloads
+  project.godot        Forward+ renderer (Vulkan, D3D12, Metal; falls back to OpenGL 3.3), the Web
+                       export on Compatibility (WebGL 2), Jolt physics at 64 Hz, autoloads
   scenes/main.tscn     the one scene; scripts/main.gd boots the game, runs the tick and the camera
   assets/              written by tools/godot-export.mjs (committed, so playing needs only Godot)
-    textures/          world, prop, skin and camo textures (PNG) + textures.json (tiling, surfaces)
+    textures/          world and prop materials (albedo, normal and AO/roughness/metal PNGs), skin,
+                       glove and camo textures + textures.json (tiling, surfaces)
     sounds/            every sound effect (WAV) + sounds.json
-    maps/<map>/        level.json + level.bin (faces, UVs, light probes), brushes.json (collision),
-                       lightmap.png, nav.json (bot graph and tactical data), radar.png
-    models/            viewmodels, attachments, characters, world weapons (models.json + .bin)
+    maps/<map>/        level.json (spawns, sites, places, bot tactics) + level.bin (chunked faces,
+                       UVs, light probes), brushes.json (collision), lightmap.png (indirect light,
+                       lamps and sky visibility), nav.bin (the bots' graph), radar.png
+    models/            viewmodels, attachments, characters with LODs, world weapons
+                       (models.json + .bin)
     data/              weapon table, viewmodel animation clips, attachments and camos
     ui/                weapon silhouettes and map thumbnails
-  shaders/             world (lightmap × texture, dynamic lights, fog), models (probe lighting),
-                       decals, particles, smoke, tracers, sky, scope, radar, x-ray
+  shaders/             world (PBR with the baked indirect light and sky reflections), models (PBR lit
+                       by the light probes), decals, particles, smoke, tracers, sky (two cloud
+                       layers), scope, radar, x-ray
   scripts/core/        settings, game state, data tables, small helpers
   scripts/world/       level loading, brush collision and traces, doors and plates, textures
   scripts/player/      movement (shared by you and the bots), input commands
   scripts/weapons/     guns, knife, smoke, the charge, loadout, attachments, ballistics, wallbangs
-  scripts/view/        the viewmodel, drawn in its own viewport with its own field of view
+  scripts/view/        the viewmodel, drawn in its own viewport with its own field of view and sun;
+                       graphics presets and each map's look (gfx.gd)
   scripts/models/      mesh building, character skeletons, procedural animation, hitboxes
   scripts/actors/      players and bots: spawning, damage, deaths, money, sides
   scripts/bots/        sight, hearing, memory, aim, A* navigation, team tactics
@@ -385,10 +409,25 @@ godot/
 - **The same simulation:** a fixed 64 Hz tick in `_physics_process`, driven by input commands,
   with rendering interpolated between ticks. Movement, weapons, bots and rules are ports of the
   JavaScript, checked against the same numbers (see Tests).
-- **Collision:** every brush is a convex Jolt body; traces sweep with `cast_motion` and then clip
+- **Collision:** every brush is a convex Jolt body (built around its own centre, so detailed
+  brushes far out on the big maps stay exact); traces sweep with `cast_motion` and then clip
   exactly against the brush planes, so stepping, sliding and jumping match the original.
-- **Lighting:** the lightmaps and light probes come from the original baker, so the maps look
-  as they did in the browser, with no bake step in the editor.
+- **Lighting:** the sun is a real-time directional light with soft shadows (cascades, and
+  percentage-closer soft shadows on High and Ultra). The exporter bakes everything else: bounced
+  light, lamps and how much sky each spot sees go into the lightmap, which the world shader adds
+  as indirect light along with a reflection of the sky; light probes light the characters,
+  weapons and viewmodels the same way. Muzzle flashes and the blast are dynamic lights. Each map
+  has its own look (sun strength, clouds, fog, exposure) in `gfx.gd`.
+- **Graphics presets** (Settings → Graphics): Low, Medium, High and Ultra set the shadow map size
+  and distance, soft shadows, ambient occlusion (SSAO, and SSIL on Ultra), screen-space
+  reflections (Ultra), volumetric fog (High and Ultra), anti-aliasing and texture filtering.
+- **Materials:** 512-pixel albedo, normal and AO/roughness/metal maps generated per material,
+  with a large-scale tone variation in the shader so big walls and floors don't repeat visibly.
+- **Models:** the guns are built from rounded boxes, bevelled profiles and lathed parts with
+  smoothed normals (13–30k triangles each in first person); characters are lofted meshes with up
+  to four bone weights per vertex and automatic levels of detail.
+- **World meshes** are split into chunks of 2,048 units so Godot can cull them, with one merged
+  shadow-only mesh per chunk.
 - **Bots** route over the exported waypoint graph with `AStar3D`, keeping the routes and
   timings their tactics were tuned for.
 - **Sound:** the WebAudio synth is rendered offline to WAV; Godot plays it with distance
@@ -396,10 +435,11 @@ godot/
 
 ### Regenerating the assets
 
-Only needed after changing the generators in `src/`. It needs Node 18+, Playwright with
-Chromium (`npm install playwright`, then `npx playwright install chromium`) and three.js r128
-(`three.min.js`, used for the bone maths; for example from `npm pack three@0.128.0`, file
-`package/build/three.min.js`):
+Only needed after changing the generators in `src/` or `assetgen/` (a file in `assetgen/`
+replaces the `src/` file of the same name for the export; the browser build is unaffected). It
+needs Node 18+, Playwright with Chromium (`npm install playwright`, then
+`npx playwright install chromium`) and three.js r128 (`three.min.js`, used for the bone maths;
+for example from `npm pack three@0.128.0`, file `package/build/three.min.js`):
 
 ```bash
 node tools/godot-export.mjs path/to/three.min.js
@@ -410,7 +450,8 @@ godot --headless --path godot --import
 ```
 
 An optional second argument picks the parts (`textures,sounds,maps,models,data`) and a third
-the maps (`depot,kiln,frost,range`).
+the maps, comma-separated (`depot,kiln,frost,range`). A big map takes 30–40 s, most of it the
+lightmap bake.
 
 ## Tests
 
@@ -431,14 +472,22 @@ godot --headless --path godot res://tests/runner.tscn -- --test=move,bots,combat
   with a PIN.
 - `profile` (10): levels and points, ranks, XP and Elo rules, recording matches, shop prices.
 
-Bots playing whole defuse rounds on each map (rounds finish, the charge gets planted, fights
-happen, bots buy, the simulation stays fast):
+Bots playing whole 8v8 defuse rounds on each map (rounds finish, the charge gets planted,
+fights happen, bots buy, the simulation stays fast; `--bots` and `--allies` change the sides):
 
 ```bash
 godot --headless --path godot res://tests/runner.tscn -- --test=match --maps=depot,kiln,frost --rounds=4
 ```
 
-Screenshots for a visual check (needs a display; on a Linux server put `xvfb-run -a` in front):
+Map layout checks: neither spawn sees the other, mid can't see into a spawn, and every spawn,
+plant and hold spot is reachable for the bots (`--dump=dir` writes the clear sight lines as JSON):
+
+```bash
+godot --headless --path godot res://tests/runner.tscn -- --test=mapcheck
+```
+
+Screenshots for a visual check (needs a display; on a Linux server put `xvfb-run -a` in front;
+`--vm=all` adds every viewmodel in the sun and indoors, and a line-up of characters):
 
 ```bash
 godot --path godot res://tests/runner.tscn -- --test=shots,menus --out=/tmp/wallr-shots
@@ -451,24 +500,33 @@ your accounts.
 
 | Requirement | Godot version |
 | --- | --- |
-| Textured world, tiling procedural textures | The same generated textures as the browser version (brick, plaster, concrete, asphalt, corrugated steel, timber, firebrick, clay, snow, granite, signs, wagons), mipmapped and filtered |
-| Baked lighting + skybox | The original lightmaps and light probes on every map (warm low sun on Kilnworks, overcast on Frostline, interior lamps), a sky per map, dynamic light from muzzle flashes and the blast |
-| Maps with two sites | Saltpan Depot, Kilnworks, Frostline, plus the Hall B practice range |
-| Player models, viewmodels, effects | Skinned characters with procedural animation; viewmodels with attachments and camos in their own viewport with 2× MSAA; decals, sparks, dust, smoke, tracers, casings, blood |
-| HUD and menus | The full HUD and every menu screen, rebuilt with Godot UI |
-| 60+ FPS | About 100 draw calls and 11–14k triangles per frame with 10 players in view; the simulation takes 0.8–1.0 ms per 64 Hz tick with 10 players. Frame rate not yet timed on a real GPU (the test machine renders in software) |
+| Textured world, tiling procedural textures | Physically based materials for every surface (brick, plaster, concrete, cobbles, asphalt, corrugated steel, timber, firebrick, clay, salt, snow, ice, rock, signs, wagons): 512-pixel albedo, normal and AO/roughness/metal maps, with large-scale tone variation so big surfaces don't repeat |
+| Baked lighting + skybox | A real-time sun with soft shadows over baked bounce light, lamps and sky occlusion; light probes for characters and guns; a sky per map with two cloud layers; ambient occlusion, volumetric fog, ACES tone mapping and bloom; dynamic light from muzzle flashes and the blast |
+| Maps with two sites | Saltpan Depot, Kilnworks and Frostline, each about 12,000 × 9,800 units, plus the Hall B practice range |
+| Player models, viewmodels, effects | Characters with team gear, four-bone skinning, procedural animation and levels of detail (about 8k triangles); viewmodels of 13–30k triangles with bevelled parts, attachments and camos, in their own viewport with their own sun; decals, sparks, dust, smoke, tracers, casings, blood |
+| HUD and menus | The full HUD and every menu screen, rebuilt with Godot UI, plus graphics presets |
+| 60+ FPS | 160–540 draw calls and 20–330k triangles per frame on the big maps with 16 players; the simulation takes about 2 ms per 64 Hz tick with 16 players. Frame rate not yet timed on a real GPU (the test machine renders in software, about 10 FPS at 720p) |
 
 ## The browser version
 
 `index.html` is the browser game as it was at Stage 7 (`node build.mjs` rebuilds it from
-`src/`; it loads three.js r128 from cdnjs). It plays the same game with touch controls, but
-new work goes into the Godot version. Its headless checks and screenshot tools are in `tools/`
-(`node-*-check.mjs`, `gameplay*-check.mjs`).
+`src/`; it loads three.js r128 from cdnjs). It plays the same game with touch controls, on the
+original small maps with the older models and renderer; the big maps, the new models and the
+Forward+ graphics are in the Godot version only, where new work goes. Its headless checks and
+screenshot tools are in `tools/` (`node-*-check.mjs`, `gameplay*-check.mjs`).
 
 ## Known limitations
 
-- Bot balance varies by map and sample: in 16-round bot-only samples of the browser version
-  Raiders won 10 on Kilnworks and 11 on Frostline; on Saltpan Depot Wardens win most retakes.
+- Bot balance on the big maps rests on short samples (a few 8v8 bot-only matches per map, in
+  which the charge was planted in most rounds); it hasn't been tuned further.
+- Raiders take about 44–52 s to reach a site on Saltpan Depot and Frostline and 37–40 s on
+  Kilnworks with the knife out (12% longer holding a rifle); the plan was 35–45 s.
+- Frame rate on a real GPU is untimed (see above). On the big maps the lightmaps are coarse on
+  large surfaces (a sample every 32–48 units) and hold no sun shadows, so beyond the preset's
+  shadow distance (2,400 units on Low to 6,000 on Ultra) everything is in sunlight.
+- The OpenGL renderer (the Web export, and the fallback where Vulkan, Direct3D 12 or Metal is
+  missing) has no screen-space ambient occlusion, volumetric fog or reflections, and its image
+  is a little brighter.
 - Your attachments and camo show in first person only; the third-person and dropped models stay
   stock. Bots never use attachments.
 - Rating against bots is a single-player measure: there is no matchmaking against people yet.
@@ -477,8 +535,8 @@ new work goes into the Godot version. Its headless checks and screenshot tools a
 - No finished executables have been built and tried yet. The game data has been exported as a
   `.pck` with the Linux preset and runs on its own with the Godot binary; the Windows, macOS
   and Web builds are untested.
-- Maps are still written in the JavaScript map format (`src/07-map*.js`) and exported; there is
-  no in-editor map workflow yet.
+- Maps are written in code (`assetgen/07-map-*.js`, with the building blocks in
+  `assetgen/07-map-kit.js`) and exported; there is no in-editor map workflow yet.
 
 ## Next
 

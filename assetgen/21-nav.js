@@ -103,16 +103,29 @@ const Nav = {
     return Math.abs(prev - by) < 10 ? { jump, drop } : null;
   },
 
-  // Keep the largest connected group; isolated ledges (wall caps, roof) drop out.
+  // Keep the largest strongly connected group: from every node left a bot can walk to every other,
+  // so isolated ledges (wall caps, roofs) and one-way perches (container tops you can only drop
+  // from) drop out. Kosaraju: finish order on the links, then groups on the reversed links.
   prune() {
-    const N = this.nodes.length, adj = this.nodes.map(() => []);
-    for (const a of this.nodes) for (const l of a.links) { adj[a.id].push(l.to); adj[l.to].push(a.id); }
+    const N = this.nodes.length, rev = this.nodes.map(() => []);
+    for (const a of this.nodes) for (const l of a.links) rev[l.to].push(a.id);
+    const seen = new Uint8Array(N), order = [];
+    for (let s = 0; s < N; s++) {
+      if (seen[s]) continue;
+      const st = [[s, 0]]; seen[s] = 1;
+      while (st.length) {
+        const top = st[st.length - 1], links = this.nodes[top[0]].links;
+        if (top[1] < links.length) { const v = links[top[1]++].to; if (!seen[v]) { seen[v] = 1; st.push([v, 0]); } }
+        else { order.push(top[0]); st.pop(); }
+      }
+    }
     const comp = new Int32Array(N).fill(-1);
     let best = -1, bestSize = 0;
-    for (let s = 0, c = 0; s < N; s++) {
+    for (let k = N - 1, c = 0; k >= 0; k--) {
+      const s = order[k];
       if (comp[s] >= 0) continue;
       const st = [s]; comp[s] = c; let size = 0;
-      while (st.length) { const u = st.pop(); size++; for (const v of adj[u]) if (comp[v] < 0) { comp[v] = c; st.push(v); } }
+      while (st.length) { const u = st.pop(); size++; for (const v of rev[u]) if (comp[v] < 0) { comp[v] = c; st.push(v); } }
       if (size > bestSize) { bestSize = size; best = c; }
       c++;
     }
