@@ -433,7 +433,7 @@ func _process(dt: float) -> void:
 	if _shot_frames >= 0 and _frames >= _shot_frames:
 		var img := get_viewport().get_texture().get_image()
 		img.save_png(String(Game.args.shot))
-		print("saved ", Game.args.shot)
+		print("saved %s · %s" % [Game.args.shot, Game.frame_cost()])
 		get_tree().quit()
 
 

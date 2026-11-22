@@ -15,6 +15,15 @@ static func surf_name(id: int) -> String:
 	return SURF_NAMES[clampi(id, 0, SURF_NAMES.size() - 1)]
 
 
+## Where saves live: user:// for the game. When the test runner is the scene being run, a folder
+## of its own, so running the tests never touches a player's accounts or settings.
+static func data_dir() -> String:
+	for a: String in OS.get_cmdline_args():
+		if a.ends_with("tests/runner.tscn"):
+			return "user://test-data/"
+	return "user://"
+
+
 ## Hermite step between edges a and b (b may be below a).
 static func smooth(a: float, b: float, x: float) -> float:
 	if a == b:

@@ -25,8 +25,8 @@ func frames(r: Node, n: int) -> void:
 func run(r: Node) -> void:
 	out = String(Game.args.get("out", ""))
 	# a fresh device: no accounts
-	for f in DirAccess.get_files_at(Accounts.DIR):
-		DirAccess.remove_absolute(Accounts.DIR + f)
+	for f in DirAccess.get_files_at(Accounts.dir):
+		DirAccess.remove_absolute(Accounts.dir + f)
 	Settings.v.map = "depot"      # the menu background; the match below loads another map
 	Game.args = {"menu": "1"}
 	Game.world_root = r
@@ -40,7 +40,7 @@ func run(r: Node) -> void:
 	await frames(r, 3)
 	r.check("creating an account signs in and opens the main menu", res.ok and Accounts.cur != null and Accounts.cur.name == "Ember" and Menus.current == "home",
 		"%s %s" % [res.get("msg", ""), Menus.current])
-	r.check("the account and its profile are saved on the device", FileAccess.file_exists(Accounts.INDEX) and FileAccess.file_exists(Accounts.DIR + "profile_%s.json" % Accounts.cur.id))
+	r.check("the account and its profile are saved on the device", FileAccess.file_exists(Accounts.index_path) and FileAccess.file_exists(Accounts.dir + "profile_%s.json" % Accounts.cur.id))
 	await snap(r, "m-home")
 	# Create Game
 	Menus.open_create()
@@ -85,6 +85,15 @@ func run(r: Node) -> void:
 	await snap(r, "m-results")
 	Menus.home()
 	Menus.show_screen("settings")
+	await frames(r, 2)
+	var fs0 := bool(Settings.get_value("fullscreen"))
+	var f11 := InputEventKey.new()
+	f11.keycode = KEY_F11
+	f11.pressed = true
+	Input.parse_input_event(f11)
+	await frames(r, 2)
+	r.check("F11 toggles fullscreen, and the box in Settings follows", bool(Settings.get_value("fullscreen")) != fs0 and Menus._fs_check.button_pressed != fs0)
+	Settings.set_value("fullscreen", fs0)
 	await frames(r, 2)
 	await snap(r, "m-settings")
 	Menus.show_screen("career")

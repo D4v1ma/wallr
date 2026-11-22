@@ -25,6 +25,7 @@ var welcome := ""
 var admin_msg := ""
 var admin_ok := false
 var preview: Dictionary = {}
+var _fs_check: CheckBox          ## Settings → Fullscreen, kept in step with F11
 var _t := 0.0
 
 
@@ -41,6 +42,9 @@ func _ready() -> void:
 	shade.color = Color(0.02, 0.025, 0.022, 0.55)
 	shade.mouse_filter = Control.MOUSE_FILTER_STOP
 	root.add_child(shade)
+	Settings.changed.connect(func(k: String, val: Variant) -> void:
+		if k == "fullscreen" and is_instance_valid(_fs_check):
+			_fs_check.set_pressed_no_signal(bool(val)))
 	fade = ColorRect.new()
 	fade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	fade.color = Color(0, 0, 0, 0)
@@ -1152,6 +1156,8 @@ func _render_settings() -> void:
 	a.add_child(UI.sect("View"))
 	a.add_child(_slider("Field of view (4:3)", "fov", 70.0, 110.0, 1.0, "%d°"))
 	a.add_child(_slider("Weapon field of view", "vmFov", 50.0, 80.0, 1.0, "%d°"))
+	_fs_check = _check("Fullscreen (F11)", "fullscreen")
+	a.add_child(_fs_check)
 	a.add_child(UI.sect("Sound"))
 	a.add_child(_slider("Volume", "volume", 0.0, 100.0, 1.0, "%d%%"))
 	a.add_child(UI.sect("HUD"))
@@ -1174,7 +1180,7 @@ func _render_settings() -> void:
 	b.add_child(UI.sect("Controls"))
 	var cg := UI.grid(2, 6)
 	for kv: Array in [["Move · jump · crouch · walk", "WASD · Space · Ctrl/C · Shift"], ["Fire · scope in", "Mouse 1 · Mouse 2"], ["Load a wallbang round", "X"], ["Reload · use · drop · inspect", "R · E · G · F"],
-			["Weapons · last · next", "1–5 · Q · wheel"], ["Buy menu · scores", "B · Tab"], ["Noclip (admins) · debug · hints", "V · F1 · H"], ["Pause", "Esc"]]:
+			["Weapons · last · next", "1–5 · Q · wheel"], ["Buy menu · scores", "B · Tab"], ["Noclip (admins) · debug · hints", "V · F1 · H"], ["Pause · fullscreen", "Esc · F11"]]:
 		cg.add_child(UI.label(kv[0], 13, UI.MUTED))
 		cg.add_child(UI.label(kv[1], 13, UI.TEXT, UI.display))
 	b.add_child(cg)

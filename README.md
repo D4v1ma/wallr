@@ -1,21 +1,92 @@
-# wallr — Stage 7: wallbangs
+# wallr
 
-An original round-based tactical shooter for the browser where **wallbanging** is the point:
-load a wallbang round and your next shot goes through every wall in its way. Built in stages:
-movement and shooting (1), weapons, viewmodels and effects (2), player models and bots (3),
-rounds, money and the charge (4), the first map and the radar (5), menus, progression, the shop,
-ranks, two more maps and accounts (6), and now (7) the rename to **wallr**, **wallbang rounds**,
-**scoping in**, an **admin passcode**, and **bots that only know what they see and hear**.
-Everything is original: procedural canvas textures, synthesized WebAudio sound, brush
-geometry, models and code. three.js r128 is the only dependency, loaded from cdnjs.
+An original round-based tactical shooter where **wallbanging** is the point: load a wallbang
+round and your next shot goes through every wall in its way. You play 5v5 against bots on three
+two-site defuse maps, with rounds, money, a buy menu, attachments and camos, levels, ranks and
+accounts saved on your computer.
+
+The game runs in **Godot 4.7** (the `godot/` folder). It began as a browser game, built in
+seven stages: movement and shooting, weapons and effects, player models and bots, rounds and
+money, maps and the radar, menus and progression, and wallbangs. That version is still here
+(`index.html`, `src/`), and its generators are where the Godot version's assets come from:
+`tools/godot-export.mjs` runs them and writes the textures, sounds, maps and models into
+`godot/assets/`. Everything is original: procedural textures, synthesized sounds, brush
+geometry, models and code. There are no third-party assets, plugins or add-ons.
+
+## Play it
+
+1. Install **Godot 4.7** from [godotengine.org](https://godotengine.org/download) (the
+   standard build; the .NET build isn't needed).
+2. In the Project Manager choose **Import**, pick `godot/project.godot`, then **Import & Edit**.
+   The first time, Godot imports the textures and sounds (a few seconds).
+3. Press **F5** (Run Project).
+
+Or from a terminal in the repository folder (`godot` here is however you start Godot 4.7, for
+example `Godot_v4.7.2-stable_linux.x86_64` on Linux or
+`/Applications/Godot.app/Contents/MacOS/Godot` on macOS):
+
+```bash
+godot --path godot
+```
+
+The first time, you create an **account** (a callsign and an optional PIN) or play as a guest;
+after that the game opens on your account, or asks who's playing if there are several. Then the
+**main menu**, over a slow fly-through of the last map you played: **Play** → Create Game →
+loadout → **Start match** → **Deploy**. Click in the window to take the mouse; **Esc** pauses
+and gives it back. **F11** (or Alt+Enter) switches fullscreen.
+
+To go straight into a match without the menus (as a guest, so nothing is saved):
+
+```bash
+godot --path godot -- --menu=0 --map=kiln --mode=defuse --bots=5 --allies=4 --diff=hard
+```
+
+`--map` is `depot`, `kiln`, `frost` or `range` (the Hall B practice range); `--mode` is
+`defuse` or `skirmish`; `--bots` is the number of opponents and `--allies` the number of bot
+teammates; `--team=1` plays Wardens and `--team=0` Raiders; `--diff` is `easy`, `normal`,
+`hard` or `expert`.
+
+### A standalone build
+
+The project has export presets for **Windows**, **Linux**, **macOS** and **Web**. Install the
+export templates once (**Editor → Manage Export Templates → Download and Install**), then use
+**Project → Export**, or:
+
+```bash
+mkdir -p godot/build/linux
+```
+
+```bash
+godot --headless --path godot --export-release "Linux" build/linux/wallr.x86_64
+```
+
+Builds go to `godot/build/`, which git ignores. The game's data packs into a 16 MB `.pck`.
+
+## Controls
+
+| Action | Keys |
+| --- | --- |
+| Move / jump / crouch / walk | W A S D or arrows / Space / Ctrl or C / Shift |
+| Fire, slash, throw overhand, plant (hold, in a site) | Mouse 1 |
+| Scope in (hold), Osprey LR scope zoom, stab, lob underhand | Mouse 2 |
+| Load or unload a wallbang round | X |
+| Reload / inspect | R / F |
+| Primary, pistol, knife, smoke, the charge | 1, 2, 3, 4, 5 |
+| Last weapon / cycle | Q / mouse wheel |
+| Buy menu (buy time, near your spawn), then buy | B, then 1–9 |
+| Drop the weapon in hand | G |
+| Door, pick up or swap a weapon / defuse (hold) | E |
+| Scoreboard (hold) | Tab |
+| Pause menu / fullscreen | Esc / F11 or Alt+Enter |
+| Noclip fly (admins) / debug readout / hints | V / F1 or ` / H |
 
 ## Wallbang rounds
 
-- Press **X** to load a wallbang round (the touch layout has a WALL button). Your **next gun
-  shot** goes straight through every wall, door and crate in its way, at full damage (only the
-  normal range falloff), and hits the first enemy on the line. Every wall it crosses gets entry
-  and exit marks, and the shot leaves a bright streak along its whole path. With the Bison 12
-  every pellet pierces. Press X again to take the round out unused.
+- Press **X** to load a wallbang round. Your **next gun shot** goes straight through every
+  wall, door and crate in its way, at full damage (only the normal range falloff), and hits
+  the first enemy on the line. Every wall it crosses gets entry and exit marks, and the shot
+  leaves a bright streak along its whole path. With the Bison 12 every pellet pierces. Press X
+  again to take the round out unused.
 - **3 per round** each. They **unlock 10 seconds after the round goes live** (after the buy
   time), or 10 s after spawning in skirmish. The panel above your weapon name shows the
   rounds left as diamonds and the state: *unlocks in 7 s*, *X to load*, *ARMED*, *none left
@@ -24,7 +95,7 @@ geometry, models and code. three.js r128 is the only dependency, loaded from cdn
 - Bots use them too, fairly: right after losing sight of someone, a bot sometimes fires one
   through the cover where it **last saw** them (never through walls at someone it hasn't seen).
   Normal bots do it about 30% of the time, Hard 50%, Expert 70%, Easy never.
-- The numbers live in `WALLBANG` in `src/22-wallbang.js` (`perRound`, `unlock`).
+- The numbers are `PER_ROUND` and `UNLOCK` in `godot/scripts/weapons/wallbang.gd`.
 
 ## Scoping in
 
@@ -36,9 +107,9 @@ you out of it. Red dot and holo sights line up with the screen centre.
 ## Admin
 
 Settings → **Admin**: enter the admin passcode to make the signed-in account an admin (a guest
-stays admin until reload). An admin has:
+stays admin until the game closes). An admin has:
 
-- **noclip**: V flies through walls (noclip is no longer available to everyone);
+- **noclip**: V flies through walls (noclip isn't available to everyone);
 - **unlimited wallbang rounds** with no 10 s wait;
 - **unlimited money** (buying costs nothing; the HUD shows ∞);
 - **enemies visible through walls**: orange or blue silhouettes wherever a wall hides them, and
@@ -46,44 +117,16 @@ stays admin until reload). An admin has:
 
 Admin powers can be switched off or removed in the same place, and the HUD tag says ADMIN while
 they are on. **Matches played with admin powers on don't change XP, points, rank or match
-history.** Only hashes of the passcode are in the code; to change it, run
-`node tools/admin-hash.mjs "new passcode"` and paste the two hashes into `ADMIN_HASHES` in
-`src/26-admin.js`. It's a game setting rather than security: everything runs in the browser.
-
-## Run it
-
-Open `index.html` in a desktop browser. It needs internet access for three.js (cdnjs) and the
-two UI fonts (Google Fonts, optional). Loading takes a few seconds: textures are generated, the
-lighting is baked and bot routes are mapped. The first time, you create an **account** (a
-callsign and an optional PIN) or play as a guest; after that the game opens on your account, or
-asks who's playing if there are several. Then the **main menu**, over a slow fly-through of the
-last map you played: **Play** → Create Game → loadout → **Start match**.
-**Esc** pauses a match. `index.html?map=kiln` (or `frost`, `depot`, `range`) picks the map shown
-first.
-
-| Action | Keys |
-| --- | --- |
-| Move / jump / crouch / walk | W A S D / Space / C (Ctrl in fullscreen) / Shift |
-| Fire, slash, throw overhand, plant (hold, in a site) | Mouse 1 |
-| Scope in (hold), Osprey LR scope zoom, stab, lob underhand | Mouse 2 |
-| Load or unload a wallbang round | X |
-| Reload / inspect | R / F |
-| Primary, pistol, knife, smoke, the charge | 1, 2, 3, 4, 5 |
-| Last weapon / cycle | Q / mouse wheel |
-| Buy menu (buy time, near your spawn), then buy | B, then 1–9 |
-| Drop the weapon in hand | G |
-| Door, pick up or swap a weapon / defuse (hold) | E |
-| Scoreboard (hold) | Tab |
-| Pause menu | Esc |
-| Noclip fly (admins) / debug readout / hints | V / F1 or ` / H |
-
-Touch devices get an on-screen stick, look pad and buttons (JUMP, DUCK, RELOAD, USE, SWAP, BUY,
-WALL, FIRE); the menus fit a phone held sideways.
+history.** Only a salted hash of the passcode is in the code. To change it, run
+`node tools/admin-hash.mjs "new passcode"` and put the first hash it prints (the one starting
+`s256:`) into `HASHES` in `godot/scripts/meta/admin.gd` (the browser version takes both hashes,
+in `src/26-admin.js`). It's a game setting rather than security: the game runs on the player's
+own computer.
 
 ## The front end
 
-- **Main menu:** Play, Loadout, Shop, Career, Settings, Controls, Fullscreen. A profile card
-  shows your rank emblem, Elo, level, XP bar and points.
+- **Main menu:** Play, Loadout, Shop, Career, Settings, Quit. A profile card shows your rank
+  emblem, Elo, level, XP bar and points.
 - **Create Game:** pick the map (cards with overviews), **Defuse** or **Skirmish**,
   **Casual** or **Ranked**, the **bot difficulty** (Easy 750, Normal 1050, Hard 1350, Expert
   1650 rating), match length (first to 9 or 16), your side (Wardens, Raiders or random), bot
@@ -92,13 +135,16 @@ WALL, FIRE); the menus fit a phone held sideways.
 - **Loadout for this match:** the next step. For each gun in the buy menu (Wasp 9, Swift SMG,
   Bison 12, Kestrel AR, Osprey LR) choose a muzzle, optic, magazine, grip/stock and camo from
   what you own, with a turning 3D preview and stat bars showing the change. **Start match**
-  builds the map in place if it differs (no page reload) and shows **Deploy**.
+  builds the map and shows **Deploy**.
 - **In the match:** guns you buy come with your attachments and camo (bots carry stock guns).
-  **Esc** opens the pause menu: Resume, Settings, Controls, Leave match.
+  **Esc** opens the pause menu: Resume, Settings, Leave match.
 - **Results:** victory, defeat or draw, your stats, the XP breakdown with the level bar and any
   level-ups, and the Elo change line by line. Then Play again, Shop or Main menu.
 - **Career:** rank and Elo (and peak), level, lifetime stats (win rate, K/D, damage per round,
   headshot %, plants, defuses), the last 15 matches and the rank ladder.
+- **Settings:** mouse sensitivity and invert, field of view and weapon field of view,
+  fullscreen, volume, HUD readouts, the crosshair (style, colour, size, gap, thickness, dot,
+  outline, follow recoil), the controls, and Admin.
 
 ## Levels, points and the shop
 
@@ -145,10 +191,10 @@ profile starts at 1000.
 
 ## Accounts and saving
 
-Accounts live on the device, in this browser's storage; there is no server and nothing leaves
-the device.
+Accounts live on your computer, in Godot's user data folder; there is no server and nothing
+leaves the computer.
 
-- **Create an account:** a callsign (2–16 characters, unique on this device) and an optional
+- **Create an account:** a callsign (2–16 characters, unique on this computer) and an optional
   PIN of 4–8 digits. You play under your callsign in the scoreboard and kill feed.
 - **Who's playing?** With several accounts the game opens on a picker (level, rank, points,
   last played). An account without a PIN signs straight back in next time; one with a PIN asks
@@ -158,22 +204,22 @@ the device.
 - **Guests** can play everything but nothing is saved; the home card and the results screen
   offer to turn the session into an account, keeping what it earned.
 - **When progress saves:** when a match **finishes** (before the results screen) and when you
-  **exit** it: Leave match in the pause menu, or closing or reloading the page mid-match (saved
-  as you leave, with what you had earned; a ranked match that had started counts as a loss, as
-  with Leave match). Each round also leaves a small checkpoint on the device, so if the page is
-  killed before it can save (a phone closing the tab), the match is recorded the next time that
-  account signs in, and a note on the home screen says so. A match is never counted twice.
-  Purchases and loadout changes save immediately. The home card, career and results screens
-  show when the account was last saved.
-- **What's stored** (the keys keep their pre-rename `shortfuse.` prefix so existing saves carry
-  over): `shortfuse.accounts.v1` (the accounts and who played last; PINs only as
-  salted SHA-256 hashes), and per account `shortfuse.profile.v1.<id>` (XP, points, purchases,
-  loadout, Elo, stats, recent matches) and, during a match, `shortfuse.pending.v1.<id>`.
-  Progress from before accounts existed moves into the first account created on the device.
-- **Limits:** the PIN stops other people using this browser from playing as you; it is not
-  encryption (anyone with the browser's developer tools can read the data). Clearing the site's
-  data deletes the accounts, and a private window or blocked site storage means everything is
-  played as a guest (the home screen says so).
+  **exit** it: Leave match in the pause menu, or closing the window mid-match (saved as you
+  leave, with what you had earned; a ranked match that had started counts as a loss, as with
+  Leave match). Each round also leaves a small checkpoint, so if the game is killed before it
+  can save, the match is recorded the next time that account signs in, and a note on the home
+  screen says so. A match is never counted twice. Purchases and loadout changes save
+  immediately. The home card, career and results screens show when the account was last saved.
+- **Where:** `accounts/` and `settings.json` in the user data folder:
+  `%APPDATA%\Godot\app_userdata\wallr\` on Windows,
+  `~/Library/Application Support/Godot/app_userdata/wallr/` on macOS and
+  `~/.local/share/godot/app_userdata/wallr/` on Linux (Project → Open User Data Folder in the
+  editor). `accounts.json` holds the accounts and who played last (PINs only as salted SHA-256
+  hashes); each account has `profile_<id>.json` (XP, points, purchases, loadout, Elo, stats,
+  recent matches) and, during a match, `pending_<id>.json`. Deleting the folder deletes the
+  accounts. Saves from the browser version stay in that browser.
+- **Limits:** the PIN stops other people using this computer from playing as you; it is not
+  encryption (the files are plain JSON).
 
 ## The maps
 
@@ -304,167 +350,138 @@ Four difficulty levels (Easy, Normal, Hard, Expert) set reaction time, aim error
 recoil control, headshot chance, view cone, how fast they notice you, and how often they use
 wallbang rounds.
 
-## Project layout
+## How the Godot version is built
 
 ```
-index.html            single-file build (open this)
-dist/artifact.html    same page without the <html> wrapper (for hosted embeds)
-build.mjs             zero-dependency build: concatenates src/NN-*.js into one inline script
-src/head.html, body.html   page shell, HUD and menu screens, CSS tokens
-src/01-util.js        math, seeded noise, settings persistence
-src/02-pix.js         float RGB pixel buffer + canvas stamping helpers
-src/03-tex-world.js   tiling 256px world textures
-src/04-tex-maps.js    Kilnworks/Frostline textures: sooty firebrick, yellow brick, clay, snow, granite
-src/04-tex-props.js   props, signs, site plates, wagons, windows, weapon skins, the texture registry
-src/05-collision.js   convex brushes with bevel planes, BVH, box sweeps, rays
-src/06-level.js       map DSL + compiler (faces, UVs, lightmap atlas, spawns, sites, areas, menu shots)
-src/07-map-depot.js   Saltpan Depot
-src/07-map-frost.js   Frostline
-src/07-map-kiln.js    Kilnworks
-src/07-map.js         the Hall B practice range, and the map registry
-src/08-bake.js        lightmap + light-probe baker (per-map texel size, probe step, ray count)
-src/09-render.js      world shader, per-map sky, viewmodel pass, FOV/aspect modes, scope zoom, map swap
-src/10-fx.js          decals, particles, dynamic lights, tracers, casings, smoke, blood, the blast
-src/11-audio.js       WebAudio synthesis (every gun, suppressed shots, the charge, round cues)
-src/12-input.js       keyboard / pointer lock / free cursor / wheel / touch
-src/13-player.js      movement physics (shared by you and bots)
-src/14-weapons.js     weapon definitions, spray patterns, guns/knife/grenade/charge, loadout
-src/15-arsenal.js     attachments (stat changes), camo painters, the player's modified weapon defs
-src/15-ballistics.js  bullets and pellets with penetration, wallbang rays through every wall, knife traces
-src/16-grenades.js    grenade physics, smoke clouds, smoke line-of-sight test
-src/17-vm-models.js   viewmodel geometry: guns, knife, smoke, the charge, hands, attachment meshes
-src/18-viewmodel.js   keyframed clips + procedural motion, per-gun materials, camo UVs, kits
-src/19-entities.js    hinged doors and knock-down plates
-src/20-models.js      faction textures, skinned player models, procedural animation, hitboxes
-src/21-nav.js         waypoint graph builder, walkability tests, A*
-src/22-actors.js      players and bots: spawn, damage (and damage dealt), death, money, sides
-src/22-wallbang.js    wallbang rounds: the count per round, the 10 s unlock, loading and using one
-src/23-bots.js        bot sight, hearing, callouts and memory; aiming, combat, wallbangs, navigation
-src/24-items.js       weapons on the ground: drops, physics, pickups and swaps
-src/25-bomb.js        the charge: sites, carrier, planting, fuse, defusing, the blast
-src/26-accounts.js    accounts on this device: callsigns, PINs, per-account saves, exit checkpoints
-src/26-admin.js       the admin passcode and powers
-src/26-match.js       defuse rounds, economy, buying, halftime, match end
-src/26-profile.js     career profile: XP, levels, points, shop, kit, Elo and ranks
-src/27-tactics.js     bot team play from the map's tactical data
-src/28-radar.js       radar overview + rotating radar, map thumbnails, weapon silhouette icons
-src/29-hud.js         HUD and the buy menu
-src/29-menus.js       accounts, main menu, Create Game, loadout/shop with 3D preview, career, pause, results
-src/30-main.js        boot, in-place map loading, match sessions, menu camera, 64 Hz tick
-docs/ENGINE_AND_NETCODE.md   the path to Godot/Unity and to multiplayer
-tools/                headless checks and screenshot harnesses (see below)
+godot/
+  project.godot        Compatibility renderer (OpenGL 3.3 / WebGL 2), Jolt physics at 64 Hz, autoloads
+  scenes/main.tscn     the one scene; scripts/main.gd boots the game, runs the tick and the camera
+  assets/              written by tools/godot-export.mjs (committed, so playing needs only Godot)
+    textures/          world, prop, skin and camo textures (PNG) + textures.json (tiling, surfaces)
+    sounds/            every sound effect (WAV) + sounds.json
+    maps/<map>/        level.json + level.bin (faces, UVs, light probes), brushes.json (collision),
+                       lightmap.png, nav.json (bot graph and tactical data), radar.png
+    models/            viewmodels, attachments, characters, world weapons (models.json + .bin)
+    data/              weapon table, viewmodel animation clips, attachments and camos
+    ui/                weapon silhouettes and map thumbnails
+  shaders/             world (lightmap × texture, dynamic lights, fog), models (probe lighting),
+                       decals, particles, smoke, tracers, sky, scope, radar, x-ray
+  scripts/core/        settings, game state, data tables, small helpers
+  scripts/world/       level loading, brush collision and traces, doors and plates, textures
+  scripts/player/      movement (shared by you and the bots), input commands
+  scripts/weapons/     guns, knife, smoke, the charge, loadout, attachments, ballistics, wallbangs
+  scripts/view/        the viewmodel, drawn in its own viewport with its own field of view
+  scripts/models/      mesh building, character skeletons, procedural animation, hitboxes
+  scripts/actors/      players and bots: spawning, damage, deaths, money, sides
+  scripts/bots/        sight, hearing, memory, aim, A* navigation, team tactics
+  scripts/match/       defuse rounds, economy and buying, the charge, weapons on the ground
+  scripts/fx/          decals, particles, tracers, casings, smoke, blood, dynamic lights
+  scripts/audio/       positional sound, buses with a compressor and limiter
+  scripts/meta/        accounts, profile (XP, points, Elo), admin, match sessions, menu camera
+  scripts/ui/          HUD and buy menu, menus, the UI toolkit, rank emblems
+  tests/               test runner and suites (left out of exports)
 ```
 
-## Build and test
+- **The same simulation:** a fixed 64 Hz tick in `_physics_process`, driven by input commands,
+  with rendering interpolated between ticks. Movement, weapons, bots and rules are ports of the
+  JavaScript, checked against the same numbers (see Tests).
+- **Collision:** every brush is a convex Jolt body; traces sweep with `cast_motion` and then clip
+  exactly against the brush planes, so stepping, sliding and jumping match the original.
+- **Lighting:** the lightmaps and light probes come from the original baker, so the maps look
+  as they did in the browser, with no bake step in the editor.
+- **Bots** route over the exported waypoint graph with `AStar3D`, keeping the routes and
+  timings their tactics were tuned for.
+- **Sound:** the WebAudio synth is rendered offline to WAV; Godot plays it with distance
+  attenuation through a compressor and a limiter.
+
+### Regenerating the assets
+
+Only needed after changing the generators in `src/`. It needs Node 18+, Playwright with
+Chromium (`npm install playwright`, then `npx playwright install chromium`) and three.js r128
+(`three.min.js`, used for the bone maths; for example from `npm pack three@0.128.0`, file
+`package/build/three.min.js`):
 
 ```bash
-node build.mjs
-```
-
-Headless checks (Node only; those taking a path need the three.js UMD build for bone math):
-
-```bash
-node tools/node-profile-check.mjs path/to/three.js
+node tools/godot-export.mjs path/to/three.min.js
 ```
 
 ```bash
-node tools/node-account-check.mjs path/to/three.js
+godot --headless --path godot --import
 ```
+
+An optional second argument picks the parts (`textures,sounds,maps,models,data`) and a third
+the maps (`depot,kiln,frost,range`).
+
+## Tests
 
 ```bash
-node tools/node-map-check.mjs path/to/three.js kiln 16
+godot --headless --path godot res://tests/runner.tscn -- --test=move,bots,combat,menus,profile
 ```
+
+- `move` (19 checks): run, walk and crouch speeds, jump height, step heights, jumping and
+  crouch-jumping onto boxes, stairs and ramps, sliding along walls, doors.
+- `bots` (16): damage, armor and helmets, hitboxes, reaction time, no sight or shots through
+  walls or smoke, nothing seen behind them, hearing a shot through a wall gives only a rough
+  position, getting shot gives only a rough direction, callouts, roaming, duels, cost per tick.
+- `combat` (17): wallbang rounds (locked for 10 s, loading and unloading, a normal shot stopping
+  in a wall while a wallbang round goes through and kills, none left), scoping in and out, the
+  admin passcode and powers, admin matches recording nothing.
+- `menus` (13): a fresh computer asks for an account; the main menu, Create Game, buying and
+  equipping an attachment, launching, pausing, leaving and results, F11, signing out and back in
+  with a PIN.
+- `profile` (10): levels and points, ranks, XP and Elo rules, recording matches, shop prices.
+
+Bots playing whole defuse rounds on each map (rounds finish, the charge gets planted, fights
+happen, bots buy, the simulation stays fast):
 
 ```bash
-node tools/node-map-check.mjs path/to/three.js frost 16
+godot --headless --path godot res://tests/runner.tscn -- --test=match --maps=depot,kiln,frost --rounds=4
 ```
+
+Screenshots for a visual check (needs a display; on a Linux server put `xvfb-run -a` in front):
 
 ```bash
-node tools/node-map-check.mjs path/to/three.js depot 8
+godot --path godot res://tests/runner.tscn -- --test=shots,menus --out=/tmp/wallr-shots
 ```
 
-```bash
-node tools/node-bake-check.mjs kiln
-```
-
-```bash
-node tools/node-match-check.mjs path/to/three.js 6
-```
-
-The Stage 1–4 suites still apply: `node-move-check`, `node-weapon-check`, `node-nav-check`,
-`node-bot-check` (the last two take the three.js path).
-
-Browser checks need Playwright and a local copy of three.js r128 (the file cdnjs serves, e.g.
-from `npm pack three@0.128.0`, `package/build/three.min.js`):
-
-```bash
-node tools/gameplay7-check.mjs path/to/three.min.js shots
-```
-
-```bash
-node tools/gameplay6-check.mjs path/to/three.min.js shots
-```
-
-```bash
-node tools/gameplay5-check.mjs path/to/three.min.js shots
-```
-
-- `node-account-check`: creating accounts and signing in, callsign and PIN rules, PINs
-  stored as salted hashes, each account's progress kept apart, saving when a match is recorded
-  and when something is bought, reopening the game, recovering a match whose page closed
-  mid-game (and never counting it twice), guests and turning a guest into an account, renaming,
-  changing and removing PINs, deleting, moving older progress into the first account, damaged
-  saves and blocked storage.
-- `node-profile-check`: levels and points, shop rules (per-gun attachments, camos for every
-  gun), attachments changing weapon stats (and bots staying stock), XP lines and multipliers,
-  Elo (ranked vs casual, difficulty, performance, placements, leaving early), a whole ranked
-  match folded into the profile, sanitising saved data.
-- `node-map-check <map>`: spawns stand clear; every place and tactical spot reachable from both
-  spawns; plant spots inside their sites; route timings; no spawn-to-spawn or mid-to-spawn
-  sightlines; a bot walks every route, every Warden post and the rotation; bots play full rounds
-  with plants.
-- `gameplay7-check`: the name; wallbang rounds locked for the first 10 s (the HUD counts down),
-  then X loads one (ARMED, 3 left, the crosshair changes) and unloads it; a normal shot stops in
-  a wall while a wallbang round goes through and kills, with the WB kill-feed mark; none left
-  means no more; scoping in zooms, tightens accuracy, slows you and hides the crosshair, and
-  scoping out restores it; noclip refused without admin; a wrong passcode refused, the right one
-  (any letter case) accepted; admin flies, has unlimited rounds with no wait, sees an enemy
-  behind a wall (x-ray and radar), has unlimited money; an admin match records nothing.
-- `node-bot-check` (bots): a bot facing you reacts after a human-like delay; no sight through
-  walls or smoke; a bot doesn't see you standing behind it; a shot heard through a wall gives
-  only a rough position; getting shot gives only the rough direction; a callout reaches
-  teammates a moment later; bots duel in the open.
-- `gameplay6-check`: first launch creates an account (bad callsigns refused, typing doesn't
-  reach the game), the results are saved to it, reloading the page mid-match saves that match,
-  the PIN prompt on reopening (wrong PIN refused), switching accounts and guests; then the main
-  menu and profile card, Create Game (ranked locks 5v5), buying and
-  equipping in the pre-match loadout, the 3D preview, Kilnworks built in place without a reload,
-  the bought rifle carrying its suppressor, the pause menu, results with XP, points and Elo,
-  career history, and the phone layout.
-- `gameplay`–`gameplay5-check`, `node-match-check`: the Stage 1–5 rules, still passing.
+The tests keep their saves in a folder of their own (`user://test-data/`), so they never touch
+your accounts.
 
 ## Against the CS 1.6 graphics bar
 
-| Requirement | Status |
+| Requirement | Godot version |
 | --- | --- |
-| Textured world, tiling procedural textures | Stage 6 adds sooty firebrick, yellow stock brick, sun-cracked clay, packed snow with blue hollows, faceted granite with frost and lichen, painted station panels, hangar sheeting and new signs, on top of Stage 5's brick, plaster, concrete, asphalt, ballast, corrugated steel, timber and wagons |
-| Baked lighting + skybox | Per-map light: warm low sun on Kilnworks, cold overcast on Frostline (snowy mountains in the sky); interior lamps in the Press Hall, Conveyor Room, comms block and hangar. 131k (Kilnworks) and 156k (Frostline) lightmap texels baked in 2–3 s |
-| Maps with two sites | Saltpan Depot, Kilnworks, Frostline |
-| Player models, viewmodels, effects | Stages 2–4, plus attachments and camos on the viewmodels |
-| HUD and menus | Stage 5 HUD; Stage 6 main menu over a map fly-through, Create Game, loadout/shop with a 3D gun preview, career, results and pause screens |
-| 60+ FPS | Unchanged from Stage 5 (about 1.3 ms of game JavaScript per frame with 10 players); the menus add a second small renderer only while the loadout/shop preview is open |
+| Textured world, tiling procedural textures | The same generated textures as the browser version (brick, plaster, concrete, asphalt, corrugated steel, timber, firebrick, clay, snow, granite, signs, wagons), mipmapped and filtered |
+| Baked lighting + skybox | The original lightmaps and light probes on every map (warm low sun on Kilnworks, overcast on Frostline, interior lamps), a sky per map, dynamic light from muzzle flashes and the blast |
+| Maps with two sites | Saltpan Depot, Kilnworks, Frostline, plus the Hall B practice range |
+| Player models, viewmodels, effects | Skinned characters with procedural animation; viewmodels with attachments and camos in their own viewport with 2× MSAA; decals, sparks, dust, smoke, tracers, casings, blood |
+| HUD and menus | The full HUD and every menu screen, rebuilt with Godot UI |
+| 60+ FPS | About 100 draw calls and 11–14k triangles per frame with 10 players in view; the simulation takes 0.8–1.0 ms per 64 Hz tick with 10 players. Frame rate not yet timed on a real GPU (the test machine renders in software) |
+
+## The browser version
+
+`index.html` is the browser game as it was at Stage 7 (`node build.mjs` rebuilds it from
+`src/`; it loads three.js r128 from cdnjs). It plays the same game with touch controls, but
+new work goes into the Godot version. Its headless checks and screenshot tools are in `tools/`
+(`node-*-check.mjs`, `gameplay*-check.mjs`).
 
 ## Known limitations
 
-- Bot balance varies by map and sample: in 16-round bot-only samples Raiders won 10 on
-  Kilnworks and 11 on Frostline; on Saltpan Depot Wardens win most retakes.
+- Bot balance varies by map and sample: in 16-round bot-only samples of the browser version
+  Raiders won 10 on Kilnworks and 11 on Frostline; on Saltpan Depot Wardens win most retakes.
 - Your attachments and camo show in first person only; the third-person and dropped models stay
   stock. Bots never use attachments.
 - Rating against bots is a single-player measure: there is no matchmaking against people yet.
 - Bots don't use cover deliberately; no fall damage; ragdolls are scripted falls.
+- The Godot version has no touch controls.
+- No finished executables have been built and tried yet. The game data has been exported as a
+  `.pck` with the Linux preset and runs on its own with the Godot binary; the Windows, macOS
+  and Web builds are untested.
+- Maps are still written in the JavaScript map format (`src/07-map*.js`) and exported; there is
+  no in-editor map workflow yet.
 
 ## Next
 
-See [docs/ENGINE_AND_NETCODE.md](docs/ENGINE_AND_NETCODE.md) for the path to Godot or Unity and
-to multiplayer with server authority, client prediction and lag compensation; the profile and
-Elo would then move to the server.
+See [docs/ENGINE_AND_NETCODE.md](docs/ENGINE_AND_NETCODE.md): multiplayer on the Godot version
+with server authority, client prediction and lag compensation; the profile and Elo would then
+move to the server.

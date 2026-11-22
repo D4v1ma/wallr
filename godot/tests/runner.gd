@@ -32,6 +32,15 @@ func ticks(main: Node, n: int) -> void:
 
 func _ready() -> void:
 	Game.world_root = self
+	# Saves go to user://test-data/ (U.data_dir), never the player's; every run starts from scratch.
+	if U.data_dir() != "user://test-data/":
+		push_error("run the tests as the main scene (res://tests/runner.tscn) so they can't touch real saves")
+		get_tree().quit(1)
+		return
+	for sub in ["accounts/", ""]:
+		for f in DirAccess.get_files_at(U.data_dir() + sub):
+			DirAccess.remove_absolute(U.data_dir() + sub + f)
+	Settings.load_settings()
 	var names: PackedStringArray = String(Game.args.get("test", "move")).split(",")
 	await get_tree().physics_frame
 	for n in names:

@@ -40,3 +40,10 @@ func load_level(key: String) -> Level:
 		player.cw = L.cw
 	level_loaded.emit(L)
 	return L
+
+
+## What the last frame cost the renderer (all viewports): for screenshots and performance notes.
+func frame_cost() -> String:
+	var calls := RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME)
+	var tris := RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME)
+	return "%d draw calls, %dk triangles" % [calls, roundi(tris / 1000.0)]

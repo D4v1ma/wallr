@@ -1,11 +1,12 @@
 extends Node
 ## Accounts on this device: callsigns, optional PINs (salted SHA-256), one saved profile each, and an
-## exit checkpoint so leaving a match (or closing the game) still records it. Files live in user://.
+## exit checkpoint so leaving a match (or closing the game) still records it. Files live in
+## user://accounts/ (see U.data_dir).
 
 signal changed
 
-const DIR := "user://accounts/"
-const INDEX := DIR + "accounts.json"
+var dir := U.data_dir() + "accounts/"
+var index_path := dir + "accounts.json"
 
 var list: Array = []
 var cur: Variant = null           ## the signed-in account (Dictionary) or null = guest
@@ -17,7 +18,7 @@ var _name_re := RegEx.new()
 
 func _ready() -> void:
 	_name_re.compile("[^\\p{L}\\p{N} _.\\-']")
-	DirAccess.make_dir_recursive_absolute(DIR)
+	DirAccess.make_dir_recursive_absolute(dir)
 
 
 static func random_id(n: int = 8) -> String:
@@ -58,7 +59,7 @@ func display_name() -> String:
 
 
 func init() -> void:
-	var idx: Variant = _read(INDEX)
+	var idx: Variant = _read(index_path)
 	list = []
 	if idx is Dictionary and idx.get("accounts") is Array:
 		for a: Variant in idx.accounts:
@@ -77,7 +78,7 @@ func init() -> void:
 
 
 func save_index() -> bool:
-	return _write(INDEX, {"ver": 1, "current": cur.id if cur != null else null, "accounts": list})
+	return _write(index_path, {"ver": 1, "current": cur.id if cur != null else null, "accounts": list})
 
 
 func clean_name(s: String) -> String:
@@ -114,7 +115,7 @@ func has_progress(p: Dictionary) -> bool:
 
 
 func profile_of(a: Dictionary) -> Dictionary:
-	return Profile.sanitize(_read(DIR + "profile_%s.json" % a.id))
+	return Profile.sanitize(_read(dir + "profile_%s.json" % a.id))
 
 
 func create(name: String, pin: String, from_guest: bool = false) -> Dictionary:
@@ -130,7 +131,7 @@ func create(name: String, pin: String, from_guest: bool = false) -> Dictionary:
 	if from_guest and has_progress(Profile.v):
 		profile = Profile.sanitize(Profile.v.duplicate(true))
 		from = "guest"
-	if not _write(DIR + "profile_%s.json" % a.id, profile):
+	if not _write(dir + "profile_%s.json" % a.id, profile):
 		return {"ok": false, "msg": "Couldn’t save on this device"}
 	list.append(a)
 	sign_in(a)
@@ -191,7 +192,7 @@ func play_as_guest() -> void:
 func save_profile() -> bool:
 	if cur == null:
 		return false
-	var ok := _write(DIR + "profile_%s.json" % cur.id, Profile.v)
+	var ok := _write(dir + "profile_%s.json" % cur.id, Profile.v)
 	if ok:
 		last_saved = Time.get_unix_time_from_system()
 	return ok
@@ -241,8 +242,8 @@ func remove(a: Dictionary, pin: String) -> Dictionary:
 	a = _find(a)
 	if a.get("pin") != null and not verify(a, pin):
 		return {"ok": false, "msg": "The PIN is wrong"}
-	DirAccess.remove_absolute(DIR + "profile_%s.json" % a.id)
-	DirAccess.remove_absolute(DIR + "pending_%s.json" % a.id)
+	DirAccess.remove_absolute(dir + "profile_%s.json" % a.id)
+	DirAccess.remove_absolute(dir + "pending_%s.json" % a.id)
 	list.erase(a)
 	if remembered == a:
 		remembered = null
@@ -259,19 +260,19 @@ func remove(a: Dictionary, pin: String) -> Dictionary:
 
 func checkpoint(rec: Dictionary) -> void:
 	if cur != null:
-		_write(DIR + "pending_%s.json" % cur.id, rec)
+		_write(dir + "pending_%s.json" % cur.id, rec)
 
 
 func clear_checkpoint() -> void:
 	if cur != null:
-		DirAccess.remove_absolute(DIR + "pending_%s.json" % cur.id)
+		DirAccess.remove_absolute(dir + "pending_%s.json" % cur.id)
 
 
 ## A match left unrecorded (the game closed mid-match): fold it in at sign-in.
 func apply_pending() -> Variant:
 	if cur == null:
 		return null
-	var path := DIR + "pending_%s.json" % cur.id
+	var path := dir + "pending_%s.json" % cur.id
 	var rec: Variant = _read(path)
 	DirAccess.remove_absolute(path)
 	if not (rec is Dictionary) or not (rec.get("cfg") is Dictionary) or not (rec.get("st") is Dictionary) or not (rec.get("matchId") is String) or rec.matchId == Profile.v.lastMatchId:

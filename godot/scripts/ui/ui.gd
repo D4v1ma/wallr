@@ -70,6 +70,11 @@ static func theme() -> Theme:
 	t.set_color("font_color", "LineEdit", TEXT)
 	t.set_color("font_placeholder_color", "LineEdit", Color(MUTED, 0.6))
 	t.set_color("font_color", "CheckBox", TEXT)
+	t.set_constant("h_separation", "CheckBox", 9)
+	for on in [false, true]:
+		var key := "checked" if on else "unchecked"
+		t.set_icon(key, "CheckBox", check_icon(on, 1.0))
+		t.set_icon(key + "_disabled", "CheckBox", check_icon(on, 0.45))
 	t.set_color("font_color", "RichTextLabel", TEXT)
 	t.set_color("default_color", "RichTextLabel", TEXT)
 	t.set_font("normal_font", "RichTextLabel", body)
@@ -84,6 +89,33 @@ static func theme() -> Theme:
 	t.set_stylebox("grabber", "VScrollBar", box(Color(1, 1, 1, 0.2), Color(0, 0, 0, 0), 0, 3, 2))
 	_theme = t
 	return t
+
+
+
+## Checkbox icons drawn in code: an outlined box, or an amber box with a dark tick.
+static func check_icon(on: bool, alpha: float) -> ImageTexture:
+	var n := 16
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	var a := Vector2(4.0, 8.5)
+	var b := Vector2(7.0, 11.5)
+	var c := Vector2(12.2, 4.8)
+	for y in n:
+		for x in n:
+			var edge := x == 0 or y == 0 or x == n - 1 or y == n - 1
+			var col := Color("#7c877f") if edge else Color("#0f1311")
+			if on:
+				col = ACCENT
+				var p := Vector2(x + 0.5, y + 0.5)
+				var d := minf(_seg_dist(p, a, b), _seg_dist(p, b, c))
+				col = col.lerp(ACCENT_INK, clampf(1.9 - d, 0.0, 1.0))
+			col.a *= alpha
+			img.set_pixel(x, y, col)
+	return ImageTexture.create_from_image(img)
+
+
+static func _seg_dist(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	return p.distance_to(a + ab * clampf((p - a).dot(ab) / ab.length_squared(), 0.0, 1.0))
 
 
 static func label(text: String, size: int = 15, color: Color = TEXT, font: Font = null, wrap: bool = false) -> Label:

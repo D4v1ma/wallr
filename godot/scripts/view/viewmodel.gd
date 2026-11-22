@@ -9,7 +9,7 @@ const RAIL := {"rifle": 1.46, "pistol": 1.525, "smg": 1.425, "shotgun": 1.5}
 const BUILD_ORDER := ["rifle", "pistol", "knife", "smoke", "smg", "shotgun", "sniper", "charge"]
 
 var layer: CanvasLayer
-var container: SubViewportContainer
+var screen: TextureRect
 var vp: SubViewport
 var cam: Camera3D
 var rig: Node3D
@@ -36,18 +36,23 @@ func build(parent: Node) -> void:
 	layer = CanvasLayer.new()
 	layer.layer = 0
 	parent.add_child(layer)
-	container = SubViewportContainer.new()
-	container.stretch = true
-	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	container.set_anchors_preset(Control.PRESET_FULL_RECT)
-	layer.add_child(container)
+	# rendered at the window's real pixel size and shown 1:1 (the 2D canvas is stretched from 1280x720)
 	vp = SubViewport.new()
 	vp.transparent_bg = true
 	vp.own_world_3d = true
 	vp.msaa_3d = Viewport.MSAA_2X
 	vp.handle_input_locally = false
 	vp.gui_disable_input = true
-	container.add_child(vp)
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	vp.size = parent.get_window().size
+	layer.add_child(vp)
+	screen = TextureRect.new()
+	screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	screen.set_anchors_preset(Control.PRESET_FULL_RECT)
+	screen.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	screen.stretch_mode = TextureRect.STRETCH_SCALE
+	screen.texture = vp.get_texture()
+	layer.add_child(screen)
 	cam = Camera3D.new()
 	cam.near = 0.5
 	cam.far = 400.0
@@ -223,6 +228,9 @@ func apply_kit(m: Dictionary, def: Dictionary) -> void:
 func update(dt: float, pl: Player, w: Weapon, look: Vector2, eye: Vector3, alpha: float, main_cam: Camera3D) -> void:
 	if not built:
 		return
+	var ws := layer.get_window().size
+	if vp.size != ws and ws.x > 0 and ws.y > 0:
+		vp.size = ws
 	show(w.id)
 	var m := cur
 	if m.is_empty():

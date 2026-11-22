@@ -20,7 +20,7 @@ func snap(r: Node, name: String, frames: int = 6) -> void:
 	var img := r.get_viewport().get_texture().get_image()
 	DirAccess.make_dir_recursive_absolute(out)
 	img.save_png(out.path_join(name + ".png"))
-	print("shot ", name)
+	print("shot %s · %s" % [name, Game.frame_cost()])
 
 
 func fire(main: Node, a: Actor) -> void:
