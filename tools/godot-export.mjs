@@ -1,0 +1,333 @@
+// Exports wallr's original generated assets and level data from the JS sources into the Godot
+// project (godot/assets). Everything still comes from the same original generators:
+//   textures  procedural canvas textures -> PNG (+ textures.json with tiling, surface and average colour)
+//   sounds    the WebAudio synth, rendered offline -> 16-bit mono WAV (+ sounds.json)
+//   maps      map compiler + lightmap bake + light probes + nav graph + radar -> JSON + binary + PNG
+//   models    viewmodels with attachments, character bodies, world weapons -> JSON + binary
+//   data      weapon table and viewmodel animation clips -> JSON
+// Usage: node tools/godot-export.mjs <three.min.js> [textures,sounds,maps,models,data] [map keys]
+import { createRequire } from 'node:module';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const { chromium } = createRequire(import.meta.url)('playwright');
+const [threePath, onlyArg, mapsArg] = process.argv.slice(2);
+if (!threePath) {
+  console.error('usage: node tools/godot-export.mjs <three.min.js> [textures,sounds,maps,models,data] [depot,kiln,frost,range]');
+  process.exit(2);
+}
+const want = new Set((onlyArg || 'textures,sounds,maps,models,data').split(','));
+const here = dirname(fileURLToPath(import.meta.url));
+const OUT = `${here}/../godot/assets`;
+const put = (rel, data) => { const p = `${OUT}/${rel}`; mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, data); };
+const json = (v) => JSON.stringify(v, (k, x) => (typeof x === 'number' ? Math.round(x * 1e5) / 1e5 : x));
+const t0 = Date.now();
+const log = (...a) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1)}s]`, ...a);
+
+// ---------------------------------------------------------------------------
+// The page: the original sources (minus the WebGL renderer, DOM UI and the boot code) with stubs.
+// ---------------------------------------------------------------------------
+const srcDir = `${here}/../src`;
+const files = readdirSync(srcDir).filter((f) => /^(0[1-8]|11|13|14|15|16|17|18|20|21|22|23|24|25|26|27|28)-.*\.js$/.test(f)).sort();
+const stubs = `
+const noop = () => {};
+const HUD = new Proxy({}, { get: () => noop });
+const Menu = new Proxy({}, { get: () => noop });
+const Input = { pressed: () => false };
+const FX = { L: null, probe: [0, 0, 0, 0], lightAt: (x, y, z, o) => o, explosion: noop };
+const DLights = { add: noop };
+const Ents = { targets: [], doors: [], doorInReach: () => null, tick: noop };
+const Game = { L: null, player: null, loadout: null, time: 0, shake: 0, tex: null };
+const Session = { checkpoint: noop };
+const R = { scene: null, maxAniso: 1, vmScene: { add: noop }, textures: {} };`;
+const helpers = `
+function toB64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+const f32 = (a) => toB64(new Uint8Array(Float32Array.from(a).buffer));
+const u8 = (a) => toB64(Uint8Array.from(a));
+// three.js uploads canvases flipped (v = 0 at the bottom); Godot samples v = 0 at the top row
+const flipV = (a) => { const o = Float32Array.from(a); for (let i = 1; i < o.length; i += 2) o[i] = 1 - o[i]; return o; };
+// three.js front faces wind counter-clockwise, Godot's clockwise: swap the 2nd and 3rd vertex of each triangle
+const wind = (a, k) => {
+  const o = a instanceof Uint8Array ? Uint8Array.from(a) : Float32Array.from(a);
+  for (let t = 0; t + 3 * k <= o.length; t += 3 * k) for (let c = 0; c < k; c++) { const x = o[t + k + c]; o[t + k + c] = o[t + 2 * k + c]; o[t + 2 * k + c] = x; }
+  return o;
+};
+const A3 = (a) => f32(wind(a, 3)), A2 = (a) => f32(wind(a, 2)), UV = (a) => f32(wind(flipV(a), 2));
+const png = (cv) => cv.toDataURL('image/png').split(',')[1];
+let TEX = null;
+async function texturesOnce() { if (!TEX) { TEX = await generateTextures(noop); Game.tex = TEX; } return TEX; }
+
+async function exportTextures() {
+  const tex = await texturesOnce(), out = {};
+  for (const [name, t] of Object.entries(tex)) {
+    const d = t.def || {};
+    out[name] = { def: { world: d.world || 0, fit: !!d.fit, cyl: !!d.cyl, surf: d.surf || '', fullbright: d.fullbright || null, aux: !!d.aux }, avg: t.avg,
+      png: t.canvas ? png(t.canvas) : null, w: t.canvas ? t.canvas.width : 0, h: t.canvas ? t.canvas.height : 0 };
+  }
+  for (const team of [0, 1]) { const cv = chAtlas(team); out['ch' + team] = { def: { aux: true }, avg: [0.5, 0.5, 0.5], png: png(cv), w: cv.width, h: cv.height }; }
+  for (const id of Object.keys(CAMOS)) { const cv = Arsenal.camoCanvas(id); out['camo_' + id] = { def: { aux: true }, avg: [0.5, 0.5, 0.5], png: png(cv), w: cv.width, h: cv.height }; }
+  WeaponIcons.build();
+  const icons = {};
+  for (const [id, url] of Object.entries(WeaponIcons.url)) if (id !== 'blast') icons[id] = url.split(',')[1];
+  const thumbs = {};
+  for (const key of Object.keys(MAPS)) thumbs[key] = png(Radar.thumb(key));
+  return { tex: out, icons, thumbs };
+}
+
+// --- maps ---
+const plainOpts = (o) => { const r = {}; for (const [k, v] of Object.entries(o || {})) if (k !== 'doorDef' && k !== 'targetDef' && typeof v !== 'function') r[k] = v; return r; };
+async function exportMap(key) {
+  const tex = await texturesOnce(), def = MAPS[key], mb = def.build(), L = compileLevel(mb, tex);
+  const bake = await bakeLighting(L, noop);
+  L.probes = bake.probes;
+  Nav.build(L);
+  Radar.build(L);
+  const groups = [];
+  for (const [mat, g] of L.groups) groups.push({ mat, n: g.pos.length / 3, pos: A3(g.pos), nrm: A3(g.nrm), uv: UV(g.uv), lm: A2(g.lm) });
+  const ents = [];
+  for (const [b, m] of L.entGroups) {
+    const list = [];
+    for (const [mat, g] of m) list.push({ mat, n: g.pos.length / 3, pos: A3(g.pos), nrm: A3(g.nrm), uv: UV(g.uv), lm: A2(g.lm) });
+    ents.push({ brush: mb.brushes.indexOf(b), groups: list });
+  }
+  const brushes = mb.brushes.map((b) => {
+    const cb = b.cbrush;
+    return { planes: b.faces.map((f) => f.plane), mats: b.faces.map((f) => f.mat), polys: cb.polys, contents: cb.contents, surfs: Array.from(cb.surf).slice(0, cb.faceCount),
+      surf: cb.surfDefault, entity: b.o.entity || null, o: plainOpts(b.o), min: cb.min, max: cb.max };
+  });
+  const lm = document.createElement('canvas'); lm.width = L.atlasW; lm.height = L.atlasH;
+  const lctx = lm.getContext('2d'), img = lctx.createImageData(L.atlasW, L.atlasH); img.data.set(bake.lmData); lctx.putImageData(img, 0, 0);
+  const pr = bake.probes;
+  const nav = { nodes: Nav.nodes.map((n) => [n.x, n.y, n.z, n.cx, n.cz]), links: Nav.nodes.map((n) => n.links.map((l) => [l.to, Math.round(l.cost * 100) / 100, l.jump ? 1 : 0])) };
+  const meta = {
+    key, name: def.name, blurb: def.blurb, practice: !!def.practice, env: L.env, lights: L.lights, spawns: L.spawns, teamSpawns: L.teamSpawns, hotspots: L.hotspots,
+    sites: L.sites, areas: L.areas, tactics: L.tactics, menuShots: L.menuShots, bounds: L.bounds, atlasW: L.atlasW, atlasH: L.atlasH, bakeStats: bake.stats,
+    doors: mb.doors.map((d) => ({ brush: mb.brushes.indexOf(d.mb), hinge: d.hinge, opts: plainOpts(d.opts) })),
+    targets: mb.targets.map((t) => ({ brush: mb.brushes.indexOf(t.mb), center: t.center, half: t.half, opts: plainOpts(t.opts) })),
+    radar: { s: Radar.s, lo: Radar.lo, w: Radar.img.width, h: Radar.img.height },
+    probes: { nx: pr.nx, ny: pr.ny, nz: pr.nz, x0: pr.x0, y0: pr.y0, z0: pr.z0, step: pr.step },
+  };
+  return { meta, brushes, groups, ents, nav, lightmap: png(lm), radar: png(Radar.img), probeData: f32(pr.data), probeValid: u8(pr.valid) };
+}
+
+// --- sounds: each effect rendered offline through the same synth graph and reverb ---
+async function renderSound(call, dur, rate, space) {
+  const ctx = new OfflineAudioContext(2, Math.ceil(dur * rate), rate);
+  const S = Object.create(Snd);
+  S.ctx = ctx; S.ready = true;
+  S.master = ctx.createGain(); S.master.connect(ctx.destination);
+  const rev = ctx.createConvolver(); rev.buffer = S.makeIR(1.8, 3.0);
+  S.revSend = ctx.createGain(); S.revSend.gain.value = space; S.revSend.connect(rev); rev.connect(S.master);
+  S.noise = ctx.createBuffer(1, rate, rate);
+  const nd = S.noise.getChannelData(0); for (let i = 0; i < rate; i++) nd[i] = Math.random() * 2 - 1;
+  call(S);
+  const buf = await ctx.startRendering(), L = buf.getChannelData(0), Rr = buf.getChannelData(1), n = L.length;
+  const mono = new Float32Array(n); let end = 0, peak = 0;
+  for (let i = 0; i < n; i++) { const v = (L[i] + Rr[i]) * 0.5; mono[i] = v; const a = Math.abs(v); if (a > 0.0009) end = i; if (a > peak) peak = a; }
+  end = Math.min(n, end + Math.round(rate * 0.01));
+  const out = mono.slice(0, end), fade = Math.min(end, Math.round(rate * 0.006));
+  for (let i = 0; i < fade; i++) out[end - 1 - i] *= i / fade;
+  return { data: f32(out), peak, len: end / rate };
+}
+async function exportSounds(list, rate, space) {
+  const out = {};
+  for (const [name, variants, dur, body] of list) {
+    const call = new Function('S', body);
+    out[name] = [];
+    for (let v = 0; v < variants; v++) out[name].push(await renderSound(call, dur, rate, space));
+  }
+  return out;
+}
+
+// --- models: object trees with meshes, materials by name and tagged parts ---
+function texName(t) { return t && t.name ? t.name : null; }
+function matInfo(m) {
+  return { type: m.isMeshBasicMaterial ? 'basic' : m.isMeshPhongMaterial ? 'phong' : 'lambert', map: texName(m.map), color: m.color ? m.color.toArray() : [1, 1, 1],
+    shininess: m.shininess || 0, specular: m.specular ? m.specular.toArray() : [0, 0, 0], transparent: !!m.transparent, opacity: m.opacity,
+    additive: m.blending === THREE.AdditiveBlending, depthWrite: m.depthWrite !== false, vertexColors: !!m.vertexColors };
+}
+function exportTree(root, names, extra) {
+  const nodes = [];
+  const walk = (o, parent) => {
+    const id = nodes.length;
+    const n = { name: o.name || '', parent, p: o.position.toArray(), q: o.quaternion.toArray(), s: o.scale.toArray(), visible: o.visible };
+    if (o.userData.tag) n.tag = o.userData.tag;
+    if (o.isMesh) {
+      const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry, a = g.attributes;
+      const uvBase = g.userData.uvBase || a.uv;
+      n.mesh = { n: a.position.count, pos: A3(a.position.array), nrm: A3(a.normal.array), uv: uvBase ? UV(uvBase.array) : null,
+        color: a.color ? A3(a.color.array) : null, mat: names.get(o.material) || 'unknown' };
+      if (extra && extra.camo && extra.camo.has(o)) n.mesh.uvCamo = UV(camoUV(g).array);
+    }
+    nodes.push(n);
+    for (const c of o.children) walk(c, id);
+  };
+  walk(root, -1);
+  return nodes;
+}
+function exportModels() {
+  for (const n of ['gun_metal', 'gun_poly', 'gun_tan', 'glove0', 'glove1', 'sleeve0', 'sleeve1', 'blade', 'nade', 'sprites', 'gun_wood']) { const t = new THREE.Texture(); t.name = n; R.textures[n] = t; }
+  const M = vmMaterials(), mats = {}, names = new Map();
+  for (const [k, m] of Object.entries(M)) { names.set(m, k); mats[k] = matInfo(m); }
+  const vm = {};
+  for (const fn of [buildRifleVM, buildPistolVM, buildKnifeVM, buildSmokeVM, buildSmgVM, buildShotgunVM, buildSniperVM, buildChargeVM]) {
+    const gun = fn === buildRifleVM || fn === buildPistolVM || fn === buildSmgVM || fn === buildShotgunVM || fn === buildSniperVM;
+    const Mg = gun ? vmMatsFor(M) : M;
+    if (gun) for (const k of ['metal', 'poly', 'tan', 'wood']) names.set(Mg[k], k);
+    const m = fn(Mg);
+    if (gun) vmPrepareKit(m, Mg);
+    for (const [k, o] of Object.entries(m.parts)) o.userData.tag = 'part:' + k;
+    for (const [k, o] of Object.entries(m.anchors)) o.userData.tag = 'anchor:' + k;
+    if (m.flash) m.flash.userData.tag = 'flash';
+    for (const [k, o] of Object.entries(m.att || {})) o.userData.tag = 'att:' + k;
+    const camo = new Set(m.bodyMeshes || []);
+    const rest = {}; for (const [k, r] of Object.entries(m.rest)) rest[k] = { p: r.p.toArray(), r: [r.r.x, r.r.y, r.r.z] };
+    vm[m.id] = { id: m.id, base: m.base, rest, flashScale: m.flashScale || 1, attExt: m.attExt || {}, ironY: m.ironY || 0, adsPose: m.adsPose || null,
+      hidden: (m.hidden || []).map((o) => o.name), tris: m.tris, nodes: exportTree(m.root, names, { camo }) };
+  }
+  const chars = {};
+  for (const team of [0, 1]) {
+    const g = chGeometry(team), a = g.attributes, n = a.position.count, bone = new Uint8Array(n);
+    for (let i = 0; i < n; i++) bone[i] = a.skinIndex.array[i * 4];
+    chars[team] = { n, pos: A3(a.position.array), nrm: A3(a.normal.array), uv: UV(a.uv.array), bone: toB64(wind(bone, 1)) };
+  }
+  const weapons = {};
+  for (const id of ['rifle', 'pistol', 'knife', 'smoke', 'smg', 'shotgun', 'sniper', 'charge']) {
+    const { geo, muzzle } = chWeaponGeo(id), a = geo.attributes;
+    weapons[id] = { n: a.position.count, pos: A3(a.position.array), nrm: A3(a.normal.array), uv: UV(a.uv.array), color: A3(a.color.array), muzzle };
+  }
+  return { mats, vm, chars, weapons, bones: CH_BONES, holds: HOLDS, hitboxes: HITBOXES, mounts: VM_MOUNTS };
+}
+
+function exportData() {
+  return { weapons: WEAPONS, clips: VM_CLIPS };
+}
+`;
+
+// sound list: [name, variants, render seconds, body using S (a Snd bound to an offline context)]
+const steps = ['concrete', 'metal', 'wood', 'sand', 'cloth', 'tile'];
+const SOUNDS = [
+  ['shot_rifle', 3, 2.6, 'S.rifleShot(null)'], ['shot_pistol', 3, 2.4, 'S.pistolShot(null)'], ['shot_smg', 3, 2.4, 'S.smgShot(null)'],
+  ['shot_shotgun', 3, 2.8, 'S.shotgunShot(null)'], ['shot_sniper', 3, 3.0, 'S.sniperShot(null)'],
+  ['supp_rifle', 3, 2.0, "S.suppShot(null, 'rifle')"], ['supp_pistol', 3, 2.0, "S.suppShot(null, 'pistol')"], ['supp_sniper', 3, 2.0, "S.suppShot(null, 'sniper')"],
+  ['wallbang', 2, 2.8, 'S.wallbang(null)'],
+  ...steps.map((s) => [`step_${s}`, 4, 1.6, `S.footstep('${s}', 1, null)`]),
+  ['land', 1, 1.4, 'S.tone(S.ctx.currentTime, [S.master], { f0: 95, f1: 48, dur: 0.12, g: 0.35 })'], ['jump', 1, 1.0, 'S.jump()'],
+  ['impact_metal', 3, 1.8, 'S.ricochet = () => {}; S.impact("metal", null)'], ['impact_wood', 3, 1.6, 'S.impact("wood", null)'],
+  ['impact_sand', 3, 1.6, 'S.impact("sand", null)'], ['impact_concrete', 3, 1.6, 'S.impact("concrete", null)'],
+  ['ricochet', 3, 1.8, 'S.ricochet(null)'], ['plate', 2, 2.0, 'S.plate(null)'], ['dry', 1, 0.6, 'S.dry()'],
+  ...['wbArm', 'wbOff', 'magout', 'magin', 'bolt', 'cloth', 'slide', 'knifeDraw', 'pin', 'throw', 'pumpBack', 'pumpFwd', 'shellIn', 'boltUp', 'boltBack', 'boltFwd', 'boltDown', 'zoom']
+    .map((p) => [`sfx_${p}`, 1, 0.8, `S.sfx('${p}')`]),
+  ['sfx_key', 3, 0.5, "S.sfx('key')"],
+  ['door_metal', 1, 1.8, 'S.door(null, true, true)'], ['door_wood_open', 1, 1.8, 'S.door(null, false, true)'], ['door_wood_close', 1, 1.8, 'S.door(null, false, false)'],
+  ['swish', 3, 0.6, 'S.knifeSwish(false)'], ['swish_heavy', 3, 0.7, 'S.knifeSwish(true)'],
+  ['knifehit_metal', 2, 1.4, "S.knifeHit('metal', null, false)"], ['knifehit_wood', 2, 1.4, "S.knifeHit('wood', null, false)"],
+  ['knifehit_sand', 2, 1.4, "S.knifeHit('sand', null, false)"], ['knifehit_concrete', 2, 1.4, "S.knifeHit('concrete', null, false)"],
+  ['bounce_soft', 2, 1.2, "S.nadeBounce('sand', 400, null)"], ['bounce_wood', 2, 1.2, "S.nadeBounce('wood', 400, null)"], ['bounce_hard', 2, 1.4, "S.nadeBounce('metal', 400, null)"],
+  ['smoke_pop', 1, 5.0, 'S.smokePop(null)'],
+  ['shell_rifle', 2, 1.0, "S.shell(null, 'rifle', 0, 'concrete')"], ['shell_pistol', 2, 1.0, "S.shell(null, 'pistol', 0, 'concrete')"],
+  ['shell_shotgun', 2, 1.0, "S.shell(null, 'shotgun', 0, 'concrete')"], ['shell_soft', 1, 0.8, "S.shell(null, 'rifle', 0, 'sand')"],
+  ['bodyhit', 2, 1.2, 'S.bodyHit(null, false)'], ['bodyhit_helmet', 2, 1.2, 'S.bodyHit(null, true)'], ['hurt', 1, 1.0, 'S.hurt()'], ['death', 1, 1.6, 'S.death(null)'],
+  ['armed', 1, 1.4, 'S.armed(null)'], ['beep_0', 1, 1.0, 'S.beep(null, 0)'], ['beep_1', 1, 1.0, 'S.beep(null, 0.5)'], ['beep_2', 1, 1.0, 'S.beep(null, 1)'],
+  ['defuse_start', 1, 1.2, 'S.defuseStart(null)'], ['defused', 1, 1.6, 'S.defused(null)'], ['explosion', 2, 6.0, 'S.explosion(null)'],
+  ['buy', 1, 0.8, 'S.buy()'], ['round_go', 1, 1.0, 'S.roundGo()'], ['round_win', 1, 1.4, 'S.roundEnd(true)'], ['round_lose', 1, 1.4, 'S.roundEnd(false)'],
+  ['pickup', 1, 0.8, 'S.pickup()'], ['drop', 1, 1.0, "S.itemDrop(null, 'rifle')"], ['drop_heavy', 1, 1.0, "S.itemDrop(null, 'charge')"], ['ui', 1, 0.4, 'S.ui()'],
+];
+const SOUND_RATE = 32000, SOUND_SPACE = 0.25;
+
+// ---------------------------------------------------------------------------
+const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
+const page = await browser.newPage();
+page.on('pageerror', (e) => console.error('page error:', e.message));
+page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.error('page:', m.text()); });
+await page.route('http://wallr.export/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><meta charset="utf-8"><title>wallr export</title>' }));
+await page.goto('http://wallr.export/');
+await page.addScriptTag({ content: readFileSync(threePath, 'utf8') });
+const code = stubs + '\n' + files.map((f) => readFileSync(`${srcDir}/${f}`, 'utf8')).join('\n') + '\n' + helpers +
+  '\nreturn { exportTextures, exportMap, exportSounds, exportModels, exportData, MAPS };';
+await page.evaluate((c) => { window.X = new Function(c)(); }, code);
+page.setDefaultTimeout(0);
+log('sources loaded:', files.length, 'files');
+
+const writeB64 = (rel, b64) => put(rel, Buffer.from(b64, 'base64'));
+
+if (want.has('textures')) {
+  const r = await page.evaluate(() => window.X.exportTextures());
+  const index = {};
+  for (const [name, t] of Object.entries(r.tex)) {
+    index[name] = { ...t.def, avg: t.avg, w: t.w, h: t.h, file: t.png ? `${name}.png` : null };
+    if (t.png) writeB64(`textures/${name}.png`, t.png);
+  }
+  put('textures/textures.json', json(index));
+  for (const [id, b] of Object.entries(r.icons)) writeB64(`ui/icon_${id}.png`, b);
+  for (const [key, b] of Object.entries(r.thumbs)) writeB64(`ui/thumb_${key}.png`, b);
+  log('textures:', Object.keys(index).length, 'icons:', Object.keys(r.icons).length);
+}
+
+if (want.has('data')) {
+  const r = await page.evaluate(() => window.X.exportData());
+  put('data/weapons.json', json(r.weapons));
+  put('data/vm_clips.json', json(r.clips));
+  log('data: weapons', Object.keys(r.weapons).length);
+}
+
+if (want.has('models')) {
+  const r = await page.evaluate(() => window.X.exportModels());
+  // binary blobs: every base64 field becomes a slice of one .bin file per model set
+  const pack = (obj, bin) => JSON.parse(JSON.stringify(obj), function (k, v) {
+    if (typeof v === 'string' && ['pos', 'nrm', 'uv', 'lm', 'color', 'uvCamo', 'bone'].includes(k)) {
+      const b = Buffer.from(v, 'base64'), off = bin.len;
+      bin.parts.push(b); bin.len += b.length;
+      return [off, b.length];
+    }
+    return v;
+  });
+  const bin = { parts: [], len: 0 };
+  const out = pack(r, bin);
+  put('models/models.json', json(out));
+  put('models/models.bin', Buffer.concat(bin.parts));
+  log('models: viewmodels', Object.keys(r.vm).length, 'bytes', bin.len);
+}
+
+if (want.has('maps')) {
+  const keys = mapsArg ? mapsArg.split(',') : await page.evaluate(() => Object.keys(window.X.MAPS));
+  for (const key of keys) {
+    const r = await page.evaluate((k) => window.X.exportMap(k), key);
+    const bin = { parts: [], len: 0 };
+    const add = (b64) => { const b = Buffer.from(b64, 'base64'), off = bin.len; bin.parts.push(b); bin.len += b.length; return [off, b.length]; };
+    const geo = (g) => ({ mat: g.mat, n: g.n, pos: add(g.pos), nrm: add(g.nrm), uv: add(g.uv), lm: add(g.lm) });
+    const level = { ...r.meta, groups: r.groups.map(geo), ents: r.ents.map((e) => ({ brush: e.brush, groups: e.groups.map(geo) })), probeData: add(r.probeData), probeValid: add(r.probeValid) };
+    put(`maps/${key}/level.json`, json(level));
+    put(`maps/${key}/level.bin`, Buffer.concat(bin.parts));
+    put(`maps/${key}/brushes.json`, json(r.brushes));
+    put(`maps/${key}/nav.json`, json(r.nav));
+    writeB64(`maps/${key}/lightmap.png`, r.lightmap);
+    writeB64(`maps/${key}/radar.png`, r.radar);
+    log(`map ${key}:`, r.brushes.length, 'brushes,', r.nav.nodes.length, 'nav nodes,', `atlas ${r.meta.atlasW}x${r.meta.atlasH},`, `bake ${r.meta.bakeStats.ms} ms`);
+  }
+}
+
+if (want.has('sounds')) {
+  const r = await page.evaluate(([list, rate, space]) => window.X.exportSounds(list, rate, space), [SOUNDS, SOUND_RATE, SOUND_SPACE]);
+  let peak = 0;
+  for (const vs of Object.values(r)) for (const v of vs) peak = Math.max(peak, v.peak);
+  const gain = 0.97 / peak, index = { rate: SOUND_RATE, gain, sounds: {} };
+  const wav = (f) => {
+    const n = f.length, b = Buffer.alloc(44 + n * 2);
+    b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVE', 8); b.write('fmt ', 12); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
+    b.writeUInt32LE(SOUND_RATE, 24); b.writeUInt32LE(SOUND_RATE * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+    for (let i = 0; i < n; i++) b.writeInt16LE(Math.max(-32767, Math.min(32767, Math.round(f[i] * gain * 32767))), 44 + i * 2);
+    return b;
+  };
+  let bytes = 0;
+  for (const [name, vs] of Object.entries(r)) {
+    index.sounds[name] = vs.length;
+    vs.forEach((v, i) => { const f = new Float32Array(Buffer.from(v.data, 'base64').buffer.slice(0)); const b = wav(f); bytes += b.length; put(`sounds/${name}_${i}.wav`, b); });
+  }
+  put('sounds/sounds.json', json(index));
+  log('sounds:', Object.keys(r).length, 'effects,', `${(bytes / 1e6).toFixed(1)} MB, gain ${gain.toFixed(3)}`);
+}
+
+await browser.close();
+log('done');
