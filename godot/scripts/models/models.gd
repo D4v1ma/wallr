@@ -23,6 +23,8 @@ var hitboxes: Array = []
 var mounts: Dictionary = {}
 var _char_mesh: Dictionary = {}
 var _weapon_mesh: Dictionary = {}
+var _wmats: Dictionary = {}      ## shared materials of the third-person weapons, by viewmodel material
+var _char_mat: Dictionary = {}
 
 
 func _ready() -> void:
@@ -58,6 +60,7 @@ func vm_material(name: String) -> ShaderMaterial:
 	m.set_shader_parameter("has_map", tex != null)
 	if tex != null:
 		m.set_shader_parameter("map", Assets.tex(String(tex)))
+		_set_normal(m, String(tex))
 	m.set_shader_parameter("unlit", mi.get("type", "") == "basic")
 	var sp: Array = mi.get("specular", [0, 0, 0])
 	var pr: Array = VM_PBR.get(name, [])
@@ -71,6 +74,14 @@ func vm_material(name: String) -> ShaderMaterial:
 	return m
 
 
+## The texture's normal map, if the exporter made one (name_n.png).
+static func _set_normal(m: ShaderMaterial, tex: String) -> void:
+	var n := Assets.tex(tex + "_n") if Assets.def(tex).get("normal") != null else null
+	m.set_shader_parameter("has_normal", n != null)
+	if n:
+		m.set_shader_parameter("normal_map", n)
+
+
 ## Roughness / metalness from the original Phong shininess and specular level.
 static func pbr_from_phong(shine: float, spec: float) -> Vector2:
 	return Vector2(clampf(1.0 - sqrt(shine / 110.0) * 0.85, 0.12, 0.95), clampf((spec - 0.3) * 1.6, 0.0, 1.0))
@@ -80,6 +91,24 @@ static func pbr_from_phong(shine: float, spec: float) -> Vector2:
 static func light(mat: ShaderMaterial, c: Color) -> void:
 	mat.set_shader_parameter("irr", Vector3(c.r, c.g, c.b))
 	mat.set_shader_parameter("sky_vis", c.a)
+
+
+## The same, per mesh instance (all its surfaces), so instances can share materials.
+static func light_inst(gi: GeometryInstance3D, c: Color) -> void:
+	gi.set_instance_shader_parameter("irr_i", Vector3(c.r, c.g, c.b))
+	gi.set_instance_shader_parameter("sky_i", c.a)
+
+
+## An indexed copy of a triangle soup with tangents and automatic LODs (characters, world guns).
+static func _lod_mesh(a: Array, skinned: bool, mat: Material = null) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.create_from_arrays(a)
+	st.index()
+	st.generate_tangents()
+	var im := ImporterMesh.new()
+	im.add_surface(Mesh.PRIMITIVE_TRIANGLES, st.commit_to_arrays(), [], {}, mat)
+	im.generate_lods(25.0, 60.0, [])
+	return im.get_mesh()
 
 
 func _mesh_from(md: Dictionary, mat: Material) -> ArrayMesh:
@@ -94,6 +123,11 @@ func _mesh_from(md: Dictionary, mat: Material) -> ArrayMesh:
 	if md.get("color") != null:
 		a[Mesh.ARRAY_COLOR] = _colors(_f32(md.color).to_float32_array())
 	var mesh := ArrayMesh.new()
+	if md.get("uv") != null:
+		var st := SurfaceTool.new()
+		st.create_from_arrays(a)
+		st.generate_tangents()
+		a = st.commit_to_arrays()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
 	mesh.surface_set_material(0, mat)
 	return mesh
@@ -165,7 +199,7 @@ func build_vm(id: String, shared: Dictionary) -> Dictionary:
 	return m
 
 
-## Character body for a team, skinned to the CH_BONES skeleton (one bone per vertex).
+## Character body for a team, skinned to the CH_BONES skeleton (up to 4 bones per vertex), with LODs.
 func char_mesh(team: int) -> ArrayMesh:
 	if _char_mesh.has(team):
 		return _char_mesh[team]
@@ -175,37 +209,60 @@ func char_mesh(team: int) -> ArrayMesh:
 	a[Mesh.ARRAY_VERTEX] = _f32(c.pos).to_vector3_array()
 	a[Mesh.ARRAY_NORMAL] = _f32(c.nrm).to_vector3_array()
 	a[Mesh.ARRAY_TEX_UV] = _f32(c.uv).to_vector2_array()
-	var bone := _f32(c.bone)
-	var n := bone.size()
 	var bi := PackedInt32Array()
-	bi.resize(n * 4)
 	var bw := PackedFloat32Array()
-	bw.resize(n * 4)
-	for i in n:
-		bi[i * 4] = bone[i]
-		bw[i * 4] = 1.0
+	if c.has("bones"):
+		var b := _f32(c.bones)
+		bi.resize(b.size())
+		for i in b.size():
+			bi[i] = b[i]
+		bw = _f32(c.weights).to_float32_array()
+	else:
+		var bone := _f32(c.bone)
+		bi.resize(bone.size() * 4)
+		bw.resize(bone.size() * 4)
+		for i in bone.size():
+			bi[i * 4] = bone[i]
+			bw[i * 4] = 1.0
 	a[Mesh.ARRAY_BONES] = bi
 	a[Mesh.ARRAY_WEIGHTS] = bw
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+	var mesh := _lod_mesh(a, true, char_material(team))
 	_char_mesh[team] = mesh
 	return mesh
 
 
-## Third-person weapon mesh (vertex-coloured) and its muzzle point in gun space.
+## Shared body material per team (lit per instance with light_inst).
+func char_material(team: int) -> ShaderMaterial:
+	if not _char_mat.has(team):
+		var m := world_material("ch%d" % team)
+		_set_normal(m, "ch%d" % team)
+		_char_mat[team] = m
+	return _char_mat[team]
+
+
+## Third-person weapon mesh (the viewmodel gun: one surface per material, shared materials, LODs)
+## and its muzzle point in gun space. Light instances with light_inst.
 func weapon_mesh(id: String) -> Array:
 	if _weapon_mesh.has(id):
 		return _weapon_mesh[id]
 	var w: Dictionary = data.weapons.get(id, data.weapons.smoke)
-	var a := []
-	a.resize(Mesh.ARRAY_MAX)
-	a[Mesh.ARRAY_VERTEX] = _f32(w.pos).to_vector3_array()
-	a[Mesh.ARRAY_NORMAL] = _f32(w.nrm).to_vector3_array()
-	a[Mesh.ARRAY_TEX_UV] = _f32(w.uv).to_vector2_array()
-	a[Mesh.ARRAY_COLOR] = _colors(_f32(w.color).to_float32_array())
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
-	var out := [mesh, U.v3(w.muzzle)]
+	var im := ImporterMesh.new()
+	for s: Dictionary in w.surfaces:
+		var a := []
+		a.resize(Mesh.ARRAY_MAX)
+		a[Mesh.ARRAY_VERTEX] = _f32(s.pos).to_vector3_array()
+		a[Mesh.ARRAY_NORMAL] = _f32(s.nrm).to_vector3_array()
+		a[Mesh.ARRAY_TEX_UV] = _f32(s.uv).to_vector2_array()
+		var st := SurfaceTool.new()
+		st.create_from_arrays(a)
+		st.index()
+		st.generate_tangents()
+		var mn := String(s.mat)
+		if not _wmats.has(mn):
+			_wmats[mn] = vm_material(mn)
+		im.add_surface(Mesh.PRIMITIVE_TRIANGLES, st.commit_to_arrays(), [], {}, _wmats[mn])
+	im.generate_lods(25.0, 60.0, [])
+	var out := [im.get_mesh(), U.v3(w.muzzle)]
 	_weapon_mesh[id] = out
 	return out
 

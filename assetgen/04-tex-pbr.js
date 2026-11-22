@@ -719,3 +719,48 @@ const PBR_DEFS = {
   firebrick:      { world: 128, gen: () => pbrBrick(101, { pal: [[0.42, 0.2, 0.13], [0.36, 0.17, 0.12], [0.48, 0.25, 0.16], [0.3, 0.15, 0.11]], mortarCol: [0.42, 0.39, 0.35], soot: 0.55, bloom: 0.05 }) },
   brick_yellow:   { world: 128, gen: () => pbrBrick(102, { pal: [[0.72, 0.6, 0.4], [0.66, 0.55, 0.36], [0.78, 0.66, 0.45], [0.62, 0.5, 0.33], [0.7, 0.56, 0.38]], mortarCol: [0.62, 0.6, 0.55], soot: 0.12, bloom: 0.25 }) },
 };
+
+// ------------------------------------------------------------------------------------------
+// Weapon materials (replace the browser's 256 px gun textures): fine and uniform, because the
+// viewmodels map them at close range. Normal maps are derived from them by the exporter.
+// ------------------------------------------------------------------------------------------
+function auxGun(seed, base, o = {}) {
+  const n = 512, P = new Pix(n);
+  P.map((x, y, c) => {
+    const u = x / n, v = y / n;
+    const fine = tn(u, v, 128, 2, seed) - 0.5, mid = tn(u, v, 12, 3, seed + 1) - 0.5, grain = hashi(x, y, seed + 2) - 0.5;
+    let k = 1 + fine * (o.fine ?? 0.12) + mid * (o.mid ?? 0.1) + grain * (o.grain ?? 0.08);
+    if (o.stipple && hashi(x >> 1, y >> 1, seed + 3) > 0.7) k *= 0.86;
+    c[0] = base[0] * k; c[1] = base[1] * k; c[2] = base[2] * k;
+  });
+  if (o.scratches) {
+    const rnd = mulberry32(seed + 9);
+    P.stamp((ctx) => {
+      ctx.lineCap = 'round';
+      for (let i = 0; i < o.scratches; i++) {
+        const x = rnd() * n, y = rnd() * n, a = rnd() * TAU, l = 6 + rnd() * 30;
+        ctx.globalAlpha = 0.2 + rnd() * 0.5; ctx.lineWidth = 0.5 + rnd() * 0.8;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); ctx.stroke();
+      }
+    }, o.scratchCol || [0.45, 0.45, 0.46], 0.5);
+  }
+  return P.toCanvas();
+}
+function auxWood(seed) {
+  const n = 512, P = new Pix(n);
+  P.map((x, y, c) => {
+    const u = x / n, v = y / n;
+    const warp = tn2(u, v, 2, 6, 3, seed) * 3.0;
+    const ring = Math.sin((u * 26 + warp) * Math.PI) * 0.5 + 0.5;
+    const pores = hashi(x, y >> 2, seed + 1) > 0.9 ? -0.08 : 0;
+    const k = 0.74 + ring * 0.2 + (tn2(u, v, 8, 48, 3, seed + 2) - 0.5) * 0.16 + pores + (hashi(x, y, seed + 3) - 0.5) * 0.03;
+    c[0] = 0.42 * k; c[1] = 0.24 * k; c[2] = 0.12 * k;
+  });
+  return P.toCanvas();
+}
+const PBR_AUX = {
+  gun_metal: () => auxGun(60, [0.2, 0.205, 0.215], { fine: 0.14, mid: 0.08, scratches: 40 }),
+  gun_poly: () => auxGun(61, [0.095, 0.095, 0.1], { fine: 0.18, mid: 0.06, stipple: true }),
+  gun_tan: () => auxGun(62, [0.55, 0.47, 0.34], { fine: 0.1, mid: 0.08, grain: 0.06 }),
+  gun_wood: () => auxWood(69),
+};

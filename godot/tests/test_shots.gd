@@ -36,6 +36,7 @@ func fire(main: Node, a: Actor) -> void:
 
 func run(r: Node) -> void:
 	out = String(Game.args.get("out", out))
+	var vm_arg := String(Game.args.get("vm", ""))
 	var main: Node = await r.boot_game({"map": "depot", "mode": "skirmish", "bots": "3", "allies": "2", "team": "1"})
 	Game.bots_frozen = true
 	Settings.v.showHints = false
@@ -77,5 +78,41 @@ func run(r: Node) -> void:
 	await snap(r, "g-ads", 4)
 	Controls.test_hold = {}
 	r.ticks(main, 30)
+	# a line-up of characters facing the camera with different weapons (model check)
+	if vm_arg != "":
+		place(me, Vector3(-300, 0, 0), -90)
+		me.player.pitch = -0.08
+		var guys: Array = enemies + mates
+		var kit := ["rifle", "pistol", "sniper", "shotgun", "smg"]
+		for i in guys.size():
+			var a: Actor = guys[i]
+			place(a, Vector3(-300 + 150 + (i % 2) * 40, 0, -75 + i * 45), 90 + (i - 1) * 14)
+			var w: Variant = a.loadout.by_id(kit[i % kit.size()])
+			if w == null:
+				a.loadout.give(kit[i % kit.size()], true)
+			else:
+				a.loadout.select(w)
+		(guys[1] as Actor).player.ducked = true
+		Viewmodel.set_visible(false)
+		r.ticks(main, 40)
+		await snap(r, "c-lineup", 6)
+		Viewmodel.set_visible(true)
+	# every viewmodel, settled after its draw animation, in sun and in shade
+	if vm_arg != "":
+		for e: Actor in enemies:
+			place(e, Vector3(-2000, 0, -2000), 0)
+		for spot: Array in [[Vector3(-200, 0, 0), -90.0, "sun"], [Vector3(20, 0, 0), -90.0, "shade"]]:
+			place(me, spot[0], spot[1])
+			me.player.pitch = -0.05
+			for id: String in ["rifle", "pistol", "knife", "smoke", "smg", "shotgun", "sniper", "charge"]:
+				if vm_arg != "all" and not id in vm_arg.split(","):
+					continue
+				var w: Variant = me.loadout.by_id(id)
+				if w == null:
+					me.loadout.give(id, true)
+				else:
+					me.loadout.select(w)
+				r.ticks(main, 90)
+				await snap(r, "vm-%s-%s" % [id, spot[2]], 4)
 	Game.state = "menu"
 	main.queue_free()

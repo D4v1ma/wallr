@@ -92,6 +92,16 @@ async function texturesOnce() {
     const r = pbrDerive(t.canvas, t.def.surf, t.def.world || 64);
     t.normal = r.normal; t.orm = r.orm;
   }
+  for (const [name, gen] of Object.entries(typeof PBR_AUX === 'object' ? PBR_AUX : {})) if (TEX[name]) TEX[name].canvas = gen();
+  // weapons, gloves and sleeves get normal maps too (fine surface relief on the viewmodels)
+  const AUX_N = { gun_metal: ['metal', 10], gun_poly: ['cloth', 6], gun_tan: ['cloth', 6], gun_wood: ['wood', 12], glove0: ['cloth', 8], glove1: ['cloth', 8],
+    sleeve0: ['cloth', 14], sleeve1: ['cloth', 14], blade: ['metal', 8], nade: ['metal', 10] };
+  for (const [name, [surf, world]] of Object.entries(AUX_N)) {
+    const t = TEX[name];
+    if (!t || !t.canvas) continue;
+    const r = pbrDerive(t.canvas, surf, world);
+    t.normal = r.normal;
+  }
   Game.tex = TEX;
   return TEX;
 }
@@ -226,14 +236,14 @@ function exportModels() {
   }
   const chars = {};
   for (const team of [0, 1]) {
-    const g = chGeometry(team), a = g.attributes, n = a.position.count, bone = new Uint8Array(n);
-    for (let i = 0; i < n; i++) bone[i] = a.skinIndex.array[i * 4];
-    chars[team] = { n, pos: A3(a.position.array), nrm: A3(a.normal.array), uv: UV(a.uv.array), bone: toB64(wind(bone, 1)) };
+    const g = chGeometry(team), a = g.attributes, n = a.position.count, bi = new Uint8Array(n * 4);
+    for (let i = 0; i < n * 4; i++) bi[i] = a.skinIndex.array[i];
+    chars[team] = { n, pos: A3(a.position.array), nrm: A3(a.normal.array), uv: UV(a.uv.array), bones: toB64(wind(bi, 4)), weights: f32(wind(a.skinWeight.array, 4)) };
   }
   const weapons = {};
   for (const id of ['rifle', 'pistol', 'knife', 'smoke', 'smg', 'shotgun', 'sniper', 'charge']) {
-    const { geo, muzzle } = chWeaponGeo(id), a = geo.attributes;
-    weapons[id] = { n: a.position.count, pos: A3(a.position.array), nrm: A3(a.normal.array), uv: UV(a.uv.array), color: A3(a.color.array), muzzle };
+    const { surfaces, muzzle } = chWeaponGeo(id);
+    weapons[id] = { muzzle, surfaces: surfaces.map(({ mat, geo }) => { const a = geo.attributes; return { mat, n: a.position.count, pos: A3(a.position.array), nrm: A3(a.normal.array), uv: UV(a.uv.array) }; }) };
   }
   return { mats, vm, chars, weapons, bones: CH_BONES, holds: HOLDS, hitboxes: HITBOXES, mounts: VM_MOUNTS };
 }
@@ -318,7 +328,7 @@ if (want.has('models')) {
   const r = await page.evaluate(() => window.X.exportModels());
   // binary blobs: every base64 field becomes a slice of one .bin file per model set
   const pack = (obj, bin) => JSON.parse(JSON.stringify(obj), function (k, v) {
-    if (typeof v === 'string' && ['pos', 'nrm', 'uv', 'lm', 'color', 'uvCamo', 'bone'].includes(k)) {
+    if (typeof v === 'string' && ['pos', 'nrm', 'uv', 'lm', 'color', 'uvCamo', 'bone', 'bones', 'weights'].includes(k)) {
       const b = Buffer.from(v, 'base64'), off = bin.len;
       bin.parts.push(b); bin.len += b.length;
       return [off, b.length];

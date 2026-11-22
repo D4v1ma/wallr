@@ -26,12 +26,9 @@ func spawn(w: Weapon, pos: Vector3, vel: Vector3, yaw: float, owner: Actor) -> D
 	if Game.L and Game.L.root:
 		var mi := MeshInstance3D.new()
 		mi.mesh = Models.weapon_mesh(w.id)[0]
-		var mat := Models.world_material("gun_metal", true)
-		mi.material_override = mat
 		mi.rotation_order = EULER_ORDER_YXZ
 		Game.L.root.add_child(mi)
 		it.node = mi
-		it.mat = mat
 	return it
 
 
@@ -195,4 +192,4 @@ func render() -> void:
 		else:
 			m.position = p
 			m.rotation = Vector3(float(it.roll) * 0.3, it.yaw, float(it.roll) * 0.2 if flat else float(it.roll))
-		Models.light(it.mat as ShaderMaterial, Game.L.probe_sky(p + Vector3(0, 8, 0)))
+		Models.light_inst(m as GeometryInstance3D, Game.L.probe_sky(p + Vector3(0, 8, 0)))

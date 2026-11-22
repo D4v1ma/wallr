@@ -110,8 +110,10 @@ func set_team(t: int) -> void:
 	team = t
 	if shared.has("glove"):
 		(shared.glove as ShaderMaterial).set_shader_parameter("map", Assets.tex("glove%d" % t))
+		Models._set_normal(shared.glove, "glove%d" % t)
 	if shared.has("sleeve"):
 		(shared.sleeve as ShaderMaterial).set_shader_parameter("map", Assets.tex("sleeve%d" % t))
+		Models._set_normal(shared.sleeve, "sleeve%d" % t)
 
 
 func show(id: String) -> void:

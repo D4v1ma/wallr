@@ -17,7 +17,6 @@ var skel: Skeleton3D
 var body: MeshInstance3D
 var xray: MeshInstance3D = null
 var mat: ShaderMaterial
-var wmat: ShaderMaterial
 var gun_node: Node3D
 var chest_node: Node3D
 var weapons: Dictionary = {}
@@ -74,11 +73,9 @@ func _init(t: int, parent: Node3D) -> void:
 	body.skin = skin
 	root.add_child(body)
 	body.skeleton = body.get_path_to(skel)
-	mat = Models.world_material("ch%d" % team)
-	body.material_override = mat
-	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mat = Models.char_material(team)
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	body.extra_cull_margin = 64.0
-	wmat = Models.world_material("gun_metal", true)
 	gun_node = Node3D.new()
 	root.add_child(gun_node)
 	chest_node = Node3D.new()
@@ -87,9 +84,8 @@ func _init(t: int, parent: Node3D) -> void:
 		var wm: Array = Models.weapon_mesh(id)
 		var mi := MeshInstance3D.new()
 		mi.mesh = wm[0]
-		mi.material_override = wmat
 		mi.visible = false
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		gun_node.add_child(mi)
 		weapons[id] = mi
 		muzzles[id] = wm[1]
@@ -97,7 +93,6 @@ func _init(t: int, parent: Node3D) -> void:
 	# the charge rides on the back while its carrier holds something else
 	pack = MeshInstance3D.new()
 	pack.mesh = Models.weapon_mesh("charge")[0]
-	pack.material_override = wmat
 	pack.position = Vector3(0, -2.5, 9.0 if team == 0 else 7.1)
 	pack.rotation = Vector3(PI / 2.0, 0, 0)
 	pack.visible = false
@@ -250,8 +245,11 @@ func _pose() -> void:
 
 func set_light(c: Color) -> void:
 	light = c
-	Models.light(mat, c)
-	Models.light(wmat, c)
+	Models.light_inst(body, c)
+	for id: String in weapons:
+		if (weapons[id] as Node3D).visible:
+			Models.light_inst(weapons[id], c)
+	Models.light_inst(pack, c)
 
 
 ## Admin x-ray: the body drawn in a flat colour wherever a wall is in front of it.

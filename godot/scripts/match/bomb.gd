@@ -115,9 +115,7 @@ func plant(actor: Actor, w: Weapon, s: Variant) -> void:
 	if Game.L and Game.L.root:
 		var mi := MeshInstance3D.new()
 		mi.mesh = Models.weapon_mesh("charge")[0]
-		var mat := Models.world_material("gun_metal", true)
-		Models.light(mat, Game.L.probe_sky(p + Vector3(0, 8, 0)))
-		mi.material_override = mat
+		Models.light_inst(mi, Game.L.probe_sky(p + Vector3(0, 8, 0)))
 		mi.position = p + Vector3(0, 0.75, 0)
 		mi.rotation.y = actor.player.yaw
 		Game.L.root.add_child(mi)

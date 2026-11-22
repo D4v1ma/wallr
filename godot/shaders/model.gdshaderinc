@@ -18,6 +18,9 @@ uniform float emit = 0.0;
 uniform vec3 irr = vec3(0.45);
 uniform float sky_vis = 0.5;
 uniform mat3 to_world = mat3(1.0);
+// set per MeshInstance with set_instance_shader_parameter (x < 0 = use the material's irr/sky_vis)
+instance uniform vec3 irr_i = vec3(-1.0);
+instance uniform float sky_i = -1.0;
 
 global uniform sampler2D sky_pano : source_color, filter_linear_mipmap, repeat_enable;
 global uniform float refl_k;
@@ -44,7 +47,8 @@ vec3 m_indirect(vec3 alb, vec3 n, vec3 view, mat4 inv_view) {
 	vec3 f0 = mix(vec3(0.04), alb, metal);
 	vec3 F = f0 + (max(vec3(1.0 - rough), f0) - f0) * pow(1.0 - ndv, 5.0);
 	vec3 rw = to_world * (inv_view * vec4(reflect(-view, n), 0.0)).xyz;
-	vec3 ind = irr * indirect_k;
-	vec3 env = mix(ind * 0.55, m_sky(rw, rough) * refl_k, sky_vis * smoothstep(-0.25, 0.15, rw.y));
+	vec3 ind = (irr_i.x >= 0.0 ? irr_i : irr) * indirect_k;
+	float sv = sky_i >= 0.0 ? sky_i : sky_vis;
+	vec3 env = mix(ind * 0.55, m_sky(rw, rough) * refl_k, sv * smoothstep(-0.25, 0.15, rw.y));
 	return alb * (1.0 - metal) * ind + env * F * (1.0 - rough * 0.55) + alb * emit;
 }
