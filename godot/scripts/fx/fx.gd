@@ -1,6 +1,7 @@
 extends Node
 ## Effects: bullet-hole decals, billboard particles (dust, chips, sparks, blood, fire, smoke), tracers,
-## shell casings, smoke-grenade clouds and short-lived dynamic lights (4 nearest feed the world shader).
+## shell casings, smoke-grenade clouds and short-lived dynamic lights (the 4 newest become real
+## omni lights: muzzle flashes, sparks, the blast).
 
 const SURF_FX := {
 	"concrete": {"cell": 0, "dust": [0.62, 0.6, 0.56], "chip": [0.36, 0.35, 0.33]},
@@ -24,6 +25,7 @@ var tracers: Tracers
 var shells: Shells
 var smoke: SmokeRenderer
 var dlights: Array = []
+var omni: Array[OmniLight3D] = []
 
 
 func init(level: Level) -> void:
@@ -40,6 +42,15 @@ func init(level: Level) -> void:
 	shells = Shells.new(96, root)
 	smoke = SmokeRenderer.new(200, root)
 	dlights.clear()
+	omni.clear()
+	for i in 4:
+		var o := OmniLight3D.new()
+		o.visible = false
+		o.shadow_enabled = false
+		o.light_specular = 0.6
+		o.omni_attenuation = 1.2
+		root.add_child(o)
+		omni.append(o)
 
 
 ## Light at a point (probe ambient + visible sun), for dynamic objects.
@@ -62,17 +73,19 @@ func _update_lights(dt: float) -> void:
 		l.life -= dt
 	dlights = dlights.filter(func(l: Dictionary) -> bool: return l.life > 0.0)
 	var n := dlights.size()
-	for i in 4:
-		var j := n - 4 + i
+	for i in omni.size():
+		var o := omni[i]
+		var j := n - omni.size() + i
 		if j >= 0 and j < n:
 			var l: Dictionary = dlights[j]
 			var k: float = l.life / l.max
-			var c: Color = l.col
-			RenderingServer.global_shader_parameter_set("dl_pos_%d" % i, Vector4(l.p.x, l.p.y, l.p.z, l.radius))
-			RenderingServer.global_shader_parameter_set("dl_col_%d" % i, Vector4(c.r * k, c.g * k, c.b * k, 0))
+			o.position = l.p
+			o.omni_range = l.radius
+			o.light_color = l.col
+			o.light_energy = 6.0 * k * k
+			o.visible = true
 		else:
-			RenderingServer.global_shader_parameter_set("dl_pos_%d" % i, Vector4.ZERO)
-			RenderingServer.global_shader_parameter_set("dl_col_%d" % i, Vector4.ZERO)
+			o.visible = false
 
 
 func _r() -> float:
@@ -193,6 +206,8 @@ func update(dt: float) -> void:
 	sparks.update(dt)
 	tracers.update(dt)
 	shells.update(dt, L.cw)
+	if Game.player:
+		shells.light(L.probe_sky(Game.player.pos + Vector3(0, 40, 0)))
 	var cam := get_viewport().get_camera_3d()
 	if cam:
 		smoke.update(Grenades.clouds, cam.global_transform)
@@ -454,6 +469,7 @@ class Shells:
 	var max_n := 0
 	var list: Array = []
 	var mms := {}
+	var mats: Array[ShaderMaterial] = []
 	var tint := {"rifle": Color(0.84, 0.68, 0.38), "pistol": Color(0.84, 0.68, 0.38), "shotgun": Color(0.62, 0.12, 0.09)}
 
 	func _init(m: int, parent: Node3D) -> void:
@@ -473,6 +489,9 @@ class Shells:
 			mm.visible_instance_count = 0
 			var mat := Models.world_material("")
 			mat.set_shader_parameter("use_vcolor", true)
+			mat.set_shader_parameter("rough", 0.5 if kind[0] == "shotgun" else 0.3)
+			mat.set_shader_parameter("metal", 0.0 if kind[0] == "shotgun" else 1.0)
+			mats.append(mat)
 			var mmi := MultiMeshInstance3D.new()
 			mmi.multimesh = mm
 			mmi.material_override = mat
@@ -531,9 +550,7 @@ class Shells:
 			var k: float = maxf(0.01, 1.0 - (sh.age - 14.0) / 2.0) if sh.age > 14.0 else 1.0
 			var b := Basis.from_euler(sh.rot, EULER_ORDER_YXZ).scaled(Vector3(k, k, k))
 			mm.set_instance_transform(i, Transform3D(b, sh.p))
-			var c: Color = tint[sh.kind]
-			var lc: Color = sh.light
-			mm.set_instance_color(i, Color(c.r * lc.r, c.g * lc.g, c.b * lc.b))
+			mm.set_instance_color(i, tint[sh.kind])
 		for kind: String in mms:
 			(mms[kind] as MultiMesh).visible_instance_count = counts[kind]
 
@@ -541,6 +558,11 @@ class Shells:
 		list.clear()
 		for kind: String in mms:
 			(mms[kind] as MultiMesh).visible_instance_count = 0
+
+	## Casings sit near the shooter: light them all from the probe there.
+	func light(c: Color) -> void:
+		for m: ShaderMaterial in mats:
+			Models.light(m, c)
 
 
 # ------------------------------------------------------------------------------------------------

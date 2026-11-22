@@ -7,6 +7,13 @@ const MODEL_SHADER := preload("res://shaders/model.gdshader")
 const MODEL_ALPHA_SHADER := preload("res://shaders/model_alpha.gdshader")
 const MODEL_ADD_SHADER := preload("res://shaders/model_add.gdshader")
 
+## Roughness and metalness of the viewmodel materials (Phong materials in the original builders).
+const VM_PBR := {
+	"metal": [0.36, 0.85], "poly": [0.62, 0.0], "tan": [0.66, 0.0], "glove": [0.85, 0.0], "sleeve": [0.92, 0.0],
+	"blade": [0.2, 1.0], "nade": [0.5, 0.35], "wood": [0.5, 0.0], "shell": [0.45, 0.0], "brass": [0.28, 1.0],
+	"putty": [0.92, 0.0], "tape": [0.75, 0.0], "wireR": [0.5, 0.0], "wireB": [0.5, 0.0], "lens": [0.05, 0.0], "band": [0.7, 0.0],
+}
+
 var data: Dictionary = {}
 var bin := PackedByteArray()
 var bones: Array = []          ## [name, parent, x, y, z] (absolute bind positions)
@@ -52,15 +59,27 @@ func vm_material(name: String) -> ShaderMaterial:
 	if tex != null:
 		m.set_shader_parameter("map", Assets.tex(String(tex)))
 	m.set_shader_parameter("unlit", mi.get("type", "") == "basic")
-	m.set_shader_parameter("shininess", float(mi.get("shininess", 0)) if mi.get("type", "") == "phong" else 0.0)
 	var sp: Array = mi.get("specular", [0, 0, 0])
-	m.set_shader_parameter("specular", Vector3(sp[0], sp[1], sp[2]))
+	var pr: Array = VM_PBR.get(name, [])
+	var pb := Vector2(pr[0], pr[1]) if pr.size() == 2 else pbr_from_phong(float(mi.get("shininess", 0)), (float(sp[0]) + float(sp[1]) + float(sp[2])) / 3.0)
+	m.set_shader_parameter("rough", pb.x)
+	m.set_shader_parameter("metal", pb.y)
 	m.set_shader_parameter("opacity", float(mi.get("opacity", 1.0)))
-	m.set_shader_parameter("use_fog", false)
 	m.set_meta("base_map", tex)
-	m.set_meta("base_shininess", float(mi.get("shininess", 0)))
-	m.set_meta("base_specular", Vector3(sp[0], sp[1], sp[2]))
+	m.set_meta("base_rough", pb.x)
+	m.set_meta("base_metal", pb.y)
 	return m
+
+
+## Roughness / metalness from the original Phong shininess and specular level.
+static func pbr_from_phong(shine: float, spec: float) -> Vector2:
+	return Vector2(clampf(1.0 - sqrt(shine / 110.0) * 0.85, 0.12, 0.95), clampf((spec - 0.3) * 1.6, 0.0, 1.0))
+
+
+## Probe light at a model: rgb = indirect light, a = sky visibility (Level.probe_sky).
+static func light(mat: ShaderMaterial, c: Color) -> void:
+	mat.set_shader_parameter("irr", Vector3(c.r, c.g, c.b))
+	mat.set_shader_parameter("sky_vis", c.a)
 
 
 func _mesh_from(md: Dictionary, mat: Material) -> ArrayMesh:
@@ -112,7 +131,7 @@ func build_vm(id: String, shared: Dictionary) -> Dictionary:
 				shared[mname] = mat
 			var mi := MeshInstance3D.new()
 			mi.mesh = _mesh_from(md, mat)
-			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 			if own.has(mname) and md.get("uvCamo") != null:
 				(m.body as Array).append(mi)
 			n = mi
@@ -191,7 +210,8 @@ func weapon_mesh(id: String) -> Array:
 	return out
 
 
-## Lit material for world objects (characters, dropped guns, grenades): texture x probe light.
+## Lit material for world objects (characters, dropped guns, grenades, casings); light it per frame
+## with Models.light(mat, Level.probe_sky(position)).
 func world_material(tex_name: String, vcolor: bool = false) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = MODEL_SHADER
@@ -199,8 +219,13 @@ func world_material(tex_name: String, vcolor: bool = false) -> ShaderMaterial:
 	m.set_shader_parameter("has_map", t != null)
 	m.set_shader_parameter("map", t)
 	m.set_shader_parameter("use_vcolor", vcolor)
-	m.set_shader_parameter("amb", Vector3(0.85, 0.85, 0.85))
-	m.set_shader_parameter("sun_col", Vector3(0.3, 0.3, 0.3))
-	if Game.L:
-		m.set_shader_parameter("sun_dir", U.v3(Game.L.env.sunDir))
+	var pb := Vector2(0.75, 0.0)
+	if tex_name == "gun_metal":
+		pb = Vector2(0.45, 0.55)
+	elif tex_name == "nade":
+		pb = Vector2(0.5, 0.3)
+	elif tex_name.begins_with("ch"):
+		pb = Vector2(0.82, 0.0)
+	m.set_shader_parameter("rough", pb.x)
+	m.set_shader_parameter("metal", pb.y)
 	return m

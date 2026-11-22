@@ -195,5 +195,4 @@ func render() -> void:
 		else:
 			m.position = p
 			m.rotation = Vector3(float(it.roll) * 0.3, it.yaw, float(it.roll) * 0.2 if flat else float(it.roll))
-		var lc := FX.light_at(p + Vector3(0, 8, 0))
-		(it.mat as ShaderMaterial).set_shader_parameter("color", Vector3(lc.r, lc.g, lc.b))
+		Models.light(it.mat as ShaderMaterial, Game.L.probe_sky(p + Vector3(0, 8, 0)))

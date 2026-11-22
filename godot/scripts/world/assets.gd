@@ -14,6 +14,20 @@ var _tex: Dictionary = {}
 func _ready() -> void:
 	var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(TEX_DIR + "textures.json"))
 	tex_defs = d if typeof(d) == TYPE_DICTIONARY else {}
+	RenderingServer.global_shader_parameter_set("macro_tex", _macro_noise())
+
+
+## Soft tiling noise the world shader samples in world space to break up texture repetition.
+static func _macro_noise() -> ImageTexture:
+	var n := FastNoiseLite.new()
+	n.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	n.seed = 7
+	n.frequency = 0.012
+	n.fractal_octaves = 4
+	var img := n.get_seamless_image(256, 256)
+	img.convert(Image.FORMAT_L8)
+	img.generate_mipmaps()
+	return ImageTexture.create_from_image(img)
 
 
 func tex(name: String) -> Texture2D:
@@ -46,10 +60,17 @@ func world_material(mat: String, lightmap: Texture2D) -> ShaderMaterial:
 	if d.get("fullbright") != null:
 		var fb: Array = d.fullbright
 		m.shader = fullbright_shader
-		m.set_shader_parameter("color", Vector3(fb[0], fb[1], fb[2]))
-	else:
-		m.shader = world_fit_shader if d.get("fit", false) else world_shader
-		m.set_shader_parameter("albedo_tex", tex(mat))
+		m.set_shader_parameter("color", Color(fb[0], fb[1], fb[2]))
+		m.set_shader_parameter("energy", 3.5)
+		return m
+	m.shader = world_fit_shader if d.get("fit", false) else world_shader
+	m.set_shader_parameter("albedo_tex", tex(mat))
+	var nrm: Texture2D = tex(mat + "_n") if d.get("normal") != null else null
+	var orm: Texture2D = tex(mat + "_orm") if d.get("orm") != null else null
+	m.set_shader_parameter("has_pbr", nrm != null and orm != null)
+	if nrm and orm:
+		m.set_shader_parameter("normal_tex", nrm)
+		m.set_shader_parameter("orm_tex", orm)
 	m.set_shader_parameter("lightmap", lightmap)
 	return m
 

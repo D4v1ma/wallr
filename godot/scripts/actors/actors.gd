@@ -162,4 +162,4 @@ func render(dt: float, alpha: float) -> void:
 		m.update(dt, {"x": pos.x, "y": pos.y, "z": pos.z, "yaw": p.yaw, "pitch": p.pitch, "vx": p.vel.x, "vz": p.vel.z,
 			"ducked": p.ducked, "onGround": p.on_ground or p.noclip, "alive": a.alive})
 		if Game.L:
-			m.set_light(FX.light_at(p.pos + Vector3(0, 40, 0)))
+			m.set_light(Game.L.probe_sky(p.pos + Vector3(0, 40, 0)))

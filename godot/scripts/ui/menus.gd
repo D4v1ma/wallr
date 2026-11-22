@@ -962,14 +962,28 @@ func _make_preview(gun: String, def: Dictionary) -> Control:
 		if shared.has(mn):
 			_hide_with_material(root, shared[mn])
 	Viewmodel.apply_kit(m, def)
+	# studio lighting: a warm key, a cool rim, soft fill from the probe term
+	var we := WorldEnvironment.new()
+	we.environment = Environment.new()
+	we.environment.background_mode = Environment.BG_CLEAR_COLOR
+	we.environment.ambient_light_source = Environment.AMBIENT_SOURCE_DISABLED
+	we.environment.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+	we.environment.tonemap_mode = Environment.TONE_MAPPER_AGX
+	vp.add_child(we)
+	var key := DirectionalLight3D.new()
+	key.basis = Basis.looking_at(-Vector3(1, 1.4, 0.8).normalized())
+	key.light_color = Color(1.0, 0.95, 0.88)
+	key.light_energy = 2.6
+	key.shadow_enabled = true
+	vp.add_child(key)
+	var rim := DirectionalLight3D.new()
+	rim.basis = Basis.looking_at(-Vector3(-1, 0.6, -1.2).normalized())
+	rim.light_color = Color(0.6, 0.72, 1.0)
+	rim.light_energy = 1.4
+	vp.add_child(rim)
 	var mats: Array = shared.values() + (m.mats as Dictionary).values()
 	for mat: ShaderMaterial in mats:
-		mat.set_shader_parameter("amb", Vector3(0.48, 0.48, 0.48))
-		mat.set_shader_parameter("sun_dir", Vector3(1, 1.4, 0.8).normalized())
-		mat.set_shader_parameter("sun_col", Vector3(1.05, 0.99, 0.91))
-		mat.set_shader_parameter("fill_dir", Vector3(-1, 0.6, -1.2).normalized())
-		mat.set_shader_parameter("fill_col", Vector3(0.27, 0.34, 0.45))
-		mat.set_shader_parameter("flash_col", Vector3.ZERO)
+		Models.light(mat, Color(0.42, 0.44, 0.48, 0.6))
 	# frame the gun: its bounding box from the visible meshes
 	var box := AABB()
 	var first := true
@@ -1158,6 +1172,10 @@ func _render_settings() -> void:
 	a.add_child(_slider("Weapon field of view", "vmFov", 50.0, 80.0, 1.0, "%d°"))
 	_fs_check = _check("Fullscreen (F11)", "fullscreen")
 	a.add_child(_fs_check)
+	a.add_child(UI.sect("Graphics"))
+	a.add_child(UI.seg([["low", "Low", "Fast"], ["medium", "Medium", "Shadows+AO"], ["high", "High", "+Fog light"], ["ultra", "Ultra", "+GI, reflections"]],
+		Settings.get_value("gfx"), func(v: Variant) -> void: Settings.set_value("gfx", v); _render()))
+	a.add_child(_slider("Brightness", "brightness", 0.6, 1.6, 0.05, "%.2f"))
 	a.add_child(UI.sect("Sound"))
 	a.add_child(_slider("Volume", "volume", 0.0, 100.0, 1.0, "%d%%"))
 	a.add_child(UI.sect("HUD"))

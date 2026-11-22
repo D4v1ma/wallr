@@ -1,16 +1,12 @@
-// Additive glow sprites on models (muzzle flash stars).
+// Additive glow sprites on models (muzzle flash stars), bright enough to bloom.
 shader_type spatial;
-render_mode unshaded, fog_disabled, cull_disabled, blend_add, depth_draw_never;
+render_mode unshaded, cull_disabled, blend_add, depth_draw_never, fog_disabled;
 
-uniform sampler2D map : filter_linear_mipmap, repeat_disable;
+uniform sampler2D map : source_color, filter_linear_mipmap, repeat_disable;
 uniform vec3 color = vec3(1.0);
+uniform float energy = 2.5;
 
 void fragment() {
 	vec4 t = texture(map, UV);
-	vec3 c = t.rgb * color * t.a;
-#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
-	ALBEDO = c;
-#else
-	ALBEDO = pow(max(c, vec3(0.0)), vec3(2.2));
-#endif
+	ALBEDO = t.rgb * color * t.a * energy;
 }

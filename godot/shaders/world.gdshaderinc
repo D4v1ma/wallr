@@ -1,57 +1,40 @@
-// Shared by the world shaders: baked lightmap (stored at half range, overbright to 2x),
-// four dynamic point lights (muzzle flashes, explosions), squared-exponential fog.
-// The maths runs on the texture values directly (gamma space), like the original renderer;
-// Compatibility writes ALBEDO straight to the screen; Forward+ and Mobile treat it as linear and
-// convert to sRGB on output, so there the result is linearised first (same pixels either way).
+// Lit world surfaces. Godot shades albedo / normal map / roughness / metal with the real-time sun
+// (shadow maps) and the dynamic lights; the baked lightmap supplies everything else (sky light,
+// bounced light, lamps) as emission, plus a cheap image-based reflection: the sky panorama where
+// the surface sees the sky, the surrounding light where it doesn't.
 
 uniform sampler2D lightmap : filter_linear, repeat_disable;
+uniform float lm_range = 4.0;
+uniform float normal_depth = 1.0;
 
-global uniform vec4 dl_pos_0;
-global uniform vec4 dl_pos_1;
-global uniform vec4 dl_pos_2;
-global uniform vec4 dl_pos_3;
-global uniform vec4 dl_col_0;
-global uniform vec4 dl_col_1;
-global uniform vec4 dl_col_2;
-global uniform vec4 dl_col_3;
-global uniform vec4 world_fog;
+global uniform sampler2D sky_pano : source_color, filter_linear_mipmap, repeat_enable;
+global uniform float indirect_k;
+global uniform float refl_k;
 
-varying vec3 v_wpos;
-varying vec3 v_wnrm;
-
-vec3 srgb_to_lin(vec3 c) {
-	c = max(c, vec3(0.0));
-	return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+vec3 sky_refl(vec3 rw, float rough) {
+	float u = atan(rw.x, -rw.z) / 6.2831853 + 0.5;
+	float v = acos(clamp(rw.y, -1.0, 1.0)) / 3.14159265;
+	return textureLod(sky_pano, vec2(u, v), rough * 6.0).rgb;
 }
 
-vec3 to_output(vec3 c) {
-#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
-	return max(c, vec3(0.0));
-#else
-	return srgb_to_lin(c);
-#endif
-}
-
-vec3 dlight(vec4 p, vec4 c, vec3 pos, vec3 N) {
-	if (p.w <= 0.0) return vec3(0.0);
-	vec3 L = p.xyz - pos;
-	float d = length(L);
-	float a = clamp(1.0 - d / p.w, 0.0, 1.0);
-	return c.rgb * (a * a) * clamp(dot(N, L / max(d, 0.001)) * 0.85 + 0.15, 0.0, 1.0);
-}
-
-vec3 world_fogged(vec3 col, float depth) {
-	float dens = world_fog.a;
-	float f = 1.0 - exp(-dens * dens * depth * depth);
-	return mix(col, world_fog.rgb, clamp(f, 0.0, 1.0));
-}
-
-vec3 world_shade(vec3 albedo, vec2 uv2, float depth) {
-	vec3 light = texture(lightmap, uv2).rgb * 2.0;
-	vec3 N = normalize(v_wnrm);
-	light += dlight(dl_pos_0, dl_col_0, v_wpos, N);
-	light += dlight(dl_pos_1, dl_col_1, v_wpos, N);
-	light += dlight(dl_pos_2, dl_col_2, v_wpos, N);
-	light += dlight(dl_pos_3, dl_col_3, v_wpos, N);
-	return world_fogged(albedo * light, depth);
+// n, t, b: view-space normal frame; view: VIEW; nm: normal-map texel (OpenGL convention).
+vec3 world_indirect(vec3 alb, vec3 orm, vec3 nm, vec2 uv2, vec3 n, vec3 t, vec3 b, vec3 view, mat4 inv_view) {
+	vec4 lm = texture(lightmap, uv2);
+	vec3 irr = lm.rgb * lm.rgb * lm_range * indirect_k;
+	float skyv = lm.a;
+	vec2 xy = (nm.xy * 2.0 - 1.0) * normal_depth;
+	vec3 N = normalize(t * xy.x + b * xy.y + n * sqrt(max(0.0, 1.0 - dot(xy, xy))));
+	vec3 nw = (inv_view * vec4(N, 0.0)).xyz;
+	vec3 gw = (inv_view * vec4(n, 0.0)).xyz;
+	// bumps that face up see more sky; bumps that tilt away from the face see less
+	float bump = clamp(1.0 + 0.5 * (nw.y - gw.y) - 0.6 * (1.0 - dot(N, n)), 0.5, 1.35);
+	float ao = orm.r, rough = orm.g, metal = orm.b;
+	float ndv = clamp(dot(N, view), 0.0, 1.0);
+	vec3 f0 = mix(vec3(0.04), alb, metal);
+	vec3 F = f0 + (max(vec3(1.0 - rough), f0) - f0) * pow(1.0 - ndv, 5.0);
+	vec3 rw = (inv_view * vec4(reflect(-view, N), 0.0)).xyz;
+	vec3 env = mix(irr * 0.55, sky_refl(rw, rough) * refl_k, skyv * smoothstep(-0.25, 0.15, rw.y));
+	vec3 spec = env * F * ao * (1.0 - rough * 0.55);
+	vec3 diff = alb * (1.0 - metal) * irr * bump * ao;
+	return diff + spec;
 }

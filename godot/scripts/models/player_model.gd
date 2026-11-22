@@ -250,9 +250,8 @@ func _pose() -> void:
 
 func set_light(c: Color) -> void:
 	light = c
-	var v := Vector3(c.r, c.g, c.b)
-	mat.set_shader_parameter("color", v)
-	wmat.set_shader_parameter("color", v)
+	Models.light(mat, c)
+	Models.light(wmat, c)
 
 
 ## Admin x-ray: the body drawn in a flat colour wherever a wall is in front of it.

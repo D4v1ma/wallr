@@ -142,11 +142,7 @@ func render(alpha: float) -> void:
 		else:
 			node.rotation = g.rot
 		node.position = pos
-		var pr := L.probe(g.p + Vector3(0, 8, 0))
-		var env := L.env
-		var s := pr.a * float(env.sunIntensity) * 0.7
-		var sc: Array = env.sunColor
-		(g.mat as ShaderMaterial).set_shader_parameter("color", Vector3(pr.r + s * sc[0], pr.g + s * sc[1], pr.b + s * sc[2]))
+		Models.light(g.mat as ShaderMaterial, L.probe_sky(g.p + Vector3(0, 8, 0)))
 
 
 ## Does a dense cloud sit across the line a -> b? (bot sight)

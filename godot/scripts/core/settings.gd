@@ -9,7 +9,7 @@ const DEFAULTS := {
 	"fov": 90.0, "aspect": "wide", "vmFov": 64.0, "renderScale": 100.0, "maxDpr": 1.5,
 	"xhStyle": "dynamic", "xhColor": "#4cff6a", "xhSize": 6.0, "xhGap": 3.0, "xhThick": 2.0, "xhDot": false, "xhOutline": true, "xhRecoil": false,
 	"volume": 70.0, "showFps": true, "showSpeed": true, "showHints": true, "botSkill": "normal", "team": 1.0, "ff": false,
-	"mode": "defuse", "matchLen": "standard", "map": "depot", "fullscreen": false,
+	"mode": "defuse", "matchLen": "standard", "map": "depot", "fullscreen": false, "gfx": "high", "brightness": 1.0,
 }
 
 var v: Dictionary = {}

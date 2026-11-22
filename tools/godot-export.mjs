@@ -5,8 +5,11 @@
 //   maps      map compiler + lightmap bake + light probes + nav graph + radar -> JSON + binary + PNG
 //   models    viewmodels with attachments, character bodies, world weapons -> JSON + binary
 //   data      weapon table and viewmodel animation clips -> JSON
+// Sources: src/ (the browser game), with assetgen/ on top: a file in assetgen/ replaces the src/ file
+// of the same name, and new assetgen/ files are added (PBR materials, the Godot-only map changes).
 // Usage: node tools/godot-export.mjs <three.min.js> [textures,sounds,maps,models,data] [map keys]
 import { createRequire } from 'node:module';
+import { deflateSync } from 'node:zlib';
 import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +23,21 @@ if (!threePath) {
 const want = new Set((onlyArg || 'textures,sounds,maps,models,data').split(','));
 const here = dirname(fileURLToPath(import.meta.url));
 const OUT = `${here}/../godot/assets`;
+// Straight (non-premultiplied) RGBA PNG: canvases premultiply alpha, which would wipe the colour of
+// lightmap texels whose alpha (sky visibility) is low.
+const CRC = new Int32Array(256).map((_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c; });
+const crc32 = (b) => { let c = -1; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ -1) >>> 0; };
+function pngRGBA(w, h, rgba) {
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const td = Buffer.concat([Buffer.from(type, 'ascii'), data]), crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(td));
+    return Buffer.concat([len, td, crc]);
+  };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 6; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+  const raw = Buffer.alloc((w * 4 + 1) * h);
+  for (let y = 0; y < h; y++) { raw[y * (w * 4 + 1)] = 0; rgba.copy(raw, y * (w * 4 + 1) + 1, y * w * 4, (y + 1) * w * 4); }
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
+}
 const put = (rel, data) => { const p = `${OUT}/${rel}`; mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, data); };
 const json = (v) => JSON.stringify(v, (k, x) => (typeof x === 'number' ? Math.round(x * 1e5) / 1e5 : x));
 const t0 = Date.now();
@@ -28,8 +46,11 @@ const log = (...a) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1)}s]`,
 // ---------------------------------------------------------------------------
 // The page: the original sources (minus the WebGL renderer, DOM UI and the boot code) with stubs.
 // ---------------------------------------------------------------------------
-const srcDir = `${here}/../src`;
-const files = readdirSync(srcDir).filter((f) => /^(0[1-8]|11|13|14|15|16|17|18|20|21|22|23|24|25|26|27|28)-.*\.js$/.test(f)).sort();
+const srcDir = `${here}/../src`, genDir = `${here}/../assetgen`;
+const wanted = (f) => /^(0[1-8]|11|13|14|15|16|17|18|20|21|22|23|24|25|26|27|28)-.*\.js$/.test(f);
+const genFiles = new Set(readdirSync(genDir).filter(wanted));
+const files = [...new Set([...readdirSync(srcDir).filter(wanted), ...genFiles])].sort()
+  .map((f) => (genFiles.has(f) ? `${genDir}/${f}` : `${srcDir}/${f}`));
 const stubs = `
 const noop = () => {};
 const HUD = new Proxy({}, { get: () => noop });
@@ -56,14 +77,32 @@ const wind = (a, k) => {
 const A3 = (a) => f32(wind(a, 3)), A2 = (a) => f32(wind(a, 2)), UV = (a) => f32(wind(flipV(a), 2));
 const png = (cv) => cv.toDataURL('image/png').split(',')[1];
 let TEX = null;
-async function texturesOnce() { if (!TEX) { TEX = await generateTextures(noop); Game.tex = TEX; } return TEX; }
+// The browser textures, with the PBR set (512 px albedo + normal + ORM) replacing world materials;
+// the PBR world size also drives the level UVs.
+async function texturesOnce() {
+  if (TEX) return TEX;
+  TEX = await generateTextures(noop);
+  for (const [name, pd] of Object.entries(PBR_DEFS)) {
+    const t = TEX[name], r = pd.gen();
+    t.canvas = r.albedo; t.normal = r.normal; t.orm = r.orm; t.avg = r.avg; t.pbr = true;
+    t.def.world = pd.world;
+  }
+  for (const t of Object.values(TEX)) {
+    if (t.pbr || !t.canvas || (t.def && (t.def.aux || t.def.fullbright))) continue;
+    const r = pbrDerive(t.canvas, t.def.surf, t.def.world || 64);
+    t.normal = r.normal; t.orm = r.orm;
+  }
+  Game.tex = TEX;
+  return TEX;
+}
 
 async function exportTextures() {
   const tex = await texturesOnce(), out = {};
   for (const [name, t] of Object.entries(tex)) {
     const d = t.def || {};
-    out[name] = { def: { world: d.world || 0, fit: !!d.fit, cyl: !!d.cyl, surf: d.surf || '', fullbright: d.fullbright || null, aux: !!d.aux }, avg: t.avg,
-      png: t.canvas ? png(t.canvas) : null, w: t.canvas ? t.canvas.width : 0, h: t.canvas ? t.canvas.height : 0 };
+    out[name] = { def: { world: d.world || 0, fit: !!d.fit, cyl: !!d.cyl, surf: d.surf || '', fullbright: d.fullbright || null, aux: !!d.aux, pbr: !!t.pbr }, avg: t.avg,
+      png: t.canvas ? png(t.canvas) : null, w: t.canvas ? t.canvas.width : 0, h: t.canvas ? t.canvas.height : 0,
+      normal: t.normal ? png(t.normal) : null, orm: t.orm ? png(t.orm) : null };
   }
   for (const team of [0, 1]) { const cv = chAtlas(team); out['ch' + team] = { def: { aux: true }, avg: [0.5, 0.5, 0.5], png: png(cv), w: cv.width, h: cv.height }; }
   for (const id of Object.keys(CAMOS)) { const cv = Arsenal.camoCanvas(id); out['camo_' + id] = { def: { aux: true }, avg: [0.5, 0.5, 0.5], png: png(cv), w: cv.width, h: cv.height }; }
@@ -84,11 +123,11 @@ async function exportMap(key) {
   Nav.build(L);
   Radar.build(L);
   const groups = [];
-  for (const [mat, g] of L.groups) groups.push({ mat, n: g.pos.length / 3, pos: A3(g.pos), nrm: A3(g.nrm), uv: UV(g.uv), lm: A2(g.lm) });
+  for (const g of L.groups.values()) groups.push({ mat: g.mat, chunk: g.chunk, n: g.pos.length / 3, pos: A3(g.pos), nrm: A3(g.nrm), uv: UV(g.uv), lm: A2(g.lm) });
   const ents = [];
   for (const [b, m] of L.entGroups) {
     const list = [];
-    for (const [mat, g] of m) list.push({ mat, n: g.pos.length / 3, pos: A3(g.pos), nrm: A3(g.nrm), uv: UV(g.uv), lm: A2(g.lm) });
+    for (const g of m.values()) list.push({ mat: g.mat, n: g.pos.length / 3, pos: A3(g.pos), nrm: A3(g.nrm), uv: UV(g.uv), lm: A2(g.lm) });
     ents.push({ brush: mb.brushes.indexOf(b), groups: list });
   }
   const brushes = mb.brushes.map((b) => {
@@ -96,8 +135,6 @@ async function exportMap(key) {
     return { planes: b.faces.map((f) => f.plane), mats: b.faces.map((f) => f.mat), polys: cb.polys, contents: cb.contents, surfs: Array.from(cb.surf).slice(0, cb.faceCount),
       surf: cb.surfDefault, entity: b.o.entity || null, o: plainOpts(b.o), min: cb.min, max: cb.max };
   });
-  const lm = document.createElement('canvas'); lm.width = L.atlasW; lm.height = L.atlasH;
-  const lctx = lm.getContext('2d'), img = lctx.createImageData(L.atlasW, L.atlasH); img.data.set(bake.lmData); lctx.putImageData(img, 0, 0);
   const pr = bake.probes;
   const nav = { nodes: Nav.nodes.map((n) => [n.x, n.y, n.z, n.cx, n.cz]), links: Nav.nodes.map((n) => n.links.map((l) => [l.to, Math.round(l.cost * 100) / 100, l.jump ? 1 : 0])) };
   const meta = {
@@ -106,9 +143,10 @@ async function exportMap(key) {
     doors: mb.doors.map((d) => ({ brush: mb.brushes.indexOf(d.mb), hinge: d.hinge, opts: plainOpts(d.opts) })),
     targets: mb.targets.map((t) => ({ brush: mb.brushes.indexOf(t.mb), center: t.center, half: t.half, opts: plainOpts(t.opts) })),
     radar: { s: Radar.s, lo: Radar.lo, w: Radar.img.width, h: Radar.img.height },
-    probes: { nx: pr.nx, ny: pr.ny, nz: pr.nz, x0: pr.x0, y0: pr.y0, z0: pr.z0, step: pr.step },
+    probes: { nx: pr.nx, ny: pr.ny, nz: pr.nz, x0: pr.x0, y0: pr.y0, z0: pr.z0, step: pr.step, stride: pr.stride || 4 },
+    lmRange: typeof LM_RANGE === 'number' ? LM_RANGE : 0,
   };
-  return { meta, brushes, groups, ents, nav, lightmap: png(lm), radar: png(Radar.img), probeData: f32(pr.data), probeValid: u8(pr.valid) };
+  return { meta, brushes, groups, ents, nav, lightmap: toB64(bake.lmData), radar: png(Radar.img), probeData: f32(pr.data), probeValid: u8(pr.valid) };
 }
 
 // --- sounds: each effect rendered offline through the same synth graph and reverb ---
@@ -245,7 +283,7 @@ page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') 
 await page.route('http://wallr.export/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><meta charset="utf-8"><title>wallr export</title>' }));
 await page.goto('http://wallr.export/');
 await page.addScriptTag({ content: readFileSync(threePath, 'utf8') });
-const code = stubs + '\n' + files.map((f) => readFileSync(`${srcDir}/${f}`, 'utf8')).join('\n') + '\n' + helpers +
+const code = stubs + '\n' + files.map((f) => readFileSync(f, 'utf8')).join('\n') + '\n' + helpers +
   '\nreturn { exportTextures, exportMap, exportSounds, exportModels, exportData, MAPS };';
 await page.evaluate((c) => { window.X = new Function(c)(); }, code);
 page.setDefaultTimeout(0);
@@ -257,8 +295,10 @@ if (want.has('textures')) {
   const r = await page.evaluate(() => window.X.exportTextures());
   const index = {};
   for (const [name, t] of Object.entries(r.tex)) {
-    index[name] = { ...t.def, avg: t.avg, w: t.w, h: t.h, file: t.png ? `${name}.png` : null };
+    index[name] = { ...t.def, avg: t.avg, w: t.w, h: t.h, file: t.png ? `${name}.png` : null, normal: t.normal ? `${name}_n.png` : null, orm: t.orm ? `${name}_orm.png` : null };
     if (t.png) writeB64(`textures/${name}.png`, t.png);
+    if (t.normal) writeB64(`textures/${name}_n.png`, t.normal);
+    if (t.orm) writeB64(`textures/${name}_orm.png`, t.orm);
   }
   put('textures/textures.json', json(index));
   for (const [id, b] of Object.entries(r.icons)) writeB64(`ui/icon_${id}.png`, b);
@@ -298,13 +338,13 @@ if (want.has('maps')) {
     const r = await page.evaluate((k) => window.X.exportMap(k), key);
     const bin = { parts: [], len: 0 };
     const add = (b64) => { const b = Buffer.from(b64, 'base64'), off = bin.len; bin.parts.push(b); bin.len += b.length; return [off, b.length]; };
-    const geo = (g) => ({ mat: g.mat, n: g.n, pos: add(g.pos), nrm: add(g.nrm), uv: add(g.uv), lm: add(g.lm) });
+    const geo = (g) => ({ mat: g.mat, chunk: g.chunk ?? 0, n: g.n, pos: add(g.pos), nrm: add(g.nrm), uv: add(g.uv), lm: add(g.lm) });
     const level = { ...r.meta, groups: r.groups.map(geo), ents: r.ents.map((e) => ({ brush: e.brush, groups: e.groups.map(geo) })), probeData: add(r.probeData), probeValid: add(r.probeValid) };
     put(`maps/${key}/level.json`, json(level));
     put(`maps/${key}/level.bin`, Buffer.concat(bin.parts));
     put(`maps/${key}/brushes.json`, json(r.brushes));
     put(`maps/${key}/nav.json`, json(r.nav));
-    writeB64(`maps/${key}/lightmap.png`, r.lightmap);
+    put(`maps/${key}/lightmap.png`, pngRGBA(r.meta.atlasW, r.meta.atlasH, Buffer.from(r.lightmap, 'base64')));
     writeB64(`maps/${key}/radar.png`, r.radar);
     log(`map ${key}:`, r.brushes.length, 'brushes,', r.nav.nodes.length, 'nav nodes,', `atlas ${r.meta.atlasW}x${r.meta.atlasH},`, `bake ${r.meta.bakeStats.ms} ms`);
   }

@@ -116,8 +116,7 @@ func plant(actor: Actor, w: Weapon, s: Variant) -> void:
 		var mi := MeshInstance3D.new()
 		mi.mesh = Models.weapon_mesh("charge")[0]
 		var mat := Models.world_material("gun_metal", true)
-		var lc := FX.light_at(p + Vector3(0, 8, 0))
-		mat.set_shader_parameter("color", Vector3(lc.r, lc.g, lc.b))
+		Models.light(mat, Game.L.probe_sky(p + Vector3(0, 8, 0)))
 		mi.material_override = mat
 		mi.position = p + Vector3(0, 0.75, 0)
 		mi.rotation.y = actor.player.yaw

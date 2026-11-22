@@ -1,8 +1,9 @@
 extends Node
 ## First-person weapon: every viewmodel lives in its own small 3D world drawn over the main view
 ## (so it never clips into walls), posed from the base pose + the weapon's animation clip + kick,
-## with bob, sway, scoping in (sights to the screen centre), attachments, camos, the muzzle flash,
-## and lighting taken from the baked probes at your eye.
+## with bob, sway, scoping in (sights to the screen centre), attachments, camos, the muzzle flash.
+## Lighting: the sun turned into view space (dimmed where your eye is in shade), a flash light, and
+## the baked probe light at your eye as the indirect term.
 
 const TICK := 1.0 / 64.0
 const RAIL := {"rifle": 1.46, "pistol": 1.525, "smg": 1.425, "shotgun": 1.5}
@@ -13,6 +14,9 @@ var screen: TextureRect
 var vp: SubViewport
 var cam: Camera3D
 var rig: Node3D
+var vsun: DirectionalLight3D
+var vflash: OmniLight3D
+var venv: Environment
 var models: Dictionary = {}
 var shared: Dictionary = {}       ## shared materials by name
 var cur: Dictionary = {}
@@ -58,6 +62,26 @@ func build(parent: Node) -> void:
 	cam.far = 400.0
 	cam.current = true
 	vp.add_child(cam)
+	venv = Environment.new()
+	venv.background_mode = Environment.BG_CLEAR_COLOR
+	venv.ambient_light_source = Environment.AMBIENT_SOURCE_DISABLED
+	venv.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+	venv.tonemap_mode = Environment.TONE_MAPPER_AGX
+	var we := WorldEnvironment.new()
+	we.environment = venv
+	vp.add_child(we)
+	vsun = DirectionalLight3D.new()
+	vsun.shadow_enabled = true
+	vsun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+	vsun.directional_shadow_max_distance = 60.0
+	vsun.shadow_bias = 0.02
+	vsun.shadow_normal_bias = 0.6
+	vp.add_child(vsun)
+	vflash = OmniLight3D.new()
+	vflash.omni_range = 40.0
+	vflash.light_color = Color(1.0, 0.69, 0.38)
+	vflash.visible = false
+	vp.add_child(vflash)
 	rig = Node3D.new()
 	rig.rotation_order = EULER_ORDER_XYZ
 	vp.add_child(rig)
@@ -215,14 +239,15 @@ func apply_kit(m: Dictionary, def: Dictionary) -> void:
 	for k: String in m.mats:
 		var mat: ShaderMaterial = m.mats[k]
 		if not cd.is_empty():
+			var pb := Models.pbr_from_phong(float(cd.shine), float(cd.spec))
 			mat.set_shader_parameter("use_camo", true)
 			mat.set_shader_parameter("camo_tex", Assets.tex("camo_" + camo))
-			mat.set_shader_parameter("shininess", float(cd.shine))
-			mat.set_shader_parameter("specular", Vector3.ONE * float(cd.spec))
+			mat.set_shader_parameter("rough", pb.x)
+			mat.set_shader_parameter("metal", pb.y)
 		else:
 			mat.set_shader_parameter("use_camo", false)
-			mat.set_shader_parameter("shininess", float(mat.get_meta("base_shininess", 0.0)))
-			mat.set_shader_parameter("specular", mat.get_meta("base_specular", Vector3.ZERO))
+			mat.set_shader_parameter("rough", float(mat.get_meta("base_rough", 0.6)))
+			mat.set_shader_parameter("metal", float(mat.get_meta("base_metal", 0.0)))
 
 
 func update(dt: float, pl: Player, w: Weapon, look: Vector2, eye: Vector3, alpha: float, main_cam: Camera3D) -> void:
@@ -313,22 +338,26 @@ func update(dt: float, pl: Player, w: Weapon, look: Vector2, eye: Vector3, alpha
 		(m.flash as Node3D).visible = flash_t > 0.0
 	flash_i = maxf(0.0, flash_i - dt * 50.0)
 	var L := Game.L
-	var pr := L.probe(eye)
+	var pr := L.probe_sky(eye)
+	var sunv := L.probe(eye).a
 	var env := L.env
-	var sun_w := U.v3(env.sunDir)
-	var sun_v := main_cam.global_transform.basis.inverse() * sun_w if main_cam else sun_w
+	var cam_basis := main_cam.global_transform.basis if main_cam else Basis.IDENTITY
+	var sun_v := cam_basis.inverse() * U.v3(env.sunDir).normalized()
+	vsun.basis = Basis.looking_at(-sun_v, Vector3.UP if absf(sun_v.y) < 0.99 else Vector3.FORWARD)
 	var sc: Array = env.sunColor
-	var si := pr.a * float(env.sunIntensity) * 0.6
-	var amb := Vector3(pr.r, pr.g, pr.b) * 0.95 * 0.5
-	var fill := 0.08 + (pr.r + pr.g + pr.b) * 0.03
-	var fpos := root.position + Vector3(0, 1, -6)
-	var fcol := Vector3(1.0, 0.69, 0.376) * flash_i
+	vsun.light_color = Color(sc[0], sc[1], sc[2])
+	vsun.light_energy = (L.sun.light_energy if L.sun else 2.5) * sunv
+	vsun.visible = sunv > 0.01
+	vflash.position = root.position + Vector3(0, 1, -6)
+	vflash.light_energy = flash_i * 4.0
+	vflash.visible = flash_i > 0.01
+	if L.world_env:
+		venv.tonemap_exposure = L.world_env.environment.tonemap_exposure
+		venv.tonemap_mode = L.world_env.environment.tonemap_mode
+		venv.adjustment_enabled = true
+		venv.adjustment_contrast = L.world_env.environment.adjustment_contrast
+		venv.adjustment_saturation = L.world_env.environment.adjustment_saturation
 	var mats: Array = shared.values() + (m.mats as Dictionary).values()
 	for mat: ShaderMaterial in mats:
-		mat.set_shader_parameter("amb", amb)
-		mat.set_shader_parameter("sun_dir", sun_v)
-		mat.set_shader_parameter("sun_col", Vector3(sc[0], sc[1], sc[2]) * si)
-		mat.set_shader_parameter("fill_dir", Vector3(-0.3, 0.2, 1.0).normalized())
-		mat.set_shader_parameter("fill_col", Vector3(fill, fill, fill))
-		mat.set_shader_parameter("flash_pos", fpos)
-		mat.set_shader_parameter("flash_col", fcol)
+		Models.light(mat, pr)
+		mat.set_shader_parameter("to_world", cam_basis)
