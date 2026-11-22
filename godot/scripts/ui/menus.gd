@@ -629,8 +629,15 @@ func _render_home() -> void:
 
 # --- create game -------------------------------------------------------------------------------
 
+## The big maps play 8v8: ranked fixes it, casual allows up to 7 bot teammates and 8 opponents.
+const RANKED_ALLIES := 7
+const RANKED_ENEMIES := 8
+const MAX_ALLIES := 7
+const MAX_ENEMIES := 8
+
+
 static func default_cfg() -> Dictionary:
-	return {"map": "depot", "mode": "defuse", "ranked": false, "diff": "normal", "team": "1", "allies": 4, "enemies": 5, "len": "standard", "ff": false}
+	return {"map": "depot", "mode": "defuse", "ranked": false, "diff": "normal", "team": "1", "allies": RANKED_ALLIES, "enemies": RANKED_ENEMIES, "len": "standard", "ff": false}
 
 
 func open_create() -> void:
@@ -653,13 +660,13 @@ static func norm_cfg(c: Dictionary) -> Dictionary:
 		c.ranked = false
 	c.ranked = bool(c.ranked)
 	if c.ranked:
-		c.allies = 4
-		c.enemies = 5
+		c.allies = RANKED_ALLIES
+		c.enemies = RANKED_ENEMIES
 		c.ff = false
 		if Level.MAPS[c.map].get("practice", false):
 			c.map = "depot"
-	c.allies = clampi(int(c.allies), 0, 4)
-	c.enemies = clampi(int(c.enemies), 1, 5)
+	c.allies = clampi(int(c.allies), 0, MAX_ALLIES)
+	c.enemies = clampi(int(c.enemies), 1, MAX_ENEMIES)
 	c.team = str(c.team).replace(".0", "")
 	if not ["0", "1", "r"].has(c.team):
 		c.team = "1"
@@ -699,7 +706,7 @@ func _render_create() -> void:
 		v.add_child(ctl)
 		return v
 	g.add_child(cell.call("Mode", UI.seg([["defuse", "Defuse", "Rounds · money · the charge"], ["skirmish", "Skirmish", "Respawns · practice"]], c.mode, func(v: Variant) -> void: _set_cfg("mode", v))))
-	g.add_child(cell.call("Match type", UI.seg([[false, "Casual", "Your rules · Elo ×¼"], [true, "Ranked", "5v5 · full Elo"]], c.ranked, func(v: Variant) -> void: _set_cfg("ranked", v), not defuse)))
+	g.add_child(cell.call("Match type", UI.seg([[false, "Casual", "Your rules · Elo ×¼"], [true, "Ranked", "8v8 · full Elo"]], c.ranked, func(v: Variant) -> void: _set_cfg("ranked", v), not defuse)))
 	var diffs: Array = []
 	for k: String in Profile.DIFF_ORDER:
 		diffs.append([k, Profile.DIFFS[k].name, "Rating %d" % Profile.DIFFS[k].elo])
@@ -710,9 +717,9 @@ func _render_create() -> void:
 	g.add_child(cell.call("Length", UI.seg([["short", "Short", "First to 9"], ["standard", "Standard", "First to 16"]], c.len, func(v: Variant) -> void: _set_cfg("len", v), not defuse)))
 	g.add_child(cell.call("Your side", UI.seg([["1", "Wardens", "Defend"], ["0", "Raiders", "Attack"], ["r", "Random", "Either"]], c.team, func(v: Variant) -> void: _set_cfg("team", v))))
 	var pv := UI.vbox(6)
-	pv.add_child(UI.stepper("Bot teammates", int(c.allies), 0, 4, func(d: int) -> void: _set_cfg("allies", int(c.allies) + d), c.ranked))
-	pv.add_child(UI.stepper("Bot opponents", int(c.enemies), 1, 5, func(d: int) -> void: _set_cfg("enemies", int(c.enemies) + d), c.ranked))
-	g.add_child(cell.call("Players" + (" (ranked: 5v5)" if c.ranked else ""), pv))
+	pv.add_child(UI.stepper("Bot teammates", int(c.allies), 0, MAX_ALLIES, func(d: int) -> void: _set_cfg("allies", int(c.allies) + d), c.ranked))
+	pv.add_child(UI.stepper("Bot opponents", int(c.enemies), 1, MAX_ENEMIES, func(d: int) -> void: _set_cfg("enemies", int(c.enemies) + d), c.ranked))
+	g.add_child(cell.call("Players" + (" (ranked: 8v8)" if c.ranked else ""), pv))
 	var ff := CheckBox.new()
 	ff.text = "Friendly fire" + (" (off in ranked)" if c.ranked else "")
 	ff.button_pressed = c.ff

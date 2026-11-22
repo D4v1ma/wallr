@@ -108,7 +108,7 @@ func plant(actor: Actor, w: Weapon, s: Variant) -> void:
 	item = {}
 	pos = p
 	site = s
-	timer = FUSE
+	timer = fuse()
 	beep_t = 0.4
 	planter = actor
 	planted_at = Game.time
@@ -132,6 +132,11 @@ func plant(actor: Actor, w: Weapon, s: Variant) -> void:
 		mi.add_child(led)
 	Snd.armed(pos)
 	Match.on_plant(actor, s)
+
+
+## Fuse length for the current map (longer on the big maps, so Wardens can rotate).
+func fuse() -> float:
+	return float(Game.L.env.get("fuse", FUSE)) if Game.L else FUSE
 
 
 func can_defuse(a: Actor) -> bool:
@@ -182,7 +187,7 @@ func tick(dt: float) -> void:
 	beep_t -= dt
 	led_t -= dt
 	if beep_t <= 0.0:
-		var f := clampf(timer / FUSE, 0.0, 1.0)
+		var f := clampf(timer / fuse(), 0.0, 1.0)
 		beep_t = 0.12 if timer < 2.0 else 0.16 + 0.84 * f
 		Snd.beep(pos, 1.0 - f)
 		led_t = 0.07

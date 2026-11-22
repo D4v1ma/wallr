@@ -550,14 +550,16 @@ function pbrSnow(seed, o = {}) {
     const hgt = drift * 5 + scal * 1.6 + fine * 0.15 + ridge * 0.8;
     T.h[i] = hgt;
     const hollow = smoothstep(0.55, 0.3, drift * 0.7 + scal * 0.3);
-    const k = 0.95 + (fine - 0.5) * 0.06;
-    T.set(i, 0.88 * k, 0.91 * k, 0.95 * k);
-    T.mix(i, [0.7, 0.78, 0.9], hollow * 0.45);
+    const k = 0.9 + (fine - 0.5) * 0.1 + (scal - 0.5) * 0.12;
+    T.set(i, 0.8 * k, 0.83 * k, 0.88 * k);
+    T.mix(i, [0.6, 0.68, 0.82], hollow * 0.5);
     const ice = smoothstep(0.72, 0.85, tn(u, v, 6, 4, seed + 3));
-    T.mix(i, [0.74, 0.8, 0.86], ice * 0.5);
+    T.mix(i, [0.66, 0.73, 0.8], ice * 0.55);
+    // wind-blown grit in patches, and the odd dark speck
+    T.mul(i, 1 - smoothstep(0.68, 0.9, tn(u, v, 24, 3, seed + 5)) * 0.16 - (hashi(x, y, seed + 6) > 0.994 ? 0.22 : 0));
     T.r[i] = 0.72 - ice * 0.45 + (hashi(x, y, seed + 4) > 0.985 ? -0.5 : 0);  // glints
   });
-  return pbrFinish(T, { ao: 0.5, cavity: 0.35 });
+  return pbrFinish(T, { ao: 0.6, cavity: 0.45, normal: 1.8 });
 }
 
 // Asphalt: stone aggregate in bitumen, alligator cracking, darker patch repairs.
@@ -764,3 +766,100 @@ const PBR_AUX = {
   gun_tan: () => auxGun(62, [0.55, 0.47, 0.34], { fine: 0.1, mid: 0.08, grain: 0.06 }),
   gun_wood: () => auxWood(69),
 };
+
+// ------------------------------------------------------------------------------------------
+// Materials added for the large maps
+// ------------------------------------------------------------------------------------------
+// Salt crust on the evaporation pans: polygonal crust plates with raised rims, crystals, damp
+// darker patches that are glossier.
+function pbrSalt(seed, o = {}) {
+  const T = new PTex(o.world ?? 192), n = T.n;
+  T.each((x, y, i, u, v) => {
+    const w1 = tw(u, v, 9, seed + 1), edge = PW3[1] - PW3[0], id = PW3[2];
+    const rim = smoothstep(0.06, 0.0, edge);
+    const fine = tn(u, v, 96, 2, seed + 2), big = tn(u, v, 4, 4, seed + 3);
+    const damp = smoothstep(0.55, 0.8, tn(u, v, 5, 4, seed + 4)) * (o.damp ?? 0.7);
+    T.h[i] = rim * 0.5 + fine * 0.15 + (id - 0.5) * 0.15 + big * 0.2;
+    const k = 0.9 + id * 0.08 + (fine - 0.5) * 0.1 + rim * 0.08 + (hashi(x, y, seed + 5) > 0.985 ? 0.15 : 0);
+    T.set(i, 0.88 * k, 0.86 * k, 0.82 * k);
+    T.mix(i, [0.62, 0.6, 0.56], damp * 0.55);
+    T.r[i] = 0.82 - damp * 0.5 - (hashi(x, y, seed + 6) > 0.97 ? 0.4 : 0);
+  });
+  return pbrFinish(T, { ao: 0.8, cavity: 0.4 });
+}
+// Packed earth with tyre ruts, pebbles and dry cracks.
+function pbrDirt(seed, o = {}) {
+  const T = new PTex(o.world ?? 192), n = T.n, base = o.base ?? [0.46, 0.38, 0.29];
+  const cracks = crackMask(n, seed + 1, 4, 140, 0.6, 1.0);
+  T.each((x, y, i, u, v) => {
+    const big = tn(u, v, 3, 5, seed + 2), mid = tn(u, v, 14, 3, seed + 3), fine = tn(u, v, 96, 2, seed + 4);
+    const rut = Math.max(0, Math.cos((u * 2 + tn(u, v, 2, 3, seed + 5) * 0.3) * TAU * 2)) ** 6 * 0.6;
+    const peb = tw(u, v, 40, seed + 6), stone = PW3[2] > 0.86 ? dome(PW3[0], 0.3) : 0;
+    T.h[i] = big * 1.2 + mid * 0.3 + fine * 0.1 - rut * 0.6 + stone * 0.5 - cracks[i] * 0.4;
+    const k = 0.82 + big * 0.2 + (mid - 0.5) * 0.22 + (fine - 0.5) * 0.12;
+    T.setc(i, base, k * (1 - rut * 0.15));
+    if (stone > 0) T.mix(i, [0.55, 0.52, 0.48], Math.min(1, stone * 2));
+    T.r[i] = 0.95 - rut * 0.1;
+    if (cracks[i] > 0) T.mul(i, 1 - cracks[i] * 0.35);
+  });
+  return pbrFinish(T, { ao: 1.0, cavity: 0.5 });
+}
+// Cobblestones (granite setts) with sandy joints.
+function pbrCobble(seed, o = {}) {
+  const T = new PTex(o.world ?? 128), n = T.n, rows = o.rows ?? 10, rh = n / rows;
+  T.each((x, y, i, u, v) => {
+    const row = Math.floor(y / rh), ly = y + 0.5 - row * rh, off = hashi(row, 0, seed) * n;
+    const xs = (x + off) % n, bw = rh * 1.35, col = Math.floor(xs / bw), lx = xs + 0.5 - col * bw, cols = Math.floor(n / bw);
+    const id = hashi(col % cols, row, seed + 1);
+    const e = Math.min(lx, bw - lx, ly, rh - ly);
+    const dom = smoothstep(0, rh * 0.28, e);
+    const fine = tn(u, v, 64, 3, seed + 2);
+    if (e > 2) {
+      T.h[i] = dom * 1.3 + fine * 0.15 + (id - 0.5) * 0.3;
+      T.setc(i, pmix([0.44, 0.43, 0.42], [0.55, 0.5, 0.45], id), 0.85 + fine * 0.25);
+      T.r[i] = 0.7 - dom * 0.2;
+    } else {
+      T.h[i] = 0;
+      T.setc(i, [0.42, 0.38, 0.31], 0.8 + fine * 0.2);
+      T.r[i] = 0.95;
+    }
+  });
+  return pbrFinish(T, { ao: 1.2, cavity: 0.55 });
+}
+// Clay roof tiles (pantiles) in overlapping courses.
+function pbrRoofTiles(seed, o = {}) {
+  const T = new PTex(o.world ?? 128), n = T.n, rows = o.rows ?? 8, cols = o.cols ?? 6, rh = n / rows, cw = n / cols;
+  T.each((x, y, i, u, v) => {
+    const row = Math.floor(y / rh), ly = (y - row * rh) / rh, lx = (x % cw) / cw;
+    const id = hashi(Math.floor(x / cw), row, seed);
+    const wave = Math.sin(lx * Math.PI) ** 0.7;
+    T.h[i] = wave * 1.2 + ly * 0.8 - (ly > 0.94 ? 1.2 : 0);
+    const k = (0.78 + id * 0.24) * (0.7 + ly * 0.35) * (0.9 + wave * 0.12);
+    T.setc(i, pmix([0.6, 0.29, 0.18], [0.5, 0.3, 0.22], hashi(Math.floor(x / cw), row, seed + 1)), k);
+    const lichen = smoothstep(0.65, 0.8, tn(u, v, 8, 4, seed + 2)) * 0.5;
+    T.mix(i, [0.45, 0.46, 0.32], lichen);
+    T.r[i] = 0.75;
+  });
+  return pbrFinish(T, { ao: 1.4, cavity: 0.5 });
+}
+// Blue ice / packed frozen snow, glossy with trapped bubbles and scratches.
+function pbrIce(seed, o = {}) {
+  const T = new PTex(o.world ?? 192), n = T.n;
+  const scr = scratchMask(n, seed + 1, 60, 70, null, 0.5);
+  T.each((x, y, i, u, v) => {
+    const big = tn(u, v, 3, 5, seed + 2), mid = tn(u, v, 12, 3, seed + 3);
+    T.h[i] = big * 0.8 + mid * 0.2 - scr[i] * 0.05;
+    const k = 0.85 + big * 0.15;
+    T.set(i, 0.62 * k, 0.74 * k, 0.86 * k);
+    T.mix(i, [0.86, 0.9, 0.95], smoothstep(0.55, 0.8, mid) * 0.5 + scr[i] * 0.4);
+    T.r[i] = 0.12 + mid * 0.15 + scr[i] * 0.3;
+  });
+  return pbrFinish(T, { ao: 0.4, cavity: 0.3 });
+}
+Object.assign(PBR_DEFS, {
+  salt:       { world: 192, surf: 'sand', gen: () => pbrSalt(131) },
+  dirt:       { world: 192, surf: 'sand', gen: () => pbrDirt(132) },
+  cobble:     { world: 128, surf: 'concrete', gen: () => pbrCobble(133) },
+  roof_tiles: { world: 128, surf: 'tile', gen: () => pbrRoofTiles(134) },
+  ice:        { world: 192, surf: 'tile', gen: () => pbrIce(135) },
+});

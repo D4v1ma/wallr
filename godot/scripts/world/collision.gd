@@ -33,6 +33,7 @@ class Brush:
 	var dynamic := false
 	var active := true
 	var door: Object = null            ## Door entity driving this brush
+	var origin := Vector3.ZERO         ## the physics shape is built around this point (precision)
 
 	func set_planes(planes: Array, surfs: Array) -> void:
 		face_count = planes.size()
@@ -68,17 +69,25 @@ class Brush:
 		lo = Vector3(x0, y0, z0)
 		hi = Vector3(x1, y1, z1)
 
-	## Unique corner points (Jolt's hull builder rejects near-duplicates).
-	func points() -> PackedVector3Array:
+	## Unique corner points relative to `origin`. The faces are rebuilt in local space with a small
+	## starting quad, so the corners stay exact far from the world origin (Jolt's hull builder
+	## rejects near-duplicates and points a hair off their face).
+	func points(origin: Vector3) -> PackedVector3Array:
+		var planes: Array = []
+		for i in face_count:
+			var o := i * 4
+			planes.append([P[o], P[o + 1], P[o + 2], P[o + 3] - (P[o] * origin.x + P[o + 1] * origin.y + P[o + 2] * origin.z)])
 		var out := PackedVector3Array()
-		var seen := {}
-		for p in polys:
+		for p: Variant in CollisionWorld.brush_polygons(planes, (hi - lo).length() + 64.0):
 			if p == null:
 				continue
 			for v: Vector3 in p:
-				var k := Vector3i(roundi(v.x * 16.0), roundi(v.y * 16.0), roundi(v.z * 16.0))
-				if not seen.has(k):
-					seen[k] = true
+				var dup := false
+				for w: Vector3 in out:
+					if v.distance_squared_to(w) < 0.0025:
+						dup = true
+						break
+				if not dup:
 					out.append(v)
 		return out
 
@@ -116,7 +125,7 @@ static func clip_polygon(poly: PackedVector3Array, nx: float, ny: float, nz: flo
 
 
 ## Face polygons of a convex brush (one per plane; null where the plane is redundant).
-static func brush_polygons(planes: Array) -> Array:
+static func brush_polygons(planes: Array, S := 65536.0) -> Array:
 	var polys: Array = []
 	for i in planes.size():
 		var p: Array = planes[i]
@@ -126,7 +135,6 @@ static func brush_polygons(planes: Array) -> Array:
 		var r := up.cross(n).normalized()
 		var u := n.cross(r)
 		var c := n * d
-		var S := 65536.0
 		var poly := PackedVector3Array([c + (r + u) * S, c + (u - r) * S, c - (r + u) * S, c + (r - u) * S])
 		for j in planes.size():
 			if j == i:
@@ -161,7 +169,10 @@ func build(list: Array, world_space: RID) -> void:
 
 
 func _make_body(b: Brush, kinematic: bool) -> void:
-	var pts := b.points()
+	# Build the hull around the brush's own centre: Jolt's hull builder works in 32-bit floats and
+	# fails on detailed brushes far from the origin of a big map.
+	b.origin = ((b.lo + b.hi) * 0.5).round()
+	var pts := b.points(b.origin)
 	if pts.size() < 4:
 		return
 	b.shape = PhysicsServer3D.convex_polygon_shape_create()
@@ -173,7 +184,7 @@ func _make_body(b: Brush, kinematic: bool) -> void:
 	PhysicsServer3D.body_set_collision_layer(b.body, b.contents)
 	PhysicsServer3D.body_set_collision_mask(b.body, 0)
 	PhysicsServer3D.body_set_space(b.body, space)
-	PhysicsServer3D.body_set_state(b.body, PhysicsServer3D.BODY_STATE_TRANSFORM, Transform3D.IDENTITY)
+	PhysicsServer3D.body_set_state(b.body, PhysicsServer3D.BODY_STATE_TRANSFORM, Transform3D(Basis.IDENTITY, b.origin))
 	_by_rid[b.body] = b
 
 
@@ -196,7 +207,7 @@ func move_brush(b: Brush, planes: Array, xform: Transform3D) -> void:
 	var keep := b.surf.slice(0, b.face_count)
 	b.set_planes(planes, Array(keep))
 	if b.body.is_valid():
-		PhysicsServer3D.body_set_state(b.body, PhysicsServer3D.BODY_STATE_TRANSFORM, xform)
+		PhysicsServer3D.body_set_state(b.body, PhysicsServer3D.BODY_STATE_TRANSFORM, xform * Transform3D(Basis.IDENTITY, b.origin))
 
 
 func set_active(b: Brush, on: bool) -> void:

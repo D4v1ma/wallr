@@ -43,8 +43,9 @@ func run(r: Node) -> void:
 	var me := Actors.me
 	var enemies := Actors.list.filter(func(a: Actor) -> bool: return a.is_bot and a.team != me.team)
 	var mates := Actors.list.filter(func(a: Actor) -> bool: return a.is_bot and a.team == me.team)
-	# characters in the yard: two enemies facing you, a teammate to the side
-	var base := Vector3(-200, 0, 0)
+	# Saltpan Depot's Plaza: you face the salt monument (east, in the sun), two enemies facing you,
+	# a teammate to the side
+	var base := Vector3(-700, 0, 0)
 	place(me, base, -90)
 	place(enemies[0], base + Vector3(260, 0, -40), 90)
 	place(enemies[1], base + Vector3(420, 0, 70), 100)
@@ -62,8 +63,8 @@ func run(r: Node) -> void:
 		await r.get_tree().process_frame
 	await snap(r, "g-fire", 1)
 	await snap(r, "g-decals", 30)
-	# close up on the hut wall after a few hits
-	place(me, Vector3(20, 0, 0), -90)
+	# close up on the monument after a few hits
+	place(me, Vector3(-330, 0, 0), -90)
 	me.player.pitch = -0.02
 	for i in 5:
 		me.player.yaw = deg_to_rad(-90.0 + (i - 2) * 4.0)
@@ -80,13 +81,14 @@ func run(r: Node) -> void:
 	r.ticks(main, 30)
 	# a line-up of characters facing the camera with different weapons (model check)
 	if vm_arg != "":
-		place(me, Vector3(-300, 0, 0), -90)
+		var lu := Vector3(-700, 0, -600)
+		place(me, lu, -90)
 		me.player.pitch = -0.08
 		var guys: Array = enemies + mates
 		var kit := ["rifle", "pistol", "sniper", "shotgun", "smg"]
 		for i in guys.size():
 			var a: Actor = guys[i]
-			place(a, Vector3(-300 + 150 + (i % 2) * 40, 0, -75 + i * 45), 90 + (i - 1) * 14)
+			place(a, lu + Vector3(150 + (i % 2) * 40, 0, -75 + i * 45), 90 + (i - 1) * 14)
 			var w: Variant = a.loadout.by_id(kit[i % kit.size()])
 			if w == null:
 				a.loadout.give(kit[i % kit.size()], true)
@@ -97,11 +99,11 @@ func run(r: Node) -> void:
 		r.ticks(main, 40)
 		await snap(r, "c-lineup", 6)
 		Viewmodel.set_visible(true)
-	# every viewmodel, settled after its draw animation, in sun and in shade
+	# every viewmodel, settled after its draw animation, in the sun (the Plaza) and indoors (the canteen)
 	if vm_arg != "":
 		for e: Actor in enemies:
-			place(e, Vector3(-2000, 0, -2000), 0)
-		for spot: Array in [[Vector3(-200, 0, 0), -90.0, "sun"], [Vector3(20, 0, 0), -90.0, "shade"]]:
+			place(e, Vector3(-5800, 0, -400 + enemies.find(e) * 120), 0)
+		for spot: Array in [[base, -90.0, "sun"], [Vector3(-3400, 0, 900), -90.0, "shade"]]:
 			place(me, spot[0], spot[1])
 			me.player.pitch = -0.05
 			for id: String in ["rifle", "pistol", "knife", "smoke", "smg", "shotgun", "sniper", "charge"]:

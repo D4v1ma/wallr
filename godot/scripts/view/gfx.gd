@@ -28,7 +28,7 @@ const DEFAULT_LOOK := {
 const LOOKS := {
 	"depot": {"cloud_cover": 0.42, "fog": 0.00003, "vfog": 0.00005},
 	"kiln": {"sun_k": 2.8, "cloud_cover": 0.3, "fog": 0.00004, "vfog": 0.00009, "saturation": 1.1, "sun_scatter": 0.2},
-	"frost": {"sun_k": 2.1, "indirect_k": 1.1, "cloud_cover": 0.72, "cloud_dark": 0.45, "fog": 0.00005, "vfog": 0.00007, "saturation": 0.98, "exposure": 0.95},
+	"frost": {"sun_k": 2.1, "indirect_k": 1.1, "cloud_cover": 0.72, "cloud_dark": 0.45, "fog": 0.00005, "vfog": 0.00007, "saturation": 0.98, "exposure": 0.82, "contrast": 1.1},
 	"range": {"cloud_cover": 0.5, "fog": 0.00002, "vfog": 0.00004},
 }
 

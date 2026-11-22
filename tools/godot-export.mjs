@@ -83,6 +83,7 @@ async function texturesOnce() {
   if (TEX) return TEX;
   TEX = await generateTextures(noop);
   for (const [name, pd] of Object.entries(PBR_DEFS)) {
+    if (!TEX[name]) TEX[name] = { canvas: null, avg: [0.5, 0.5, 0.5], def: { world: pd.world, surf: pd.surf || 'concrete' } };   // new materials
     const t = TEX[name], r = pd.gen();
     t.canvas = r.albedo; t.normal = r.normal; t.orm = r.orm; t.avg = r.avg; t.pbr = true;
     t.def.world = pd.world;
@@ -146,7 +147,7 @@ async function exportMap(key) {
       surf: cb.surfDefault, entity: b.o.entity || null, o: plainOpts(b.o), min: cb.min, max: cb.max };
   });
   const pr = bake.probes;
-  const nav = { nodes: Nav.nodes.map((n) => [n.x, n.y, n.z, n.cx, n.cz]), links: Nav.nodes.map((n) => n.links.map((l) => [l.to, Math.round(l.cost * 100) / 100, l.jump ? 1 : 0])) };
+  const nav = { step: typeof NAV_STEP === 'number' ? NAV_STEP : 40, nodes: Nav.nodes.map((n) => [n.x, n.y, n.z, n.cx, n.cz]), links: Nav.nodes.map((n) => n.links.map((l) => [l.to, Math.round(l.cost * 100) / 100, l.jump ? 1 : 0])) };
   const meta = {
     key, name: def.name, blurb: def.blurb, practice: !!def.practice, env: L.env, lights: L.lights, spawns: L.spawns, teamSpawns: L.teamSpawns, hotspots: L.hotspots,
     sites: L.sites, areas: L.areas, tactics: L.tactics, menuShots: L.menuShots, bounds: L.bounds, atlasW: L.atlasW, atlasH: L.atlasH, bakeStats: bake.stats,

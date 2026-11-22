@@ -226,7 +226,7 @@ func update(dt: float, cam: Camera3D) -> void:
 	var L := Game.L
 	var s := float(L.meta.radar.s)
 	var lo: Array = L.meta.radar.lo
-	var zoom := 0.8
+	var zoom := float(L.env.get("radarZoom", 0.8))
 	radar_mat.set_shader_parameter("view_px", Vector2((who.player.pos.x - float(lo[0])) * s, (who.player.pos.z - float(lo[1])) * s))
 	radar_mat.set_shader_parameter("yaw", who.player.yaw)
 	radar_mat.set_shader_parameter("k", zoom)
@@ -412,7 +412,7 @@ func _draw_radar(me: Actor) -> void:
 	var view := who.player.pos
 	var yaw := who.player.yaw
 	var s := float(Game.L.meta.radar.s)
-	var k := 0.8
+	var k := float(Game.L.env.get("radarZoom", 0.8))
 	var cs := cos(yaw)
 	var sn := sin(yaw)
 	var lim := R - 7.0

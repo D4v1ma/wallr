@@ -162,6 +162,11 @@ func frozen() -> bool:
 	return active and phase == "freeze"
 
 
+## Round length for the current map (the big maps take longer to cross).
+func round_time() -> float:
+	return float(Game.L.env.get("roundTime", ROUND)) if Game.L else ROUND
+
+
 func buy_time() -> bool:
 	return active and (phase == "freeze" or (phase == "live" and live_t < BUY_WINDOW))
 
@@ -174,7 +179,7 @@ func in_buy_zone(a: Actor) -> bool:
 	var spots: Array = Game.L.team_spawns[a.team] if a.team < Game.L.team_spawns.size() and Game.L.team_spawns[a.team] != null else []
 	var p := a.player.pos
 	for s: Dictionary in spots:
-		if Vector2(s.pos[0] - p.x, s.pos[2] - p.z).length() < BUY_RADIUS:
+		if Vector2(s.pos[0] - p.x, s.pos[2] - p.z).length() < float(Game.L.env.get("buyRadius", BUY_RADIUS)):
 			return true
 	return false
 
@@ -248,7 +253,7 @@ func tick(dt: float) -> void:
 		"freeze":
 			if t <= 0.0:
 				phase = "live"
-				t = ROUND
+				t = round_time()
 				live_t = 0.0
 				Snd.round_go()
 				banner = {"title": "Go", "sub": "Plant the charge at A or B" if Actors.me.team == 0 else "Defend A and B", "t": 1.8, "kind": "go"}

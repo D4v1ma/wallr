@@ -177,7 +177,7 @@ function compileLevel(map, tex) {
     const td = tex[f.mat] && tex[f.mat].def;
     if (td && td.fullbright) continue;
     const ext = Math.max(maxR - minR, maxT - minT);
-    const env = map.env || {}, s = f.mb.o.lm || (ext > (env.lmBig || 640) ? 16 : (env.lmSmall || 8));
+    const env = map.env || {}, s = f.mb.o.lm || (ext > (env.lmBig || 640) ? (env.lmBigS || 16) : (env.lmSmall || 8));
     const w = Math.max(2, Math.ceil((maxR - minR) / s) + 1), h = Math.max(2, Math.ceil((maxT - minT) / s) + 1);
     f.lm = { s, w, h, x: 0, y: 0, start: 0 };
     luxels += w * h;

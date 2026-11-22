@@ -294,7 +294,7 @@ func xp_for(cfg: Dictionary, st: Dictionary, outcome: String) -> Dictionary:
 ## fully; casual ones a quarter. Placement matches move twice as far.
 static func opp_rating(cfg: Dictionary) -> float:
 	var d: Dictionary = DIFFS.get(String(cfg.get("diff", "normal")), DIFFS.normal)
-	return float(d.elo) + 40.0 * (float(cfg.get("enemies", 5)) - 1.0 - float(cfg.get("allies", 4)))
+	return float(d.elo) + 40.0 * (float(cfg.get("enemies", 8)) - 1.0 - float(cfg.get("allies", 7)))
 
 
 func elo_for(cfg: Dictionary, st: Dictionary, outcome: String, rating: float, placed: int) -> Dictionary:

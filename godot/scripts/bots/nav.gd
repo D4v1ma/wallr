@@ -3,7 +3,7 @@ extends Node
 ## linked where the floor can be walked (steps <= 18), hopped (<= 50, jump links) or dropped from
 ## (one-way). Paths come from Godot's AStar3D; bots string-pull them with walk tests.
 
-const STEP := 40.0
+var STEP := 40.0          ## grid step (the map's navStep; 40 on the small maps)
 
 var nodes := PackedVector3Array()
 var cells: Dictionary = {}
@@ -19,6 +19,7 @@ func build(level: Level) -> void:
 	cells.clear()
 	jumps.clear()
 	astar.clear()
+	STEP = float(level.nav.get("step", 40.0))
 	var raw: Array = level.nav.nodes
 	var links: Array = level.nav.links
 	astar.reserve_space(raw.size())
