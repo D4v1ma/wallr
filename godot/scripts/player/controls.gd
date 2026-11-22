@@ -7,6 +7,7 @@ const KEYS := {
 	"jump": [KEY_SPACE], "duck": [KEY_CTRL, KEY_C], "walk": [KEY_SHIFT],
 	"reload": [KEY_R], "use": [KEY_E], "drop": [KEY_G], "inspect": [KEY_F], "last": [KEY_Q], "wallbang": [KEY_X],
 	"slot1": [KEY_1], "slot2": [KEY_2], "slot3": [KEY_3], "slot4": [KEY_4], "slot5": [KEY_5],
+	"slot6": [KEY_6], "slot7": [KEY_7], "slot8": [KEY_8], "slot9": [KEY_9],
 	"buy": [KEY_B], "scores": [KEY_TAB], "noclip": [KEY_V], "debug": [KEY_F1, KEY_QUOTELEFT], "hints": [KEY_H],
 	"pause": [KEY_ESCAPE], "chat": [KEY_Y],
 }
@@ -26,6 +27,7 @@ var mdy := 0.0
 var wheel := 0
 var ui_capture := false      ## a menu (buy menu) owns number keys and the mouse buttons
 var active := false          ## gameplay input on (mouse captured or free-look mode)
+var test_hold: Dictionary = {}   ## tests: command fields forced on every tick
 
 
 func _ready() -> void:
@@ -116,6 +118,8 @@ func build_cmd() -> Dictionary:
 	c.last = pressed("last")
 	c.cycle = 1 if wheel > 0 else (-1 if wheel < 0 else 0)
 	wheel = 0
+	for k: String in test_hold:
+		c[k] = test_hold[k]
 	return c
 
 

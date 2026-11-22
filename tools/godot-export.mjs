@@ -184,7 +184,7 @@ function exportModels() {
     const camo = new Set(m.bodyMeshes || []);
     const rest = {}; for (const [k, r] of Object.entries(m.rest)) rest[k] = { p: r.p.toArray(), r: [r.r.x, r.r.y, r.r.z] };
     vm[m.id] = { id: m.id, base: m.base, rest, flashScale: m.flashScale || 1, attExt: m.attExt || {}, ironY: m.ironY || 0, adsPose: m.adsPose || null,
-      hidden: (m.hidden || []).map((o) => o.name), tris: m.tris, nodes: exportTree(m.root, names, { camo }) };
+      hidden: (m.hidden || []).slice(), tris: m.tris, nodes: exportTree(m.root, names, { camo }) };
   }
   const chars = {};
   for (const team of [0, 1]) {
@@ -201,7 +201,8 @@ function exportModels() {
 }
 
 function exportData() {
-  return { weapons: WEAPONS, clips: VM_CLIPS };
+  const strip = (o, fn) => { const r = {}; for (const [id, a] of Object.entries(o)) { const c = {}; for (const [k, v] of Object.entries(a)) if (k !== fn && typeof v !== 'function') c[k] = v; r[id] = c; } return r; };
+  return { weapons: WEAPONS, clips: VM_CLIPS, arsenal: { attachments: strip(ATTACHMENTS, 'apply'), camos: strip(CAMOS, 'paint'), slots: ATT_SLOTS, armory: ARMORY_GUNS, priceK: GUN_PRICE_K, tiers: CAMO_TIERS } };
 }
 `;
 
@@ -269,6 +270,7 @@ if (want.has('data')) {
   const r = await page.evaluate(() => window.X.exportData());
   put('data/weapons.json', json(r.weapons));
   put('data/vm_clips.json', json(r.clips));
+  put('data/arsenal.json', json(r.arsenal));
   log('data: weapons', Object.keys(r.weapons).length);
 }
 

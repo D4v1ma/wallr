@@ -33,13 +33,13 @@ class Door:
 	var center := Vector3.ZERO
 	var doorway := CollisionWorld.Brush.new()
 	var local_polys: Array = []
+	var decals: Object = null
 
 	func _init(level: Level, def: Dictionary) -> void:
 		L = level
 		brush = L.cw.brushes[int(def.brush)]
 		brush.door = self
 		hinge = Vector3(def.hinge[0], 0, def.hinge[1])
-		var raw: Dictionary = {}
 		closed = []
 		for i in brush.face_count:
 			closed.append([brush.P[i * 4], brush.P[i * 4 + 1], brush.P[i * 4 + 2], brush.P[i * 4 + 3]])
@@ -107,6 +107,17 @@ class Door:
 
 	func render(alpha: float) -> void:
 		obj.rotation.y = lerpf(prev_angle, angle, alpha)
+
+	## Bullet hole in door-local space (decals ride along with the door).
+	func add_impact(hit: Dictionary, decal_scale: float = 1.0) -> void:
+		if decals == null:
+			decals = FX.DecalSet.new(48, obj)
+		var b := Basis(Vector3.UP, -angle)
+		var lp: Vector3 = b * ((hit.point as Vector3) - hinge)
+		var ln: Vector3 = b * (hit.normal as Vector3)
+		var plane: int = hit.plane
+		var clip: Variant = local_polys[plane] if plane >= 0 and plane < closed.size() else null
+		FX.impact(hit.point, hit.normal, hit.surf, decals, clip, lp, ln, decal_scale)
 
 
 class Target:

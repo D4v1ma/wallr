@@ -7,6 +7,12 @@ const DT := 1.0 / 64.0
 
 var L: Level = null
 var player: Player = null
+var loadout: Loadout = null
+var main: Node = null
+var spec_target: Actor = null
+var last_hit: Dictionary = {}
+var freeze := false
+var freeze_fx := false
 var time := 0.0
 var ticks := 0
 var state := "boot"          ## boot | menu | loading | play | paused | results

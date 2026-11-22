@@ -1,0 +1,206 @@
+extends Node
+## The procedural models exported from the original builders (tools/godot-export.mjs): first-person
+## viewmodels with their attachments, the two characters (rigidly skinned to a 19-bone skeleton) and
+## the third-person weapons. Builds Godot meshes, nodes and materials from models.json + models.bin.
+
+const MODEL_SHADER := preload("res://shaders/model.gdshader")
+const MODEL_ALPHA_SHADER := preload("res://shaders/model_alpha.gdshader")
+const MODEL_ADD_SHADER := preload("res://shaders/model_add.gdshader")
+
+var data: Dictionary = {}
+var bin := PackedByteArray()
+var bones: Array = []          ## [name, parent, x, y, z] (absolute bind positions)
+var bone_index: Dictionary = {}
+var holds: Dictionary = {}
+var hitboxes: Array = []
+var mounts: Dictionary = {}
+var _char_mesh: Dictionary = {}
+var _weapon_mesh: Dictionary = {}
+
+
+func _ready() -> void:
+	data = Assets.read_json("res://assets/models/models.json")
+	bin = FileAccess.get_file_as_bytes("res://assets/models/models.bin")
+	bones = data.bones
+	for i in bones.size():
+		bone_index[String(bones[i][0])] = i
+	holds = data.holds
+	hitboxes = data.hitboxes
+	mounts = data.mounts
+
+
+func _f32(span: Variant) -> PackedByteArray:
+	return Assets.blob(bin, span)
+
+
+## ShaderMaterial for one of the viewmodel materials (metal, poly, glove, flash, ...).
+func vm_material(name: String) -> ShaderMaterial:
+	var mi: Dictionary = data.mats.get(name, {})
+	var m := ShaderMaterial.new()
+	if mi.get("additive", false):
+		m.shader = MODEL_ADD_SHADER
+		m.set_shader_parameter("map", Assets.tex(String(mi.map)) if mi.map != null else null)
+		var c: Array = mi.color
+		m.set_shader_parameter("color", Vector3(c[0], c[1], c[2]))
+		m.render_priority = 2
+		return m
+	m.shader = MODEL_ALPHA_SHADER if mi.get("transparent", false) else MODEL_SHADER
+	var c2: Array = mi.get("color", [1, 1, 1])
+	m.set_shader_parameter("color", Vector3(c2[0], c2[1], c2[2]))
+	var tex: Variant = mi.get("map")
+	m.set_shader_parameter("has_map", tex != null)
+	if tex != null:
+		m.set_shader_parameter("map", Assets.tex(String(tex)))
+	m.set_shader_parameter("unlit", mi.get("type", "") == "basic")
+	m.set_shader_parameter("shininess", float(mi.get("shininess", 0)) if mi.get("type", "") == "phong" else 0.0)
+	var sp: Array = mi.get("specular", [0, 0, 0])
+	m.set_shader_parameter("specular", Vector3(sp[0], sp[1], sp[2]))
+	m.set_shader_parameter("opacity", float(mi.get("opacity", 1.0)))
+	m.set_shader_parameter("use_fog", false)
+	m.set_meta("base_map", tex)
+	m.set_meta("base_shininess", float(mi.get("shininess", 0)))
+	m.set_meta("base_specular", Vector3(sp[0], sp[1], sp[2]))
+	return m
+
+
+func _mesh_from(md: Dictionary, mat: Material) -> ArrayMesh:
+	var a := []
+	a.resize(Mesh.ARRAY_MAX)
+	a[Mesh.ARRAY_VERTEX] = _f32(md.pos).to_vector3_array()
+	a[Mesh.ARRAY_NORMAL] = _f32(md.nrm).to_vector3_array()
+	if md.get("uv") != null:
+		a[Mesh.ARRAY_TEX_UV] = _f32(md.uv).to_vector2_array()
+	if md.get("uvCamo") != null:
+		a[Mesh.ARRAY_TEX_UV2] = _f32(md.uvCamo).to_vector2_array()
+	if md.get("color") != null:
+		a[Mesh.ARRAY_COLOR] = _colors(_f32(md.color).to_float32_array())
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+	mesh.surface_set_material(0, mat)
+	return mesh
+
+
+static func _colors(f: PackedFloat32Array) -> PackedColorArray:
+	var out := PackedColorArray()
+	out.resize(f.size() / 3)
+	for i in out.size():
+		out[i] = Color(f[i * 3], f[i * 3 + 1], f[i * 3 + 2])
+	return out
+
+
+## A viewmodel: {id, root, parts, rest, anchors, flash, att, att_ext, base, ads_pose, iron_y,
+## flash_scale, body (meshes that take camo), mats (this gun's own metal/poly/tan/wood)}.
+func build_vm(id: String, shared: Dictionary) -> Dictionary:
+	var d: Dictionary = data.vm[id]
+	var gun: bool = d.get("adsPose") != null
+	var own: Dictionary = {}
+	if gun:
+		for k in ["metal", "poly", "tan", "wood"]:
+			own[k] = vm_material(k)
+	var m := {"id": id, "parts": {}, "rest": {}, "anchors": {}, "flash": null, "att": {}, "att_ext": d.get("attExt", {}),
+		"base": d.base, "ads_pose": d.get("adsPose"), "iron_y": float(d.get("ironY", 0)), "flash_scale": float(d.get("flashScale", 1)),
+		"flash_base_scale": float(d.get("flashScale", 1)), "body": [], "mats": own, "hidden": d.get("hidden", []), "kit_sig": ""}
+	var nodes: Array = []
+	for nd: Dictionary in d.nodes:
+		var n: Node3D
+		if nd.has("mesh"):
+			var md: Dictionary = nd.mesh
+			var mname := String(md.mat)
+			var mat: Material = own[mname] if own.has(mname) else shared.get(mname)
+			if mat == null:
+				mat = vm_material(mname)
+				shared[mname] = mat
+			var mi := MeshInstance3D.new()
+			mi.mesh = _mesh_from(md, mat)
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			if own.has(mname) and md.get("uvCamo") != null:
+				(m.body as Array).append(mi)
+			n = mi
+		else:
+			n = Node3D.new()
+		n.name = String(nd.name) if String(nd.name) != "" else "n%d" % nodes.size()
+		n.rotation_order = EULER_ORDER_XYZ
+		n.position = U.v3(nd.p)
+		n.quaternion = Quaternion(nd.q[0], nd.q[1], nd.q[2], nd.q[3])
+		n.scale = U.v3(nd.s)
+		n.visible = nd.visible
+		var parent := int(nd.parent)
+		if parent >= 0:
+			(nodes[parent] as Node3D).add_child(n)
+		nodes.append(n)
+		var tag := String(nd.get("tag", ""))
+		if tag.begins_with("part:"):
+			var pn := tag.substr(5)
+			var rd: Dictionary = d.rest[pn]
+			m.parts[pn] = n
+			m.rest[pn] = {"p": U.v3(rd.p), "r": U.v3(rd.r)}
+		elif tag.begins_with("anchor:"):
+			m.anchors[tag.substr(7)] = n
+		elif tag == "flash":
+			m.flash = n
+		elif tag.begins_with("att:"):
+			m.att[tag.substr(4)] = n
+	m.root = nodes[0]
+	m.muzzle_base = (m.anchors.muzzle as Node3D).position.z if m.anchors.has("muzzle") else 0.0
+	m.flash_base = (m.flash as Node3D).position.z if m.flash else 0.0
+	return m
+
+
+## Character body for a team, skinned to the CH_BONES skeleton (one bone per vertex).
+func char_mesh(team: int) -> ArrayMesh:
+	if _char_mesh.has(team):
+		return _char_mesh[team]
+	var c: Dictionary = data.chars[str(team)]
+	var a := []
+	a.resize(Mesh.ARRAY_MAX)
+	a[Mesh.ARRAY_VERTEX] = _f32(c.pos).to_vector3_array()
+	a[Mesh.ARRAY_NORMAL] = _f32(c.nrm).to_vector3_array()
+	a[Mesh.ARRAY_TEX_UV] = _f32(c.uv).to_vector2_array()
+	var bone := _f32(c.bone)
+	var n := bone.size()
+	var bi := PackedInt32Array()
+	bi.resize(n * 4)
+	var bw := PackedFloat32Array()
+	bw.resize(n * 4)
+	for i in n:
+		bi[i * 4] = bone[i]
+		bw[i * 4] = 1.0
+	a[Mesh.ARRAY_BONES] = bi
+	a[Mesh.ARRAY_WEIGHTS] = bw
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+	_char_mesh[team] = mesh
+	return mesh
+
+
+## Third-person weapon mesh (vertex-coloured) and its muzzle point in gun space.
+func weapon_mesh(id: String) -> Array:
+	if _weapon_mesh.has(id):
+		return _weapon_mesh[id]
+	var w: Dictionary = data.weapons.get(id, data.weapons.smoke)
+	var a := []
+	a.resize(Mesh.ARRAY_MAX)
+	a[Mesh.ARRAY_VERTEX] = _f32(w.pos).to_vector3_array()
+	a[Mesh.ARRAY_NORMAL] = _f32(w.nrm).to_vector3_array()
+	a[Mesh.ARRAY_TEX_UV] = _f32(w.uv).to_vector2_array()
+	a[Mesh.ARRAY_COLOR] = _colors(_f32(w.color).to_float32_array())
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+	var out := [mesh, U.v3(w.muzzle)]
+	_weapon_mesh[id] = out
+	return out
+
+
+## Lit material for world objects (characters, dropped guns, grenades): texture x probe light.
+func world_material(tex_name: String, vcolor: bool = false) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = MODEL_SHADER
+	var t := Assets.tex(tex_name) if tex_name != "" else null
+	m.set_shader_parameter("has_map", t != null)
+	m.set_shader_parameter("map", t)
+	m.set_shader_parameter("use_vcolor", vcolor)
+	m.set_shader_parameter("amb", Vector3(0.85, 0.85, 0.85))
+	m.set_shader_parameter("sun_col", Vector3(0.3, 0.3, 0.3))
+	if Game.L:
+		m.set_shader_parameter("sun_dir", U.v3(Game.L.env.sunDir))
+	return m
