@@ -6,6 +6,7 @@ const HALF := Vector3(4, 1.5, 4)
 
 var list: Array = []
 var tr := Trace.new()
+var _uid := 1
 
 
 func init() -> void:
@@ -21,7 +22,8 @@ func clear() -> void:
 
 func spawn(w: Weapon, pos: Vector3, vel: Vector3, yaw: float, owner: Actor) -> Dictionary:
 	var it := {"w": w, "id": w.id, "p": pos, "v": vel, "yaw": yaw, "roll": 0.0, "spin": Vector2((randf() - 0.5) * 10.0, (randf() - 0.5) * 6.0),
-		"rest": false, "age": 0.0, "owner": owner, "node": null, "mat": null}
+		"rest": false, "age": 0.0, "owner": owner, "node": null, "mat": null, "uid": _uid}
+	_uid = _uid % 60000 + 1
 	list.append(it)
 	if Game.L and Game.L.root:
 		var mi := MeshInstance3D.new()
@@ -92,6 +94,8 @@ func pick(a: Actor, it: Dictionary) -> void:
 	if a.is_me:
 		Snd.pickup()
 		HUD.note("Picked up %s" % w.def.name)
+	elif a.peer > 0 and Net.is_host():
+		Net.server.ev(["pickup", String(w.def.name)], a.peer)
 	if w is Charge:
 		Bomb.on_pickup(a)
 
@@ -160,6 +164,7 @@ func tick(dt: float, max_age: float = 0.0) -> void:
 			it.spin = Vector2(it.spin.x * 0.4, it.spin.y * 0.6)
 			if -vn > 70.0:
 				Snd.item_drop(it.p, (it.w as Weapon).kind)
+				Net.snd("item_drop", [it.p, (it.w as Weapon).kind])
 			if n.y > 0.7 and v.length() < 45.0:
 				it.rest = true
 				v = Vector3.ZERO
@@ -177,6 +182,30 @@ func tick(dt: float, max_age: float = 0.0) -> void:
 		for it: Dictionary in list.duplicate():
 			if float(it.age) > max_age and not (it.w is Charge):
 				remove(it)
+
+
+## A client's copy from a snapshot: [uid, weapon id, position, yaw, roll, resting].
+func client_sync(entries: Array) -> void:
+	var by := {}
+	for it: Dictionary in list:
+		by[int(it.get("uid", 0))] = it
+	var seen := {}
+	for e: Array in entries:
+		var uid := int(e[0])
+		if String(e[1]) == "":
+			continue
+		seen[uid] = true
+		var it: Dictionary = by.get(uid, {})
+		if it.is_empty():
+			it = spawn(Weapon.make(String(e[1])), e[2], Vector3.ZERO, float(e[3]), null)
+			it.uid = uid
+		it.p = e[2]
+		it.yaw = float(e[3])
+		it.roll = float(e[4])
+		it.rest = bool(e[5])
+	for it: Dictionary in list.duplicate():
+		if not seen.has(int(it.get("uid", 0))):
+			remove(it)
 
 
 func render() -> void:

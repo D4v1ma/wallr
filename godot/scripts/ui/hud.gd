@@ -45,6 +45,7 @@ var _spot_t := 0.0
 var buy_open := false
 var buy_msg := ""
 var buy_msg_t := 0.0
+var chat_lines: Array = []       ## network games: {name, team, text, team_only, age}
 var scope_on := false
 var main_cam: Camera3D = null
 var active := false
@@ -181,6 +182,9 @@ func toggle_buy(force: Variant = null) -> void:
 func buy_press(n: int) -> void:
 	for e: Dictionary in Match.SHOP:
 		if int(e.key) == n:
+			if Net.is_client():
+				Net.send_msg(1, Net.M_BUY, {"id": e.id})     # the host answers with what happened
+				return
 			var r := Match.buy(Actors.me, e.id)
 			buy_msg = r.msg
 			buy_msg_t = 2.5
@@ -192,6 +196,9 @@ func buy_press(n: int) -> void:
 
 func update(dt: float, cam: Camera3D) -> void:
 	main_cam = cam
+	for c: Dictionary in chat_lines:
+		c.age += dt
+	chat_lines = chat_lines.filter(func(c: Dictionary) -> bool: return float(c.age) < 12.0)
 	if not active:
 		return
 	note_t = maxf(0.0, note_t - dt)
@@ -362,6 +369,7 @@ func _draw_hud() -> void:
 		if Ents.plate_count() > 0:
 			_str(Vector2(W / 2, 52), rng, 11, DIM, null, HORIZONTAL_ALIGNMENT_CENTER)
 	_draw_feed(W)
+	_draw_chat(H)
 	# health / armor / money
 	if me.alive:
 		var low := me.health <= 25
@@ -469,6 +477,25 @@ func _draw_alive(cx: float, y: float) -> void:
 			var x: float = (cx - 18.0 - i * 10.0) if t == 0 else (cx + 12.0 + i * 10.0)
 			var col: Color = T_COL[t] if a.alive else Color(0.3, 0.3, 0.3, 0.6)
 			canvas.draw_rect(Rect2(x, y, 6, 10), col)
+
+
+## A chat line from a network game (Y to type comes later; the host's notes come here too).
+func chat_line(n: String, team: int, text: String, team_only: bool) -> void:
+	chat_lines.append({"name": n, "team": team, "text": text, "team_only": team_only, "age": 0.0})
+	if chat_lines.size() > 6:
+		chat_lines.pop_front()
+
+
+func _draw_chat(H: float) -> void:
+	var y := H - 190.0 - 22.0 * (chat_lines.size() - 1)
+	for c: Dictionary in chat_lines:
+		var alpha := clampf((12.0 - float(c.age)) / 2.0, 0.0, 1.0)
+		var col: Color = T_COL[clampi(int(c.team), 0, 1)]
+		col.a = alpha
+		var x := GAP
+		x += _str(Vector2(x, y), ("(team) " if c.team_only else "") + String(c.name) + ": ", 14, col)
+		_str(Vector2(x, y), String(c.text), 14, Color(HUD_COL, alpha))
+		y += 22.0
 
 
 func _draw_feed(W: float) -> void:
@@ -757,11 +784,11 @@ func _draw_board(W: float, H: float, me: Actor) -> void:
 		var score: int = M.side_score(t) if M.active else Actors.score[t]
 		_str(Vector2(cx, y + 26), "%s · %d" % [Actors.TEAMS[t].name.to_upper(), score], 14, T_COL[t])
 		var hy := y + 48.0
-		for i in 5:
-			var hdr: String = ["NAME", "K", "D", "HP", "MONEY"][i]
-			if i == 4 and not M.active:
+		for i in 6:
+			var hdr: String = ["NAME", "K", "D", "HP", "MONEY", "PING"][i]
+			if (i == 4 and not M.active) or (i == 5 and not Net.active()):
 				continue
-			_str(Vector2(cx + [0.0, 130.0, 160.0, 190.0, 228.0][i], hy), hdr, 10, DIM)
+			_str(Vector2(cx + [0.0, 130.0, 160.0, 190.0, 228.0, 282.0][i], hy), hdr, 10, DIM)
 		var list := Actors.list.filter(func(a: Actor) -> bool: return a.team == t)
 		list.sort_custom(func(a: Actor, b: Actor) -> bool: return a.kills > b.kills)
 		var ry := hy + 22.0
@@ -776,6 +803,9 @@ func _draw_board(W: float, H: float, me: Actor) -> void:
 			_str(Vector2(cx + 190, ry), str(a.health) if a.alive else "—", 13, col)
 			if M.active:
 				_str(Vector2(cx + 228, ry), "$" + money(a.money) if a.team == me.team else "—", 13, col)
+			if Net.active():
+				var ping := "BOT" if a.is_bot else (str(int(Net.client.pings.get(a.id, 0))) if Net.is_client() and Net.client else (str(Net.ping_of(a.peer)) if a.peer > 0 else "0"))
+				_str(Vector2(cx + 282, ry), ping, 12, DIM)
 			ry += 26.0
 	if M.active and not M.history.is_empty():
 		var hx := x + 16.0

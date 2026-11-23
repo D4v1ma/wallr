@@ -39,6 +39,8 @@ var last_hit_wb := false
 var kill_info: Dictionary = {}
 var brain: BotBrain = null
 var prev_pos := Vector3.ZERO
+var peer := 0                  ## network: the client that plays this actor (0: the host itself or a bot)
+var net_vt := 0.0              ## network: the host tick this player's client was showing (lag compensation)
 
 
 func _init(t: int, n: String, bot: bool, me: bool) -> void:
@@ -96,6 +98,8 @@ func damage(amount: float, group: String, attacker: Actor, def: Dictionary, from
 		brain.on_hurt(attacker, from)
 	if is_me:
 		HUD.hurt(dealt)
+	elif peer > 0 and Net.is_host():
+		Net.server.ev(["hurt", dealt, from], peer)
 	if health <= 0:
 		health = 0
 		die(attacker, def, group == "head")
@@ -124,6 +128,8 @@ func die(attacker: Actor, def: Dictionary, headshot: bool) -> void:
 		Actors.feed.pop_front()
 	model.death_dir = 1.0 if headshot else (1.0 if randf() < 0.5 else -1.0)
 	Snd.death(player.pos)
+	if Net.is_host():
+		Net.server.ev(["kill", id, attacker.id if attacker else 0, String(def.get("name", "")), String(def.get("id", "")), headshot, last_hit_wb, model.death_dir])
 	Match.on_death(self, attacker, def)
 
 

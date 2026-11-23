@@ -24,6 +24,7 @@ var reload_phase := ""
 var phase_t := 0.0
 var reload_abort := false
 var end_dur := 0.0
+var shot_seed := 0                ## this tick's per-shot seed (shooter id x command number)
 
 
 func _init(d: Dictionary) -> void:
@@ -139,6 +140,7 @@ func shell_reload_tick(cmd: Dictionary, dt: float) -> void:
 
 func tick(cmd: Dictionary, pl: Player, time: float, dt: float) -> void:
 	base_tick(dt)
+	shot_seed = Wire.shot_seed(int(cmd.get("sid", 0)), int(cmd.get("seq", 0))) if cmd.has("seq") else 0
 	var rc: Dictionary = def.recoil
 	var interval := 60.0 / float(def.rpm)
 	fire_inacc *= exp(-dt * 2.3 / (float(def.recoverCrouch) if pl.ducked else float(def.recoverStand)))
@@ -202,12 +204,14 @@ func fire(pl: Player, time: float, interval: float) -> void:
 	var idx := spray_idx
 	var P := Weapon.pattern_at(rc.pattern, idx)
 	var js := float(rc.jitter) * minf(1.0, 0.3 + idx * 0.1)
-	jit = Vector2((rnd.next() - 0.5) * 2.0 * js, (rnd.next() - 0.5) * 2.8 * js)
+	# seeded per shot, so a client predicting its own shot gets the host's jitter and spread
+	var r := U.Rng.new(shot_seed ^ 0x2545F491) if shot_seed != 0 else rnd
+	jit = Vector2((r.next() - 0.5) * 2.0 * js, (r.next() - 0.5) * 2.8 * js)
 	var off := P + jit
 	recoil = off
 	var every := int(def.tracerEvery)
 	var tracer := every > 0 and shot_count % every == 0
-	events.append({"type": "shot", "inacc": inaccuracy(pl), "off": off, "idx": int(floor(idx)), "tracer": tracer, "pellets": int(def.get("pellets", 1))})
+	events.append({"type": "shot", "inacc": inaccuracy(pl), "off": off, "idx": int(floor(idx)), "tracer": tracer, "pellets": int(def.get("pellets", 1)), "seed": shot_seed})
 	spray_idx = idx + 1.0
 	shot_count += 1
 	fire_inacc = minf(fire_inacc + float(def.inFire), float(def.inFireMax))

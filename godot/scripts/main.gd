@@ -4,7 +4,9 @@ extends Node3D
 ## viewmodel, effects, HUD.
 ## Command line (after --): --map=depot --mode=defuse|skirmish --bots=N --diff=normal --team=0|1
 ##   --menu=0 to skip the menus; --shot=path.png --frames=N to save a screenshot and quit;
-##   --pos=x,y,z --yaw=deg --pitch=deg to place the camera (noclip) for screenshots.
+##   --pos=x,y,z --yaw=deg --pitch=deg to place the camera (noclip) for screenshots;
+##   --host[=port] (with --size=N players per side, --fill=0|1) to host that match on the network;
+##   --join=address[:port] to join a network game straight away.
 
 const TICK := 1.0 / 64.0
 
@@ -27,7 +29,11 @@ func _ready() -> void:
 	Settings.changed.connect(_on_setting)
 	if Game.args.has("shot"):
 		_shot_frames = int(Game.args.get("frames", "12"))
-	if Game.args.get("menu", "1") == "0" or Game.args.has("shot"):
+	if Game.args.has("join"):
+		Accounts.init()
+		Menus.show_screen("loading", false)
+		Net.join(String(Game.args.join))
+	elif Game.args.get("menu", "1") == "0" or Game.args.has("shot"):
 		quick_start()
 	else:
 		Menus.boot()
@@ -48,6 +54,13 @@ func _on_setting(k: String, _v: Variant) -> void:
 func quick_start() -> void:
 	var cfg := {"map": Game.args.get("map", "range"), "mode": Game.args.get("mode", "skirmish"), "ranked": false, "diff": Game.args.get("diff", "normal"),
 		"team": Game.args.get("team", "1"), "allies": int(Game.args.get("allies", "0")), "enemies": int(Game.args.get("bots", "0")), "len": "standard", "ff": false}
+	if Game.args.has("host"):
+		cfg.mp = true
+		cfg.size = clampi(int(Game.args.get("size", "8")), 1, 8)
+		cfg.fill = String(Game.args.get("fill", "1")) != "0"
+		if not Game.args.has("bots") and cfg.fill:
+			cfg.enemies = cfg.size
+			cfg.allies = cfg.size - 1
 	load_map(String(cfg.map))
 	Session.begin(cfg)
 	if Game.args.has("pos"):
@@ -58,8 +71,11 @@ func quick_start() -> void:
 		Actors.me.player.yaw = deg_to_rad(float(Game.args.yaw))
 	if Game.args.has("pitch"):
 		Actors.me.player.pitch = deg_to_rad(float(Game.args.pitch))
-	if Game.args.has("shot"):
+	if Game.args.has("shot") and not Game.args.has("host"):
 		Game.bots_frozen = true
+	if Game.args.has("host"):
+		var hp := String(Game.args.host)
+		Net.host(cfg, int(hp) if hp.is_valid_int() and int(hp) > 1024 else Net.PORT, String(Game.args.get("name", "")))
 	play()
 
 
@@ -119,22 +135,36 @@ func _unhandled_input(e: InputEvent) -> void:
 # --- simulation ------------------------------------------------------------------------------------
 
 func _physics_process(_delta: float) -> void:
+	if Net.is_client():
+		if Net.client and Game.L and Game.state != "loading":
+			Net.client.tick(TICK)
+		return
 	var paused := Game.state != "play" or Game.freeze or Game.L == null
+	if Net.is_host() and Game.L != null and Game.state != "loading" and not Game.freeze:
+		paused = false      # the game goes on for everyone else while the host is in a menu
 	if paused:
 		return
 	sim_tick(TICK)
+	if Net.is_host() and Net.server:
+		Net.server.after_tick()
 
 
 func sim_tick(dt: float) -> void:
 	Game.time += dt
 	Game.ticks += 1
 	var me := Actors.me
-	for a: Actor in Actors.list:
+	var host := Net.is_host()
+	for a: Actor in Actors.list.duplicate():
 		var cmd: Dictionary
-		if a.is_me and a.brain == null:
+		if a.peer > 0:
+			cmd = Net.server.next_cmd(a)        # a remote player: its client's command (and view)
+		elif a.is_me and a.brain == null:
 			cmd = Controls.build_cmd() if Game.state == "play" else Controls.IDLE.duplicate()
+			cmd.seq = Game.ticks
 		else:
 			cmd = Controls.IDLE.duplicate() if Game.bots_frozen else a.brain.think(dt)
+			cmd.seq = Game.ticks
+		cmd.sid = a.id
 		if not a.alive:
 			continue
 		# freeze time: look and buy only; defusing pins you in place
@@ -143,6 +173,8 @@ func sim_tick(dt: float) -> void:
 		Bomb.control(a, cmd, dt)
 		if cmd.get("wallbang", false) and a.is_me:
 			HUD.wallbang_note(Wallbang.toggle(a))
+		elif cmd.get("wallbang", false) and a.peer > 0:
+			Net.server.ev(["wb", Wallbang.toggle(a)], a.peer)
 		if cmd.use and not Bomb.defusing(a) and not Items.use(a):
 			var d := Ents.door_in_reach(a.eye(), a.view_dir())
 			if d:
@@ -159,6 +191,8 @@ func sim_tick(dt: float) -> void:
 					else:
 						Snd.footstep(U.surf_name(ev.surf), 1.0, a.player.pos)
 					Bots.noise(a.player.pos, a, 650.0)
+					if host:
+						Net.server.ev(["step", a.id, int(ev.surf), 1.0], 0, a.peer, false)
 				"jump":
 					if a.is_me:
 						Snd.jump()
@@ -167,6 +201,8 @@ func sim_tick(dt: float) -> void:
 						Snd.land(U.surf_name(ev.surf), ev.speed)
 					else:
 						Snd.footstep(U.surf_name(ev.surf), 1.3, a.player.pos)
+					if host:
+						Net.server.ev(["step", a.id, int(ev.surf), 1.3], 0, a.peer, false)
 		a.player.events.clear()
 		for w: Weapon in a.loadout.list.duplicate():
 			for e: Dictionary in w.events:
@@ -179,6 +215,12 @@ func sim_tick(dt: float) -> void:
 					eject_shell(a, w)
 					if a.is_me:
 						Snd.sfx(e.part)
+					if host:
+						Net.server.ev(["eject", a.id, w.id], 0, a.peer, false)
+				elif t == "knifeHit":
+					knife_hit(a, e)
+				elif t == "throwNade":
+					Grenades.spawn(a.player, e.mode, a.eye(), a.view_dir())
 				elif not a.is_me:
 					continue
 				elif t == "dry":
@@ -189,10 +231,6 @@ func sim_tick(dt: float) -> void:
 					Snd.sfx("zoom")
 				elif t == "swing":
 					Snd.knife_swish(e.heavy)
-				elif t == "knifeHit":
-					knife_hit(a, e)
-				elif t == "throwNade":
-					Grenades.spawn(a.player, e.mode, a.eye(), a.view_dir())
 			w.events.clear()
 	if not me.alive:
 		for w: Weapon in me.loadout.list:
@@ -243,27 +281,40 @@ func eject_shell(actor: Actor, w: Weapon) -> void:
 
 
 func fire_shot(actor: Actor, w: Weapon, e: Dictionary) -> void:
+	var back: Array = Net.server.rewind_for(actor) if Net.is_host() else []
 	var shot := Combat.shot(actor, w, e)
+	if Net.is_host():
+		Net.server.restore(back)
+		Net.server.ev_shot(actor, w, e, shot)
+	shot_fx(actor, w, e, shot, "all")
+
+
+## Draw and sound a shot. parts: "all"; "world" (your own shot as a client predicts it: no blood,
+## the host confirms hits); "bodies" (the host's copy of your own shot: only the blood).
+func shot_fx(actor: Actor, w: Weapon, e: Dictionary, shot: Dictionary, parts: String = "all") -> void:
 	var eye: Vector3 = shot.eye
 	var dir: Vector3 = shot.dir
 	var def := w.def
 	var suppressed: bool = def.get("suppressed", false)
-	var mz: Vector3
-	if actor.is_me:
-		Ents.stats.shots += 1
-		Snd.shot(String(def.sound), null, suppressed)
-		Viewmodel.on_shot(w)
-		var a: Variant = Viewmodel.anchor_world("muzzle", 22.0, camera)
-		mz = a if a != null else eye + dir * 22.0
-	else:
-		actor.model.fire()
-		mz = actor.model.muzzle_world()
-		Snd.shot(String(def.sound), mz, suppressed)
-		if not suppressed:
-			FX.world_flash(mz, dir, float(def.flash))
-	if not def.has("ejectOn"):
-		eject_shell(actor, w)
-	FX.add_light(mz, Color(1.0, 0.62, 0.3), 240.0 * float(def.flash) + 40.0, 0.06)
+	var gun_side := parts != "bodies"
+	var body_side := parts != "world"
+	var mz := eye + dir * 22.0
+	if gun_side:
+		if actor.is_me:
+			Ents.stats.shots += 1
+			Snd.shot(String(def.sound), null, suppressed)
+			Viewmodel.on_shot(w)
+			var a: Variant = Viewmodel.anchor_world("muzzle", 22.0, camera)
+			mz = a if a != null else mz
+		else:
+			actor.model.fire()
+			mz = actor.model.muzzle_world()
+			Snd.shot(String(def.sound), mz, suppressed)
+			if not suppressed:
+				FX.world_flash(mz, dir, float(def.flash))
+		if not def.has("ejectOn"):
+			eject_shell(actor, w)
+		FX.add_light(mz, Color(1.0, 0.62, 0.3), 240.0 * float(def.flash) + 40.0, 0.06)
 	var what := "nothing"
 	var damage := 0.0
 	var sounds := 0
@@ -273,23 +324,24 @@ func fire_shot(actor: Actor, w: Weapon, e: Dictionary) -> void:
 	var results: Array = shot.results
 	for r: Dictionary in results:
 		var res: Dictionary = r.res
-		for imp: Dictionary in res.impacts:
-			world_impact(imp, 0.7 if results.size() > 1 else 1.0)
-			if not imp.exit and sounds < 3:
-				sounds += 1
-				Snd.impact(U.surf_name(imp.surf), imp.point)
-		if not (res.impacts as Array).is_empty() and what == "nothing":
-			var last: Dictionary = res.impacts[-1]
-			what = U.surf_name(last.surf)
-			damage = last.damage
-		if res.target != null:
-			var tg: Dictionary = res.target
-			FX.impact(tg.point, tg.normal, U.surf_id("metal"))
-			if (tg.target as Ents.Target).hit() and actor.is_me:
-				HUD.hitmarker()
-			what = "plate"
-			damage = tg.damage
-		if res.actor != null:
+		if gun_side:
+			for imp: Dictionary in res.impacts:
+				world_impact(imp, 0.7 if results.size() > 1 else 1.0)
+				if not imp.exit and sounds < 3:
+					sounds += 1
+					Snd.impact(U.surf_name(imp.surf), imp.point)
+			if not (res.impacts as Array).is_empty() and what == "nothing":
+				var last: Dictionary = res.impacts[-1]
+				what = U.surf_name(last.surf)
+				damage = last.damage
+			if res.target != null:
+				var tg: Dictionary = res.target
+				FX.impact(tg.point, tg.normal, U.surf_id("metal"))
+				if (tg.target as Ents.Target).hit() and actor.is_me:
+					HUD.hitmarker()
+				what = "plate"
+				damage = tg.damage
+		if res.actor != null and body_side:
 			var h: Dictionary = res.actor
 			var hs: bool = h.group == "head"
 			var victim: Actor = h.target
@@ -301,8 +353,10 @@ func fire_shot(actor: Actor, w: Weapon, e: Dictionary) -> void:
 			hits += 1
 			what = "%s (%s)%s" % [victim.name, h.group, " x%d" % hits if results.size() > 1 else ""]
 			damage = float(h.damage) * float(Actor.GROUP_MUL.get(h.group, 1.0))
-	if not bodies.is_empty() and actor.is_me:
+	if not bodies.is_empty() and actor.is_me and parts == "all":
 		HUD.hitmarker(head)
+	if not gun_side:
+		return
 	var r0: Dictionary = results[0].res
 	var end: Vector3 = r0.end if r0.end != null else eye + dir * float(def.range)
 	if shot.wallbang:
@@ -314,7 +368,7 @@ func fire_shot(actor: Actor, w: Weapon, e: Dictionary) -> void:
 		if actor.is_me:
 			var n: int = r0.pens
 			HUD.note("Wallbang · %d wall%s" % [n, "" if n == 1 else "s"])
-	elif e.tracer:
+	elif e.get("tracer", false):
 		FX.tracers.spawn(mz, end)
 	FX.muzzle_smoke(mz, dir, (w as Gun).heat if w is Gun else 0.0)
 	if actor.is_me:
@@ -322,14 +376,22 @@ func fire_shot(actor: Actor, w: Weapon, e: Dictionary) -> void:
 
 
 func knife_hit(actor: Actor, e: Dictionary) -> void:
+	var back: Array = Net.server.rewind_for(actor) if Net.is_host() else []
 	var r := Combat.knife(actor, e)
+	if Net.is_host():
+		Net.server.restore(back)
+		Net.server.ev_knife(actor, e, r)
+	knife_fx(actor, e, r)
+
+
+func knife_fx(actor: Actor, e: Dictionary, r: Dictionary) -> void:
 	var hit: Dictionary = r.hit
 	if hit.is_empty():
 		return
 	if hit.kind == "actor":
 		FX.blood(hit.point, actor.view_dir())
 		Snd.body_hit(hit.point, false)
-		if actor.is_me:
+		if actor.is_me and not Net.is_client():
 			HUD.hitmarker(false)
 	elif hit.kind == "target":
 		FX.impact(hit.point, hit.normal, U.surf_id("metal"))
@@ -340,7 +402,7 @@ func knife_hit(actor: Actor, e: Dictionary) -> void:
 	Snd.knife_hit(U.surf_name(hit.surf), hit.point, e.heavy)
 	if actor.is_me:
 		var what := String((hit.target as Actor).name) if hit.kind == "actor" else ("plate" if hit.kind == "target" else U.surf_name(hit.surf))
-		Game.last_hit = {"what": what, "damage": float(r.dealt) if int(r.dealt) > 0 else float(e.damage), "pens": 0, "dist": (hit.point as Vector3).distance_to(r.eye)}
+		Game.last_hit = {"what": what, "damage": float(r.dealt) if int(r.dealt) > 0 else float(e.get("damage", 0.0)), "pens": 0, "dist": (hit.point as Vector3).distance_to(r.eye)}
 
 
 func handle_hotkeys() -> void:
@@ -401,6 +463,8 @@ func _process(dt: float) -> void:
 	var vf: float = float(w.def.recoil.viewFrac) if w is Gun else 0.0
 	pl.update_view(dt)
 	var eye := pl.eye(alpha)
+	if Net.is_client() and Net.client:
+		eye += Net.client.corr
 	if in_menu:
 		MenuCam.update(dt, camera)
 	elif me.alive:
@@ -429,7 +493,8 @@ func _process(dt: float) -> void:
 	Viewmodel.update(dt, pl, w, look, eye, alpha, camera)
 	FX.update(0.0 if Game.freeze_fx else dt)
 	HUD.update(dt, camera)
-	_frames += 1
+	if not Net.is_client() or (Net.client and Net.client.have_snap):
+		_frames += 1          # a client counts from its first snapshot
 	if _shot_frames >= 0 and _frames >= _shot_frames:
 		var img := get_viewport().get_texture().get_image()
 		img.save_png(String(Game.args.shot))

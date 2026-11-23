@@ -210,7 +210,8 @@ func apply_match(cfg: Dictionary, st: Dictionary, outcome: String, match_id: Str
 	var elo0: float = v.elo
 	var placed0: int = v.placed
 	var xp := xp_for(cfg, st, outcome)
-	var elo: Variant = elo_for(cfg, st, outcome, float(v.elo), int(v.placed)) if cfg.mode == "defuse" and outcome != "none" else null
+	# network matches give XP and points; Elo stays a measure against bots for now
+	var elo: Variant = elo_for(cfg, st, outcome, float(v.elo), int(v.placed)) if cfg.mode == "defuse" and outcome != "none" and not cfg.get("mp", false) else null
 	v.xp = float(v.xp) + float(xp.total)
 	var lv1 := level()
 	var ups: Array = []

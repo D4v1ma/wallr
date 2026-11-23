@@ -37,9 +37,11 @@ func _ready() -> void:
 		push_error("run the tests as the main scene (res://tests/runner.tscn) so they can't touch real saves")
 		get_tree().quit(1)
 		return
-	for sub in ["accounts/", ""]:
-		for f in DirAccess.get_files_at(U.data_dir() + sub):
-			DirAccess.remove_absolute(U.data_dir() + sub + f)
+	# --keep-data: a second test process (the network client) shares the first one's folder
+	if not Game.args.has("keep-data"):
+		for sub in ["accounts/", ""]:
+			for f in DirAccess.get_files_at(U.data_dir() + sub):
+				DirAccess.remove_absolute(U.data_dir() + sub + f)
 	Settings.load_settings()
 	var names: PackedStringArray = String(Game.args.get("test", "move")).split(",")
 	await get_tree().physics_frame

@@ -10,26 +10,28 @@ static var rnd := U.Rng.new(9)
 
 
 ## View direction + spray offset (deg) + centre-weighted random spread (mrad).
-static func aim_dir(pl: Player, off: Vector2, inacc: float, spread: float) -> Vector3:
+static func aim_dir(pl: Player, off: Vector2, inacc: float, spread: float, rng: U.Rng = null) -> Vector3:
+	var R := rng if rng != null else rnd
 	var yaw := pl.yaw + deg_to_rad(off.y)
 	var pitch := clampf(pl.pitch + deg_to_rad(off.x), -1.55, 1.55)
 	var cp := cos(pitch); var sp := sin(pitch); var sy := sin(yaw); var cy := cos(yaw)
 	var f := Vector3(-sy * cp, sp, -cy * cp)
 	var r := Vector3(cy, 0, -sy)
 	var u := Vector3(sy * sp, cp, cy * sp)
-	var th := rnd.next() * TAU
-	var rr := (inacc * rnd.next() + spread * rnd.next()) * 0.001
+	var th := R.next() * TAU
+	var rr := (inacc * R.next() + spread * R.next()) * 0.001
 	return (f + r * (cos(th) * rr) + u * (sin(th) * rr)).normalized()
 
 
 ## Shotgun pellet i around a base direction: uniform over a disc of `spread` mrad.
-static func pellet(base: Vector3, i: int, spread: float) -> Vector3:
+static func pellet(base: Vector3, i: int, spread: float, rng: U.Rng = null) -> Vector3:
+	var R := rng if rng != null else rnd
 	var up := Vector3(0, 1, 0) if absf(base.y) < 0.99 else Vector3(1, 0, 0)
 	var r := base.cross(up)
 	r = r.normalized() if r.length() > 0.0 else Vector3(1, 0, 0)
 	var v := r.cross(base)
-	var th := rnd.next() * TAU
-	var rr := spread * 0.001 * sqrt(rnd.next()) * (0.25 if i == 0 else 1.0)
+	var th := R.next() * TAU
+	var rr := spread * 0.001 * sqrt(R.next()) * (0.25 if i == 0 else 1.0)
 	return (base + r * (cos(th) * rr) + v * (sin(th) * rr)).normalized()
 
 

@@ -106,6 +106,8 @@ func start_match() -> void:
 	if Actors.me:
 		Actors.me.squad = 0
 	hold = false
+	if Net.is_host():
+		Net.server.roster_dirty = true      # squads were dealt again
 	start_round()
 
 
@@ -149,13 +151,86 @@ func start_round() -> void:
 	phase = "freeze"
 	t = FREEZE
 	live_t = 0.0
+	_round_banner()
+	if Net.is_host():
+		Net.server.ev(["round", round, half])
+	Tactics.on_round_start()
+
+
+func _round_banner() -> void:
 	var sub := "Buy time · B to open the buy menu"
 	if round == 1:
 		sub = "First half" if half == 1 else "Second half"
 	elif round == int(len.half) + 1:
 		sub = "Second half · sides swapped"
 	banner = {"title": "Round %d" % round, "sub": sub, "t": 3.2, "kind": "round"}
-	Tactics.on_round_start()
+
+
+func _go_banner() -> void:
+	banner = {"title": "Go", "sub": "Plant the charge at A or B" if Actors.me.team == 0 else "Defend A and B", "t": 1.8, "kind": "go"}
+
+
+func _plant_banner(site_name: String) -> void:
+	banner = {"title": "Charge planted at %s" % site_name, "sub": "Get there and defuse it (hold E)" if Actors.me.team == 1 else "Guard it until it blows", "t": 3.0, "kind": "plant"}
+
+
+## over: "" (the match goes on), "win" (someone reached the target) or "draw".
+func _end_banner(side: int, reason: String, over: String, halftime: bool) -> void:
+	var mine: bool = Actors.me != null and Actors.me.team == side
+	banner = {"title": "%s win" % Actors.TEAMS[side].name, "sub": end_text(reason, side), "t": POST, "kind": "win" if mine else "lose", "side": side}
+	if over == "win":
+		var win := squad_on_side(side)
+		banner = {"title": "%s win the match" % Actors.TEAMS[side].name, "sub": "%d – %d" % [score[win], score[1 - win]], "t": OVER, "kind": "win" if mine else "lose", "side": side, "final": true}
+	elif over == "draw":
+		banner = {"title": "Draw", "sub": "%d – %d" % [score[0], score[1]], "t": OVER, "kind": "draw", "final": true}
+	elif halftime:
+		banner.sub += " · Halftime: sides swap"
+		banner.t = HALFTIME
+
+
+## A client follows the host's round from its events (the snapshots carry the clock and score).
+func client_event(e: Array) -> void:
+	match String(e[0]):
+		"round":
+			round = int(e[1])
+			half = int(e[2])
+			planted = false
+			result = {}
+			Grenades.clear()        # no smoke or guns carried over (the snapshots bring the new ones)
+			Items.clear()
+			phase = "freeze"
+			t = FREEZE
+			live_t = 0.0
+			if round == 1 and half == 1:
+				history = []
+				score = [0, 0]
+				Actors.feed.clear()
+				Session.client_new_match()
+			_round_banner()
+		"go":
+			phase = "live"
+			t = round_time()
+			live_t = 0.0
+			Snd.round_go()
+			_go_banner()
+		"end":
+			var side := int(e[1])
+			var over := String(e[3])
+			score = e[5]
+			history.append(e[6])
+			halftime_next = bool(e[4])
+			phase = "over" if over != "" else "post"
+			var mine: bool = Actors.me.team == side
+			result = {"side": side, "reason": String(e[2]), "mine": mine}
+			_end_banner(side, String(e[2]), over, bool(e[4]))
+			Snd.round_end(mine)
+			if over != "":
+				draw = over == "draw"
+				Session.match_over(("win" if mine else "loss") if over == "win" else "draw")
+		"plant":
+			planted = true
+			phase = "planted"
+			_plant_banner(String(e[3]))
 
 
 func frozen() -> bool:
@@ -256,7 +331,9 @@ func tick(dt: float) -> void:
 				t = round_time()
 				live_t = 0.0
 				Snd.round_go()
-				banner = {"title": "Go", "sub": "Plant the charge at A or B" if Actors.me.team == 0 else "Defend A and B", "t": 1.8, "kind": "go"}
+				_go_banner()
+				if Net.is_host():
+					Net.server.ev(["go"])
 		"live":
 			live_t += dt
 			check_win()
@@ -303,7 +380,7 @@ func on_plant(actor: Actor, s: Variant) -> void:
 	phase = "planted"
 	actor.plants += 1
 	actor.money = mini(MAX_MONEY, actor.money + PLANT_REWARD)
-	banner = {"title": "Charge planted at %s" % s.name, "sub": "Get there and defuse it (hold E)" if Actors.me.team == 1 else "Guard it until it blows", "t": 3.0, "kind": "plant"}
+	_plant_banner(String(s.name))
 	Tactics.on_plant(s)
 
 
@@ -363,27 +440,28 @@ func end_round(side: int, reason: String) -> void:
 	streak[lose] += 1
 	var mine: bool = Actors.me != null and Actors.me.team == side
 	result = {"side": side, "reason": reason, "mine": mine}
-	banner = {"title": "%s win" % Actors.TEAMS[side].name, "sub": end_text(reason, side), "t": POST, "kind": "win" if mine else "lose", "side": side}
-	Snd.round_end(mine)
 	phase = "post"
 	t = POST
+	var over := ""
 	if score[win] >= int(len.win):
 		phase = "over"
 		t = OVER
 		draw = false
-		Session.match_over("win" if mine else "loss")
-		banner = {"title": "%s win the match" % Actors.TEAMS[side].name, "sub": "%d – %d" % [score[win], score[lose]], "t": OVER, "kind": "win" if mine else "lose", "side": side, "final": true}
+		over = "win"
 	elif round >= int(len.max):
 		phase = "over"
 		t = OVER
 		draw = true
-		Session.match_over("draw")
-		banner = {"title": "Draw", "sub": "%d – %d" % [score[0], score[1]], "t": OVER, "kind": "draw", "final": true}
+		over = "draw"
 	elif round == int(len.half):
 		halftime_next = true
 		t = HALFTIME
-		banner.sub += " · Halftime: sides swap"
-		banner.t = HALFTIME
+	_end_banner(side, reason, over, halftime_next)
+	Snd.round_end(mine)
+	if Net.is_host():
+		Net.server.ev(["end", side, reason, over, halftime_next, score.duplicate(), history[-1]])
+	if over != "":
+		Session.match_over(("win" if mine else "loss") if over == "win" else "draw")
 	Session.checkpoint()
 
 
@@ -398,4 +476,6 @@ func next_round() -> void:
 			a.money = START_MONEY
 			a.alive = false
 			a.kit = false
+		if Net.is_host():
+			Net.server.roster_dirty = true
 	start_round()

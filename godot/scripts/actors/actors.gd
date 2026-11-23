@@ -69,6 +69,88 @@ func add_bot(team: int) -> Actor:
 	return a
 
 
+## A remote player (network host): a person on `team` whose guns carry their own attachments.
+func add_remote(peer: int, n: String, team: int, kits: Dictionary) -> Actor:
+	var a := Actor.new(team, n, false, false)
+	a.peer = peer
+	a.loadout = Loadout.new(["rifle", "pistol", "knife", "smoke"], func(id: String) -> Dictionary: return Arsenal.def_for(id, kits.get(id, {}) if kits.get(id) is Dictionary else {}))
+	list.append(a)
+	if Match.active:
+		a.squad = Match.squad_on_side(team)
+		a.money = Match.START_MONEY
+		a.loadout.restock = false
+		a.loadout.set_kit(["pistol", "knife"])
+		if Match.frozen():
+			a.spawn()
+			a.armor = 0
+			a.helmet = false
+		else:
+			a.alive = false              # joins in at the next round
+			a.dead_t = 3.0
+	else:
+		a.spawn()
+	return a
+
+
+## Someone else on a client's screen: drawn from snapshots, never simulated here.
+func add_puppet(id: int, n: String, team: int, bot: bool) -> Actor:
+	var a := Actor.new(team, n, bot, false)
+	a.id = id
+	a.brain = null
+	a.alive = false
+	list.append(a)
+	return a
+
+
+## Take an actor out of the match (a bot making room, a player leaving): its charge drops first.
+func remove_actor(a: Actor, drop: bool = true) -> void:
+	if a == me:
+		return
+	if drop and a.alive and Match.active and not Net.is_client():
+		var ch := a.loadout.by_id("charge")
+		if ch:
+			Items.drop(a, ch, false)
+	if Bomb.carrier == a:
+		Bomb.carrier = null
+	a.alive = false
+	a.model.free_nodes()
+	list.erase(a)
+
+
+func by_id(id: int) -> Actor:
+	if id <= 0:
+		return null
+	for a in list:
+		if a.id == id:
+			return a
+	return null
+
+
+## Players (people and bots) on a side.
+func on_side(team: int) -> int:
+	var n := 0
+	for a in list:
+		if a.team == team:
+			n += 1
+	return n
+
+
+## The connection ended: a client loses everyone it was drawing, a host its remote players.
+func after_network(was_client: bool) -> void:
+	for a in list.duplicate():
+		if a != me and (was_client or a.peer > 0):
+			remove_actor(a, false)
+	if me:
+		me.peer = 0
+
+
+## Kill feed ageing on a client (the host does it in tick()).
+func tick_feed(dt: float) -> void:
+	for f: Dictionary in feed:
+		f.age += dt
+	feed = feed.filter(func(f: Dictionary) -> bool: return f.age < 7.0)
+
+
 func remove_bots() -> void:
 	for a in list:
 		if a.is_bot:

@@ -42,6 +42,7 @@ var land_penalty := 0.0
 var view_offset := 0.0
 var land_kick := 0.0
 var step_dist := 0.0
+var spawns := 0                ## counts respawns and teleports (snapshots carry it)
 var events: Array = []
 var _pl: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO]
 
@@ -51,6 +52,7 @@ func _init(world: CollisionWorld = null) -> void:
 
 
 func spawn(p: Vector3, y: float) -> void:
+	spawns += 1
 	vel = Vector3.ZERO
 	yaw = y
 	pitch = 0.0

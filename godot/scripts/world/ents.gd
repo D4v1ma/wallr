@@ -83,6 +83,16 @@ class Door:
 					best_s = s
 			target = best_s * 1.7
 		Snd.door(center, metal, target != 0.0)
+		if Net.is_host():
+			Net.server.ev(["door", Ents.doors.find(self), target != 0.0])
+
+	## A client's copy: the angle the host has, and the collision moved with it.
+	func client_set(a: float, tgt: float) -> void:
+		target = tgt
+		if absf(a - angle) < 1e-4:
+			return
+		angle = a
+		L.cw.move_brush(brush, Ents.rot_y_planes(closed, hinge, angle), xform(angle))
 
 	func xform(a: float) -> Transform3D:
 		var b := Basis(Vector3.UP, a)

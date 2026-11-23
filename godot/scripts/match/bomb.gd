@@ -90,6 +90,10 @@ func on_drop(actor: Actor, it: Dictionary) -> void:
 	item = it
 	if Actors.me and Actors.me.team == 0:
 		HUD.note("You dropped the charge" if actor.is_me else "The charge was dropped")
+	if Net.is_host():
+		for a: Actor in Actors.list:
+			if a.peer > 0 and a.team == 0:
+				Net.server.ev(["note", "You dropped the charge" if a == actor else "The charge was dropped"], a.peer)
 
 
 func on_pickup(actor: Actor) -> void:
@@ -98,6 +102,8 @@ func on_pickup(actor: Actor) -> void:
 	item = {}
 	if actor.is_me:
 		HUD.note("You have the charge: plant it at A or B (hold fire)")
+	elif actor.peer > 0 and Net.is_host():
+		Net.server.ev(["note", "You have the charge: plant it at A or B (hold fire)"], actor.peer)
 
 
 func plant(actor: Actor, w: Weapon, s: Variant) -> void:
@@ -112,12 +118,23 @@ func plant(actor: Actor, w: Weapon, s: Variant) -> void:
 	beep_t = 0.4
 	planter = actor
 	planted_at = Game.time
+	_make_node(p, actor.player.yaw)
+	Snd.armed(pos)
+	if Net.is_host():
+		Net.server.ev(["plant", p, actor.player.yaw, String(s.name)])
+	Match.on_plant(actor, s)
+
+
+## The planted charge's model and its blinking light.
+func _make_node(p: Vector3, yaw: float) -> void:
+	if node and is_instance_valid(node):
+		node.queue_free()
 	if Game.L and Game.L.root:
 		var mi := MeshInstance3D.new()
 		mi.mesh = Models.weapon_mesh("charge")[0]
 		Models.light_inst(mi, Game.L.probe_sky(p + Vector3(0, 8, 0)))
 		mi.position = p + Vector3(0, 0.75, 0)
-		mi.rotation.y = actor.player.yaw
+		mi.rotation.y = yaw
 		Game.L.root.add_child(mi)
 		node = mi
 		led = MeshInstance3D.new()
@@ -130,8 +147,6 @@ func plant(actor: Actor, w: Weapon, s: Variant) -> void:
 		led.material_override = lm
 		led.position = Vector3(1.75, 1.45, -0.55)
 		mi.add_child(led)
-	Snd.armed(pos)
-	Match.on_plant(actor, s)
 
 
 ## Fuse length for the current map (longer on the big maps, so Wardens can rotate).
@@ -166,6 +181,7 @@ func control(a: Actor, cmd: Dictionary, dt: float) -> void:
 		defuse_t = 0.0
 		defuse_dur = KIT_DEFUSE if a.kit else DEFUSE
 		Snd.defuse_start(pos)
+		Net.snd("defuse_start", [pos])
 
 
 func defuse(a: Actor) -> void:
@@ -174,6 +190,8 @@ func defuse(a: Actor) -> void:
 	if led:
 		led.visible = false
 	Snd.defused(pos)
+	if Net.is_host():
+		Net.server.ev(["defused"])
 	Match.on_defuse(a)
 
 
@@ -212,11 +230,84 @@ func explode() -> void:
 		node.queue_free()
 	node = null
 	led = null
+	_blast_fx(c)
+	if Net.is_host():
+		Net.server.ev(["explode", c])
+	Match.on_explode()
+
+
+func _blast_fx(c: Vector3) -> void:
 	FX.explosion(c)
 	if Game.player:
 		Game.shake = maxf(Game.shake, clampf(1.6 - Vector2(Game.player.pos.x - c.x, Game.player.pos.z - c.z).length() / 1600.0, 0.25, 1.4))
 	Snd.explosion(c)
-	Match.on_explode()
+
+
+# --- a client's copy (the host's snapshots and events drive it) --------------------------------------
+
+func client_state(st: String, carry: Actor, defu: Actor, tm: float, dt_: float, dd: float, p: Variant, site_i: int) -> void:
+	if st != state and (st == "none" or st == "carried" or st == "dropped"):
+		if node and is_instance_valid(node):
+			node.queue_free()
+		node = null
+		led = null
+	state = st
+	carrier = carry
+	defuser = defu
+	defuse_t = dt_
+	defuse_dur = dd
+	if absf(tm - timer) > 0.25 or state != "planted":
+		timer = tm
+	pos = p
+	site = sites()[site_i - 1] if site_i > 0 and site_i <= sites().size() else null
+	if state == "dropped" and p != null:
+		item = {"p": p}
+	elif state != "dropped":
+		item = {}
+
+
+func client_plant(p: Vector3, yaw: float, site_name: String) -> void:
+	state = "planted"
+	pos = p
+	site = site_by_name(site_name)
+	timer = fuse()
+	beep_t = 0.4
+	planted_at = Game.time
+	_make_node(p, yaw)
+	Snd.armed(p)
+
+
+func client_defused() -> void:
+	state = "defused"
+	defuser = null
+	if led:
+		led.visible = false
+	if pos != null:
+		Snd.defused(pos)
+
+
+func client_explode(c: Vector3) -> void:
+	state = "exploded"
+	if node and is_instance_valid(node):
+		node.queue_free()
+	node = null
+	led = null
+	_blast_fx(c)
+
+
+## The fuse's beeps and light on a client (the host decides when it blows).
+func client_tick(dt: float) -> void:
+	if state != "planted" or pos == null:
+		return
+	timer = maxf(0.0, timer - dt)
+	beep_t -= dt
+	led_t -= dt
+	if beep_t <= 0.0:
+		var f := clampf(timer / fuse(), 0.0, 1.0)
+		beep_t = 0.12 if timer < 2.0 else 0.16 + 0.84 * f
+		Snd.beep(pos, 1.0 - f)
+		led_t = 0.07
+		FX.add_light((pos as Vector3) + Vector3(0, 4, 0), Color(1, 0.12, 0.06), 70.0, 0.08)
 
 
 func render() -> void:

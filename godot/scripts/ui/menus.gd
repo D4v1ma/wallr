@@ -4,7 +4,7 @@ extends CanvasLayer
 ## (with Controls and the admin passcode), the pause menu, a ready card after a map load, results.
 
 const MAP_LIST := ["depot", "kiln", "frost", "range"]
-const BACKABLE := ["create", "armory", "career", "settings", "acctset"]
+const BACKABLE := ["create", "armory", "career", "settings", "acctset", "mp", "mphost", "mpjoin"]
 
 var root: Control
 var shade: ColorRect
@@ -26,6 +26,9 @@ var admin_msg := ""
 var admin_ok := false
 var preview: Dictionary = {}
 var _fs_check: CheckBox          ## Settings → Fullscreen, kept in step with F11
+var mp_message := ""             ## why the last network game ended, shown on the Multiplayer screens
+var mp_cfg: Dictionary = {}      ## Host screen choices
+var mp_addr := ""                ## Join screen address box
 var _t := 0.0
 
 
@@ -57,6 +60,12 @@ func _ready() -> void:
 	visible = false
 	Profile.changed.connect(_rerender)
 	Accounts.changed.connect(_rerender)
+	Net.lan_changed.connect(func() -> void:
+		if current == "mpjoin":
+			_render())
+	Net.state_changed.connect(func() -> void:
+		if current == "mpjoin" or current == "mp":
+			_render())
 
 
 func _rerender() -> void:
@@ -115,6 +124,7 @@ func first_screen() -> void:
 func show_screen(name: String, push: bool = true) -> void:
 	if push and current != "" and current != name and not (current in ["loading", "ready", "results"]):
 		stack.append(current)
+	Net.scan(name == "mpjoin")
 	current = name
 	visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -179,6 +189,9 @@ func _render() -> void:
 		"pause": _render_pause()
 		"ready": _render_ready()
 		"results": _render_results()
+		"mp": _render_mp()
+		"mphost": _render_mphost()
+		"mpjoin": _render_mpjoin()
 
 
 ## A centred sheet: {panel, body, foot}.
@@ -283,9 +296,11 @@ func _render_ready() -> void:
 	s.body.add_child(UI.label(Game.L.name if Game.L else "", 30, UI.TEXT, UI.display))
 	var info := "%s · %s bots" % ["Ranked" if c.get("ranked", false) else ("Casual" if c.mode == "defuse" else "Skirmish"), Profile.DIFFS[c.diff].name] if not c.is_empty() else ""
 	s.body.add_child(UI.label(info, 15, UI.MUTED))
+	if Net.is_host():
+		s.body.add_child(UI.note(_host_line(), UI.OK))
 	s.body.add_child(UI.note("Mouse to look, WASD to move. X loads a wallbang round once they unlock. Esc pauses."))
 	s.foot.add_child(UI.spacer())
-	s.foot.add_child(UI.button("Main menu", func() -> void: Session.active = false; home()))
+	s.foot.add_child(UI.button("Main menu", func() -> void: Net.leave(); Session.active = false; home()))
 	s.foot.add_child(UI.button("Deploy ›", func() -> void: Game.main.play(), "primary", 140))
 
 
@@ -299,13 +314,19 @@ func _render_pause() -> void:
 			var me := Actors.me
 			info += " · round %d · %d–%d" % [Match.round, Match.score[me.squad], Match.score[1 - me.squad]]
 	s.body.add_child(UI.label(info, 15, UI.TEXT))
+	if Net.is_host():
+		s.body.add_child(UI.note(_host_line(), UI.OK))
+		s.body.add_child(UI.note("The match keeps running while you're in this menu. Leaving ends it for everyone."))
+	elif Net.is_client() and Net.client:
+		s.body.add_child(UI.note("Connected to %s · ping %d ms · the match keeps running while you're in this menu." % [Net.client.host_name, Net.ping_of(1)], UI.OK))
 	if Session.active and c.get("ranked", false) and not Session.done:
 		s.body.add_child(UI.note("Leaving a ranked match that has started counts as a loss.", UI.DANGER))
 	s.body.add_child(UI.note("Playing as a guest: this match won’t be saved." if Accounts.is_guest() else "Progress saves to %s on this device when the match ends or you leave it." % Accounts.cur.name))
 	var col := UI.vbox(8)
 	col.add_child(UI.button("Resume", func() -> void: Game.main.play(), "primary"))
 	col.add_child(UI.button("Settings", func() -> void: show_screen("settings")))
-	col.add_child(UI.button("Leave match" if Session.active and not Session.done else "Main menu", func() -> void: Session.leave()))
+	var leave_txt := "End the game for everyone" if Net.is_host() else ("Leave the game" if Net.is_client() else ("Leave match" if Session.active and not Session.done else "Main menu"))
+	col.add_child(UI.button(leave_txt, func() -> void: Session.leave()))
 	s.body.add_child(col)
 
 
@@ -548,11 +569,12 @@ func _render_home() -> void:
 	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(left)
 	left.add_child(_brand(64))
-	left.add_child(UI.label("THE WALLBANG SHOOTER · 5V5 WITH BOTS", 13, UI.MUTED, UI.display))
+	left.add_child(UI.label("THE WALLBANG SHOOTER · UP TO 8V8 · BOTS AND LAN PLAY", 13, UI.MUTED, UI.display))
 	var gap := Control.new()
 	gap.custom_minimum_size.y = 18
 	left.add_child(gap)
-	var items := [["Play", func() -> void: open_create(), "Create a match: map, bots, rules"], ["Loadout", func() -> void: open_armory("loadout", false), "Attachments and camos per gun"],
+	var items := [["Play", func() -> void: open_create(), "Create a match: map, bots, rules"], ["Multiplayer", func() -> void: mp_message = Net.error; show_screen("mp"), "Host on this PC or join a game"],
+		["Loadout", func() -> void: open_armory("loadout", false), "Attachments and camos per gun"],
 		["Shop", func() -> void: open_armory("shop", false), "%s points to spend" % UI.fmt_n(float(Profile.v.points))], ["Career", func() -> void: show_screen("career"), "Rank, level, stats, matches"],
 		["Settings", func() -> void: show_screen("settings"), "Mouse, view, crosshair, sound, admin"], ["Quit", func() -> void: get_tree().quit(), ""]]
 	for it: Array in items:
@@ -1372,7 +1394,7 @@ func _render_results() -> void:
 		eb.add_child(h4)
 	else:
 		eb.add_child(UI.sect("Rank"))
-		eb.add_child(UI.note("This match ended before it started, so your rating did not change." if c.mode == "defuse" else "Skirmish is practice: it pays some XP but never changes your Elo. Play a defuse match to move your rank."))
+		eb.add_child(UI.note("Network matches pay XP and points; Elo stays a rating against bots for now." if c.get("mp", false) else ("This match ended before it started, so your rating did not change." if c.mode == "defuse" else "Skirmish is practice: it pays some XP but never changes your Elo. Play a defuse match to move your rank.")))
 	if R0.get("admin", false):
 		s.foot.add_child(UI.note("Admin match: nothing recorded."))
 	elif Accounts.is_guest():
@@ -1380,6 +1402,205 @@ func _render_results() -> void:
 		s.foot.add_child(UI.button("Create an account to keep it", func() -> void: new_account(true)))
 	else:
 		s.foot.add_child(UI.note("✓ %s (%s)%s" % [Profile.save_label(), Accounts.cur.name, " · Leaving a ranked match counts as a loss." if outcome == "left" and c.get("ranked", false) else ""], UI.OK))
+	if Net.active():
+		s.foot.add_child(UI.button("End the game" if Net.is_host() else "Leave the game", func() -> void: Net.leave(); Session.active = false; home()))
+		s.foot.add_child(UI.button("Back to the match ›", func() -> void: Game.main.play(), "primary"))
+		return
 	s.foot.add_child(UI.button("Shop", func() -> void: open_armory("shop", false)))
 	s.foot.add_child(UI.button("Main menu", home))
 	s.foot.add_child(UI.button("Play again", func() -> void: launch(Session.cfg), "primary"))
+
+
+# --- multiplayer -------------------------------------------------------------------------------
+
+static func default_mp_cfg() -> Dictionary:
+	return {"map": "depot", "mode": "defuse", "len": "standard", "diff": "normal", "size": 8, "fill": true, "team": "1", "ff": false, "name": "", "port": Net.PORT}
+
+
+func _render_mp() -> void:
+	var s := _sheet("Multiplayer", null, 780.0, true, 440.0)
+	if mp_message != "":
+		s.body.add_child(UI.note(mp_message, UI.DANGER))
+	var row := UI.hbox(14)
+	var host := UI.card("HOST A GAME", "Play on this PC. Others on your network find it in their list, or join by your address. Bots fill the empty places.",
+		func() -> void: _open_mphost(), true, false, null, Vector2(340, 120))
+	host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(host)
+	var join := UI.card("JOIN A GAME", "Games on your network show up by themselves; or type the host's address.", func() -> void: mp_message = ""; Net.error = ""; show_screen("mpjoin"),
+		false, false, null, Vector2(340, 120))
+	join.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(join)
+	s.body.add_child(row)
+	s.body.add_child(UI.note("Everyone needs the same version of wallr. A game uses UDP port %d (and %d to be found on the network). To play over the internet, the host forwards that port on their router and gives friends their public address." % [Net.PORT, Net.LAN_PORT]))
+	s.body.add_child(UI.note("Network matches pay XP and points like casual matches; Elo stays a rating against bots for now."))
+	s.foot.add_child(UI.spacer())
+	s.foot.add_child(UI.button("Back", back))
+
+
+func _open_mphost() -> void:
+	mp_message = ""
+	Net.error = ""
+	mp_cfg = default_mp_cfg()
+	var last: Variant = Profile.v.get("lastMp")
+	if last is Dictionary:
+		mp_cfg.merge(last, true)
+	if not Level.MAPS.has(mp_cfg.map):
+		mp_cfg.map = "depot"
+	show_screen("mphost")
+
+
+func _set_mp(k: String, v: Variant) -> void:
+	mp_cfg[k] = v
+	if mp_cfg.mode != "defuse":
+		mp_cfg.len = "standard"
+	_render()
+
+
+func _render_mphost() -> void:
+	var c := mp_cfg
+	var defuse: bool = c.mode == "defuse"
+	var s := _sheet("Host a game", null, 1040.0)
+	if mp_message != "":
+		s.body.add_child(UI.note(mp_message, UI.DANGER))
+	s.body.add_child(UI.sect("Map"))
+	var maps := UI.hbox(8)
+	for k: String in MAP_LIST:
+		var m: Dictionary = Level.MAPS[k]
+		var thumb: Texture2D = load("res://assets/ui/thumb_%s.png" % k)
+		var b := UI.card(String(m.name), String(m.blurb), func() -> void: _set_mp("map", k), c.map == k, false, thumb, Vector2(230, 214))
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		maps.add_child(b)
+	s.body.add_child(maps)
+	var g := UI.grid(2, 14)
+	g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	s.body.add_child(g)
+	var cell := func(title: String, ctl: Control) -> VBoxContainer:
+		var v := UI.vbox(6)
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v.add_child(UI.sect(title))
+		v.add_child(ctl)
+		return v
+	g.add_child(cell.call("Mode", UI.seg([["defuse", "Defuse", "Rounds · money · the charge"], ["skirmish", "Skirmish", "Respawns · warm-up"]], c.mode, func(v: Variant) -> void: _set_mp("mode", v))))
+	g.add_child(cell.call("Length", UI.seg([["short", "Short", "First to 9"], ["standard", "Standard", "First to 16"]], c.len, func(v: Variant) -> void: _set_mp("len", v), not defuse)))
+	var diffs: Array = []
+	for k: String in Profile.DIFF_ORDER:
+		diffs.append([k, Profile.DIFFS[k].name, "Rating %d" % Profile.DIFFS[k].elo])
+	g.add_child(cell.call("Bot difficulty", UI.seg(diffs, c.diff, func(v: Variant) -> void: _set_mp("diff", v))))
+	g.add_child(cell.call("Your side", UI.seg([["1", "Wardens", "Defend"], ["0", "Raiders", "Attack"], ["r", "Random", "Either"]], c.team, func(v: Variant) -> void: _set_mp("team", v))))
+	var pv := UI.vbox(6)
+	pv.add_child(UI.stepper("Players per side", int(c.size), 1, 8, func(d: int) -> void: _set_mp("size", clampi(int(c.size) + d, 1, 8))))
+	var fill := CheckBox.new()
+	fill.text = "Fill empty places with bots (people joining take a bot's place)"
+	fill.button_pressed = bool(c.fill)
+	fill.toggled.connect(func(on: bool) -> void: _set_mp("fill", on))
+	pv.add_child(fill)
+	var ff := CheckBox.new()
+	ff.text = "Friendly fire"
+	ff.button_pressed = bool(c.ff)
+	ff.toggled.connect(func(on: bool) -> void: _set_mp("ff", on))
+	pv.add_child(ff)
+	g.add_child(cell.call("Players", pv))
+	var nv := UI.hbox(8)
+	var nf := UI.field("Game name", false, String(c.name), 24, Net.default_game_name())
+	(nf[1] as LineEdit).text_changed.connect(func(t: String) -> void: c.name = t)
+	nv.add_child(nf[0])
+	var pf := UI.field("Port", false, str(int(c.port)), 5, str(Net.PORT))
+	(pf[1] as LineEdit).custom_minimum_size.x = 90
+	(pf[1] as LineEdit).text_changed.connect(func(t: String) -> void: c.port = int(t) if t.is_valid_int() and int(t) > 1024 and int(t) < 65535 else Net.PORT)
+	nv.add_child(pf[0])
+	g.add_child(cell.call("Server", nv))
+	var addrs := Net.local_addresses()
+	s.foot.add_child(UI.rich("[b]%s[/b] · %s · %dv%d%s · friends join at [b]%s[/b]" % [Level.MAPS[c.map].name, "Defuse" if defuse else "Skirmish", int(c.size), int(c.size),
+		" with bots" if c.fill else "", (addrs[0] if not addrs.is_empty() else "this PC's address") + ("" if int(c.port) == Net.PORT else ":%d" % int(c.port))], 13))
+	s.foot.add_child(UI.button("Back", back))
+	s.foot.add_child(UI.button("Host game ›", _do_host, "primary"))
+
+
+func _do_host() -> void:
+	var c := mp_cfg
+	var size := clampi(int(c.size), 1, 8)
+	var team := String(c.team)
+	if team == "r":
+		team = "0" if randf() < 0.5 else "1"
+	var cfg := {"map": c.map, "mode": c.mode, "ranked": false, "diff": c.diff, "team": team, "allies": size - 1 if c.fill else 0, "enemies": size if c.fill else 0,
+		"len": c.len, "ff": c.ff, "mp": true, "size": size, "fill": c.fill}
+	Profile.v.lastMp = c.duplicate()
+	Profile.save()
+	Session.active = false
+	show_screen("loading", false)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	Game.main.load_map(String(c.map))
+	Session.begin(cfg)
+	var err := Net.host(cfg, int(c.port), String(c.name).strip_edges())
+	if err != "":
+		Session.active = false
+		mp_message = err
+		Game.state = "menu"
+		stack = ["home", "mp"]
+		show_screen("mphost", false)
+		return
+	Game.state = "menu"
+	show_screen("ready", false)
+
+
+func _render_mpjoin() -> void:
+	var s := _sheet("Join a game", null, 820.0)
+	if Net.is_client():
+		var row := UI.hbox(10)
+		row.add_child(UI.label(Net.status, 15, UI.ACCENT))
+		row.add_child(UI.spacer())
+		row.add_child(UI.button("Cancel", func() -> void: Net.leave(); _render()))
+		s.body.add_child(row)
+	elif Net.error != "" or mp_message != "":
+		s.body.add_child(UI.note(Net.error if Net.error != "" else mp_message, UI.DANGER))
+	s.body.add_child(UI.sect("On your network"))
+	if Net.lan_games.is_empty():
+		s.body.add_child(UI.note("Looking for games… a game hosted on this network shows up here within a few seconds."))
+	for k: String in Net.lan_games:
+		var gm: Dictionary = Net.lan_games[k]
+		var row2 := UI.hbox(10)
+		var info := UI.vbox(2)
+		info.add_child(UI.label(String(gm.get("name", "wallr game")), 16, UI.TEXT, UI.display))
+		var full := int(gm.get("players", 0)) >= int(gm.get("max", 16))
+		var same := String(gm.get("v", "")) == Net.VERSION
+		info.add_child(UI.label("%s · %s · %d/%d players · %s%s" % [gm.get("mapName", gm.get("map", "")), String(gm.get("mode", "")).capitalize(), int(gm.get("players", 0)), int(gm.get("max", 16)),
+			k, "" if same else " · different version"], 13, UI.MUTED))
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row2.add_child(info)
+		var target := "%s:%d" % [gm.ip, int(gm.get("port", Net.PORT))]
+		var jb := UI.button("Join", func() -> void: _do_join(target), "primary", 100)
+		jb.disabled = full or not same or Net.is_client()
+		row2.add_child(jb)
+		s.body.add_child(row2)
+	s.body.add_child(UI.sect("By address"))
+	var row3 := UI.hbox(10)
+	var f := UI.field("The host's address (an IP or computer name; add :port if it isn't %d)" % Net.PORT, false, mp_addr, 64, "192.168.1.20")
+	var e: LineEdit = f[1]
+	e.text_changed.connect(func(t: String) -> void: mp_addr = t)
+	e.text_submitted.connect(func(t: String) -> void: _do_join(t))
+	row3.add_child(f[0])
+	var b := UI.button("Join", func() -> void: _do_join(e.text), "primary", 100)
+	b.size_flags_vertical = Control.SIZE_SHRINK_END
+	b.disabled = Net.is_client()
+	row3.add_child(b)
+	s.body.add_child(row3)
+	s.foot.add_child(UI.note("You play with your own account, loadout and camos; the host runs the match."))
+	s.foot.add_child(UI.spacer())
+	s.foot.add_child(UI.button("Back", func() -> void: Net.leave(); back()))
+
+
+## Where friends connect, for the host's screens.
+func _host_line() -> String:
+	var addrs := Net.local_addresses()
+	var port := Net.server.port if Net.server else Net.PORT
+	var at := ", ".join(addrs.map(func(a: String) -> String: return a + ("" if port == Net.PORT else ":%d" % port))) if not addrs.is_empty() else "this PC's address"
+	return "Hosting \"%s\" · %d player%s · friends on your network see it in Join, or join at %s" % [Net.host_name, Net.server.humans() if Net.server else 1, "" if (Net.server and Net.server.humans() == 1) else "s", at]
+
+
+func _do_join(addr: String) -> void:
+	mp_addr = addr.strip_edges()
+	mp_message = ""
+	Net.error = ""
+	Net.join(mp_addr)
+	_render()

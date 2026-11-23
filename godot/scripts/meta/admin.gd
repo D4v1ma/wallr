@@ -60,12 +60,13 @@ func save() -> void:
 
 func apply() -> void:
 	var me := Actors.me
+	var powers := on and not Net.active()       # no admin powers in network games
 	if me:
-		me.admin = on
-		if not on and me.player.noclip:
+		me.admin = powers
+		if not powers and me.player.noclip:
 			me.player.noclip = false
 			me.player.vel = Vector3.ZERO
-		if on and Match.active:
+		if powers and Match.active:
 			me.money = Match.MAX_MONEY
-	if on and Session.active and not Session.done:
+	if powers and Session.active and not Session.done:
 		Session.admin_used = true
