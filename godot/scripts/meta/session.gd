@@ -88,19 +88,18 @@ func client_new_match() -> void:
 	match_id = Accounts.random_id(6) + str(Time.get_ticks_msec())
 
 
-## The connection to the host dropped (or we were turned away): record what we had, back to the menu.
-func network_lost(reason: String) -> void:
-	if active and not done and Match.round > 1:
+## The connection to the host dropped, we were turned away, or joining failed (`joining`): record
+## what we had, then back to the Multiplayer screens, which say why.
+func network_lost(reason: String, joining: bool = false) -> void:
+	if active and not done and not joining and Match.round > 1:
 		record(exit_outcome(stats(Actors.me)))
 	active = false
 	HUD.toggle_buy(false)
-	Menus.mp_message = reason
 	if Game.main:
 		Controls.active = false
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		HUD.set_active(false)
-	Game.state = "menu"
-	Menus.home()
+	Menus.network_ended(reason, joining)
 
 
 ## What leaving now would record: practice XP in skirmish; in defuse a loss once the match has

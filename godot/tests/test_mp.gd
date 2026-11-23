@@ -14,14 +14,13 @@ func run(r: Node) -> void:
 	var netsim := String(Game.args.get("netsim", ""))     # --netsim=delay,loss,jitter for both ends
 	if FileAccess.file_exists(RESULTS):
 		DirAccess.remove_absolute(RESULTS)
-	var main: Node = await r.boot_game({"map": "depot", "mode": "defuse", "bots": "2", "allies": "1", "team": "1", "diff": "normal"})
-	var cfg := Session.cfg.duplicate()
-	cfg.mp = true
-	cfg.size = 2
-	cfg.fill = true
-	var err := Net.host(cfg, port, "Test host")
-	r.check("host: listening on port %d" % port, err == "", err)
-	Game.state = "play"            # from here the match runs in real time (main._physics_process)
+	var main: Node = await r.boot_game({"map": "range", "mode": "skirmish"})
+	# Multiplayer > Host a game, as a player would: a 2v2 on Saltpan Depot with bots
+	Menus._open_mphost()
+	Menus.mp_cfg.merge({"map": "depot", "mode": "defuse", "size": 2, "fill": true, "team": "1", "diff": "normal", "port": port, "name": "Test host"}, true)
+	await Menus._do_host()
+	r.check("host: Host a game is listening on port %d" % port, Net.is_host() and Menus.current == "ready" and Game.L.key == "depot", "%s, screen %s" % [Net.error, Menus.current])
+	Game.main.play()               # Deploy: from here the match runs in real time (main._physics_process)
 	var before := _sides()
 	var args := PackedStringArray(["--headless", "--path", ProjectSettings.globalize_path("res://"), "res://tests/runner.tscn", "--", "--test=mp_client", "--port=%d" % port, "--keep-data"])
 	if netsim != "":

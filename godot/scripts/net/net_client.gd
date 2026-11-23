@@ -60,8 +60,9 @@ func on_msg(type: int, data: Variant) -> void:
 			_load.call_deferred()
 		Net.M_REJECT:
 			drop_reason = String(data.get("why", "The host turned us away")) if data is Dictionary else "The host turned us away"
+			var playing := have_snap
 			Net.leave(drop_reason)
-			Session.network_lost(drop_reason)
+			Session.network_lost(drop_reason, not playing)
 		Net.M_ROSTER:
 			if data is Array and ready:
 				_roster(data)

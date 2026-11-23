@@ -16,6 +16,17 @@ func run(r: Node) -> void:
 	r.check("server: started a dedicated server process", pid > 0)
 	var main: Node = await r.boot_game({"map": "range", "mode": "skirmish"})
 	Game.state = "menu"
+	# first, a join that can't work (nothing on that port): back to the Join screen, saying why, soon
+	Menus.show_screen("mpjoin")
+	var tj := Time.get_ticks_msec()
+	Menus._do_join("127.0.0.1:%d" % (port + 1))
+	for i in 150:
+		await r.get_tree().create_timer(0.1).timeout
+		if not Net.is_client():
+			break
+	var secs := (Time.get_ticks_msec() - tj) / 1000.0
+	r.check("client: a join that can't connect comes back to the Join screen with the reason", not Net.is_client() and Menus.current == "mpjoin" and Net.error.begins_with("Couldn't reach") and secs < 13.0,
+		"%.1f s, screen %s: %s" % [secs, Menus.current, Net.error])
 	# it shows up on the LAN with nobody playing (the server itself doesn't count)
 	var info := await _find(r, port, 300)
 	r.check("server: the LAN browser lists it", not info.is_empty(), str(info))
@@ -24,8 +35,8 @@ func run(r: Node) -> void:
 		return
 	r.check("server: listed with its name, nobody playing, 4 places", String(info.get("name", "")) == "Test server" and int(info.get("players", -1)) == 0 and int(info.get("max", 0)) == 4,
 		"%s · %d/%d" % [info.get("name", ""), int(info.get("players", -1)), int(info.get("max", 0))])
-	# join
-	Net.join("127.0.0.1", port)
+	# join with the LAN list's Join button
+	Menus._do_join("%s:%d" % [info.ip, int(info.port)])
 	var ok := false
 	for i in 300:
 		await r.get_tree().create_timer(0.1).timeout
@@ -87,6 +98,17 @@ func run(r: Node) -> void:
 	if log.contains("SCRIPT ERROR"):
 		print(log)
 	main.queue_free()
+	await r.get_tree().process_frame
+	# started with --join=address and nobody there: the menus come up (with a map behind them) on
+	# the Join screen, saying why
+	var m2: Node = await r.boot_game({"join": "127.0.0.1:%d" % (port + 1)})
+	for i in 200:
+		await r.get_tree().create_timer(0.1).timeout
+		if not Net.is_client() and Menus.current == "mpjoin":
+			break
+	r.check("client: --join to nowhere ends on the Join screen with the reason", not Net.is_client() and Menus.current == "mpjoin" and Game.L != null and Net.error.begins_with("Couldn't reach"),
+		"screen %s, map %s" % [Menus.current, Game.L.key if Game.L else "none"])
+	m2.queue_free()
 	await r.get_tree().process_frame
 
 

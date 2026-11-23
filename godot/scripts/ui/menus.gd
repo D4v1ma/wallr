@@ -143,6 +143,20 @@ func home() -> void:
 	show_screen("home", false)
 
 
+## A network game ended, or joining one failed: back to the Multiplayer screens (the Join screen
+## after a failed join), which say why.
+func network_ended(reason: String, joining: bool) -> void:
+	mp_message = reason
+	if Game.L == null and Game.main:          # started with --join: put a map behind the menus first
+		show_screen("loading", false)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		Game.main.load_map(String(Settings.get_value("map")))
+	Game.state = "menu"
+	stack = ["home", "mp"] if joining else ["home"]
+	show_screen("mpjoin" if joining else "mp", false)
+
+
 func hide_all() -> void:
 	visible = false
 	current = ""
@@ -291,13 +305,14 @@ func _brand(size: int) -> HBoxContainer:
 
 
 func _render_ready() -> void:
-	var s := _sheet("Ready", null, 520.0, false, 300.0)
+	var s := _sheet("Ready", null, 520.0, false, 380.0 if Net.is_host() else 300.0)
 	var c := Session.cfg
 	s.body.add_child(UI.label(Game.L.name if Game.L else "", 30, UI.TEXT, UI.display))
 	var info := "%s · %s bots" % ["Ranked" if c.get("ranked", false) else ("Casual" if c.mode == "defuse" else "Skirmish"), Profile.DIFFS[c.diff].name] if not c.is_empty() else ""
 	s.body.add_child(UI.label(info, 15, UI.MUTED))
 	if Net.is_host():
 		s.body.add_child(UI.note(_host_line(), UI.OK))
+		s.body.add_child(UI.note("Friends can't see or reach it? Let wallr through this PC's firewall (Windows asks the first time you host: allow private networks)."))
 	s.body.add_child(UI.note("Mouse to look, WASD to move. X loads a wallbang round once they unlock. Esc pauses."))
 	s.foot.add_child(UI.spacer())
 	s.foot.add_child(UI.button("Main menu", func() -> void: Net.leave(); Session.active = false; home()))
@@ -1522,6 +1537,7 @@ func _render_mphost() -> void:
 	(pf[1] as LineEdit).text_changed.connect(func(t: String) -> void: c.port = int(t) if t.is_valid_int() and int(t) > 1024 and int(t) < 65535 else Net.PORT)
 	nv.add_child(pf[0])
 	g.add_child(cell.call("Server", nv))
+	s.body.add_child(UI.note("If friends can't see or join your game, let wallr through this PC's firewall (Windows asks the first time you host: allow it on private networks). Over the internet, also forward UDP %d on your router to this PC." % int(c.port)))
 	var addrs := Net.local_addresses()
 	s.foot.add_child(UI.rich("[b]%s[/b] · %s · %dv%d%s · friends join at [b]%s[/b]" % [Level.MAPS[c.map].name, "Defuse" if defuse else "Skirmish", int(c.size), int(c.size),
 		" with bots" if c.fill else "", (addrs[0] if not addrs.is_empty() else "this PC's address") + ("" if int(c.port) == Net.PORT else ":%d" % int(c.port))], 13))

@@ -93,6 +93,23 @@ bots take the places nobody fills.
   their router to their PC and gives friends their public address. A full 8v8 needs about
   2.5 Mbit/s of upload from the host.
 
+If it doesn't connect:
+
+- **The Join screen says "Couldn't reach …"** (it gives up after 10 seconds): check the address
+  (the host's screen shows it), that the host is still in the game, and the host PC's firewall.
+  Windows asks the first time you host; allow wallr (or Godot, when you run it from the editor)
+  on private networks, or allow it later under Windows Security → Firewall → Allow an app. On
+  Linux with ufw: `sudo ufw allow 27620:27621/udp`.
+- **The game isn't in the network list, but joining by address works:** some routers and Wi-Fi
+  networks (guest networks, "client isolation") block the broadcasts the list uses. Join by
+  address.
+- **Over the internet:** the host forwards UDP 27620 on their router to their PC's address and
+  gives friends their public address. If the provider doesn't allow incoming connections
+  (carrier-grade NAT), a virtual LAN such as ZeroTier or Tailscale works: join at the host's
+  address on it.
+- **Two copies on one PC** (to try it out): play the second as a guest, so the two don't save
+  over the same profile.
+
 From the command line, host a 5v5 on Kilnworks (bots fill both sides; `--host=27630` picks
 another port, `--fill=0` leaves the places empty, `--name="Friday game"` names it), or join:
 
@@ -554,14 +571,17 @@ Network play, each test with real Godot processes talking over ENet on this comp
 godot --headless --path godot res://tests/runner.tscn -- --test=mp,mp_dedicated,mp_lag
 ```
 
-- `mp` (29 checks): hosts a 2v2 on Saltpan Depot and starts a second Godot process as a client.
+- `mp` (29 checks): hosts a 2v2 on Saltpan Depot through Multiplayer → Host a game and starts
+  a second Godot process as a client.
   The client finds the game on the LAN, joins in a bot's place, buys through the host, walks
   (prediction corrections stay under 24 units), sees the others move, fires and chats; the host
   sees it move, fire and buy, gets a bot back when it leaves, and switches sides itself; a
   second client is told when the host ends the game.
-- `mp_dedicated` (13): starts a dedicated server process and joins it: it's listed with nobody
-  playing, the match starts afresh for the first player, chat through the Y box, switching
-  sides, the server running on when everyone has left, and its console log.
+- `mp_dedicated` (15): starts a dedicated server process and joins it with the LAN list's Join
+  button: it's listed with nobody playing, the match starts afresh for the first player, chat
+  through the Y box, switching sides, the server running on when everyone has left, and its
+  console log. Joins to an address where nothing answers (from the Join screen, and with
+  `--join`) come back to the Join screen with the reason within 10 seconds.
 - `mp_lag` (4): a client taps shots at the host strafing across its view; with lag compensation
   every one lands (without it, `--nolagcomp`, 18–44% do).
 

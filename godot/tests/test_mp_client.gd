@@ -61,7 +61,8 @@ func run(r: Node) -> void:
 			if not Net.is_client():
 				break
 			await r.get_tree().create_timer(0.1).timeout
-		check("client 2: told when the host ends the game", not Net.is_client() and Menus.mp_message == "The host left the game", "\"%s\", screen %s" % [Menus.mp_message, Menus.current])
+		check("client 2: told when the host ends the game (Multiplayer screen)", not Net.is_client() and Menus.mp_message == "The host left the game" and Menus.current == "mp",
+			"\"%s\", screen %s" % [Menus.mp_message, Menus.current])
 		_finish(r, "user://test-data/mp_client2.txt")
 		return
 	check("client: plays on the side the host gave it", Actors.me.team == 0 or Actors.me.team == 1)

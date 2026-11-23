@@ -34,6 +34,8 @@ func _ready() -> void:
 		start_server()
 	elif Game.args.has("join"):
 		Accounts.init()
+		if Accounts.remembered != null and Accounts.remembered.get("pin") == null:
+			Accounts.sign_in(Accounts.remembered)
 		Menus.show_screen("loading", false)
 		Net.join(String(Game.args.join))
 	elif Game.args.get("menu", "1") == "0" or Game.args.has("shot"):

@@ -45,6 +45,12 @@ var _scan_udp: PacketPeerUDP = null     ## browser: sends queries, gets answers
 var _scan_t := 0.0
 var scanning := false
 var _losing := false             ## a client's disconnect is being handled (deferred out of poll)
+var _connect_at := 0              ## msec when this client started joining (it gives up after CONNECT_TIMEOUT)
+var _connect_to := ""
+var _connect_port := PORT
+var _scan_dests: Array = []
+var _scan_own: Array = []         ## this PC's addresses (answers from them are a game on this PC)
+const CONNECT_TIMEOUT := 10000
 ## --netsim=delay_ms,loss_pct,jitter_ms: hold back everything we send (and drop some unreliable
 ## packets) to try the game on a bad connection; both ends should use it.
 var sim_lat := 0.0
@@ -169,6 +175,9 @@ func join(address: String, port: int = PORT) -> String:
 	mode = "client"
 	client = NetClient.new()
 	error = ""
+	_connect_at = Time.get_ticks_msec()
+	_connect_to = addr
+	_connect_port = port
 	status = "Connecting to %s:%d…" % [addr, port]
 	state_changed.emit()
 	return ""
@@ -225,8 +234,17 @@ func _lost(reason: String) -> void:
 	_losing = false
 	if mode != "client":
 		return
+	var joining := client == null or not client.have_snap       # never got into the match
 	leave(reason)
-	Session.network_lost(reason)
+	Session.network_lost(reason, joining)
+
+
+## Why joining didn't work, and what to check.
+func _join_failed() -> String:
+	var at := _connect_to + ("" if _connect_port == PORT else ":%d" % _connect_port)
+	if peer and peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+		return "%s answered but didn't let us in. Is it running the same version of wallr?" % at
+	return "Couldn't reach %s. Check the address, that the game is still being hosted, and that the host's firewall lets wallr through (UDP %d)." % [at, _connect_port]
 
 
 # --- sending ---------------------------------------------------------------------------------------
@@ -298,8 +316,11 @@ func _process(dt: float) -> void:
 		if pkt.is_empty():
 			continue
 		_dispatch(from, pkt)
-	if mode == "client" and peer and not _losing and peer.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
-		_lost("Couldn't connect to the host" if client and not client.welcomed else "Lost the connection to the host")
+	if mode == "client" and peer and not _losing:
+		if peer.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
+			_lost(_join_failed() if client and not client.welcomed else "Lost the connection to the host")
+		elif client and not client.welcomed and Time.get_ticks_msec() - _connect_at > CONNECT_TIMEOUT:
+			_lost(_join_failed())         # don't sit through ENet's own (much longer) timeout
 
 
 func _dispatch(from: int, pkt: PackedByteArray) -> void:
@@ -344,6 +365,8 @@ func scan(on: bool) -> void:
 		_scan_udp.set_broadcast_enabled(true)
 		_scan_udp.bind(0)
 		_scan_t = 0.0
+		_scan_own = local_addresses()
+		_scan_dests = _scan_targets()
 		lan_games.clear()
 	elif not on:
 		_scan_udp = null
@@ -365,7 +388,7 @@ func _poll_lan(dt: float) -> void:
 		_scan_t -= dt
 		if _scan_t <= 0.0:
 			_scan_t = 1.0
-			for dest: String in ["255.255.255.255", "127.0.0.1"]:
+			for dest: String in _scan_dests:
 				_scan_udp.set_dest_address(dest, LAN_PORT)
 				_scan_udp.put_packet(("WALLR?" + VERSION).to_utf8_buffer())
 			var now := Time.get_ticks_msec()
@@ -385,6 +408,8 @@ func _poll_lan(dt: float) -> void:
 			if not (d is Dictionary):
 				continue
 			var g: Dictionary = d
+			if ip2.begins_with("127.") or _scan_own.has(ip2):
+				ip2 = "127.0.0.1"          # a game on this PC answers on several addresses: list it once
 			g.ip = ip2
 			g.seen = Time.get_ticks_msec()
 			var key := "%s:%d" % [ip2, int(g.get("port", PORT))]
@@ -394,10 +419,48 @@ func _poll_lan(dt: float) -> void:
 				lan_changed.emit()
 
 
-## This PC's LAN addresses, to tell friends where to connect.
-func local_addresses() -> Array:
-	var out: Array = []
-	for a: String in IP.get_local_addresses():
-		if a.contains(".") and not a.begins_with("127.") and not a.begins_with("169.254."):
-			out.append(a)
+## Where a LAN query goes: everyone (255.255.255.255), each of this PC's networks as the usual
+## home /24 (on a PC with several adapters the plain broadcast may leave by the wrong one), and
+## this PC itself.
+func _scan_targets() -> Array:
+	var out: Array = ["255.255.255.255"]
+	for a: String in _scan_own:
+		var p := a.split(".")
+		if p.size() == 4 and not out.has("%s.%s.%s.255" % [p[0], p[1], p[2]]):
+			out.append("%s.%s.%s.255" % [p[0], p[1], p[2]])
+	out.append("127.0.0.1")
 	return out
+
+
+## This PC's network addresses, to tell friends where to connect: home and office networks first,
+## then the rest (VPNs such as ZeroTier or Tailscale), then adapters only this PC can use
+## (virtual machines, containers, WSL).
+func local_addresses() -> Array:
+	var ranked: Array = []
+	var seen := {}
+	for itf: Dictionary in IP.get_local_interfaces():
+		var nm := (String(itf.get("friendly", "")) + " " + String(itf.get("name", ""))).to_lower()
+		var local_only := false
+		for w: String in ["docker", "virbr", "veth", "vethernet", "hyper-v", "wsl", "virtualbox", "vmware", "vmnet", "vboxnet", "br-"]:
+			local_only = local_only or nm.contains(w)
+		for a: String in itf.get("addresses", []):
+			if a.contains(".") and not a.begins_with("127.") and not a.begins_with("169.254.") and not seen.has(a):
+				seen[a] = true
+				ranked.append([_addr_rank(a) + (10 if local_only else 0), a])
+	for a: String in IP.get_local_addresses():     # anything the interface list missed
+		if a.contains(".") and not a.begins_with("127.") and not a.begins_with("169.254.") and not seen.has(a):
+			seen[a] = true
+			ranked.append([_addr_rank(a), a])
+	ranked.sort_custom(func(x: Array, y: Array) -> bool: return int(x[0]) < int(y[0]) or (int(x[0]) == int(y[0]) and String(x[1]) < String(y[1])))
+	return ranked.map(func(e: Array) -> String: return String(e[1]))
+
+
+static func _addr_rank(a: String) -> int:
+	var p := a.split(".")
+	if p[0] == "192" and p[1] == "168":
+		return 5 if p[2] == "56" else 0         # 192.168.56.x: VirtualBox's host-only network
+	if p[0] == "10":
+		return 1
+	if p[0] == "172" and int(p[1]) >= 16 and int(p[1]) <= 31:
+		return 3                                 # often containers or WSL
+	return 2

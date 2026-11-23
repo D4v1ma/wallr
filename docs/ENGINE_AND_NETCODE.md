@@ -49,9 +49,12 @@ The port kept the shape that made networking an addition rather than a rewrite:
   `--headless`. On a dedicated server the local player exists only as a viewpoint (it is not in
   `Actors.list`), profiles aren't touched, the match idles while nobody is connected and
   restarts for the first player in, and `Net.log_line` writes a console log.
-- **Ports:** UDP 27620 for the game; UDP 27621 for LAN discovery (a client broadcasts
-  `WALLR?` to the network and to 127.0.0.1; every host answers with its name, map, mode,
-  players and port as JSON).
+- **Ports:** UDP 27620 for the game; UDP 27621 for LAN discovery (a client sends `WALLR?` to
+  255.255.255.255, to each of its networks' /24 broadcast address, since on a PC with several
+  adapters the plain broadcast can leave by the wrong one, and to 127.0.0.1; every host answers
+  with its name, map, mode, players and port as JSON, and a game on the same PC is listed once).
+  The host lists its own addresses home and office networks first, VPNs next and adapters only
+  it can use (containers, virtual machines, WSL) last.
 - **Up to 16 players** (8 a side). People take bots' places when they join and bots come back
   when they leave (`fill`).
 
@@ -61,6 +64,10 @@ The port kept the shape that made networking an addition rather than a rewrite:
    guns (so its weapons behave the same on the host), preferred side.
 2. Host → `WELCOME`: the map, the match settings, the game's name, the host's tick; or
    `REJECT` with a reason (another version, the game is full). Names are made unique.
+   A client that hasn't been welcomed within 10 seconds gives up (ENet's own timeout is much
+   longer) and goes back to the Join screen saying what to check; one that drops or is turned
+   away before its first snapshot also lands there, and one that loses a match it was playing
+   lands on the Multiplayer screen with the reason.
 3. The client loads the map, then → `READY`. The host gives it an actor on a side (removing a
    bot there if the side is full), sends `ROSTER` to everyone and `STATE` (score, round
    history, rules) to the joiner. In a defuse match the joiner plays at once during buy time,

@@ -47,7 +47,11 @@ func _ready() -> void:
 	await get_tree().physics_frame
 	for n in names:
 		print("== ", n)
-		var suite: Object = load("res://tests/test_%s.gd" % n).new()
+		var script: GDScript = load("res://tests/test_%s.gd" % n)
+		if script == null or not script.can_instantiate():
+			check("suite %s loads" % n, false, "the script didn't compile")
+			continue
+		var suite: Object = script.new()
 		await suite.run(self)
 		await get_tree().process_frame
 		await get_tree().process_frame
