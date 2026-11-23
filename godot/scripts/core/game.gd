@@ -18,6 +18,7 @@ var ticks := 0
 var state := "boot"          ## boot | menu | loading | play | paused | results
 var shake := 0.0
 var bots_frozen := false
+var dedicated := false       ## a dedicated server (--server): hosts the match with no player of its own
 var world_root: Node3D = null
 var args: Dictionary = {}
 

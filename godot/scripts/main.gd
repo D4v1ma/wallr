@@ -6,7 +6,8 @@ extends Node3D
 ##   --menu=0 to skip the menus; --shot=path.png --frames=N to save a screenshot and quit;
 ##   --pos=x,y,z --yaw=deg --pitch=deg to place the camera (noclip) for screenshots;
 ##   --host[=port] (with --size=N players per side, --fill=0|1) to host that match on the network;
-##   --join=address[:port] to join a network game straight away.
+##   --join=address[:port] to join a network game straight away;
+##   --server (with --map --mode --size --fill --diff --len --ff=1 --port --name) for a dedicated server.
 
 const TICK := 1.0 / 64.0
 
@@ -29,7 +30,9 @@ func _ready() -> void:
 	Settings.changed.connect(_on_setting)
 	if Game.args.has("shot"):
 		_shot_frames = int(Game.args.get("frames", "12"))
-	if Game.args.has("join"):
+	if Game.args.has("server"):
+		start_server()
+	elif Game.args.has("join"):
 		Accounts.init()
 		Menus.show_screen("loading", false)
 		Net.join(String(Game.args.join))
@@ -77,6 +80,42 @@ func quick_start() -> void:
 		var hp := String(Game.args.host)
 		Net.host(cfg, int(hp) if hp.is_valid_int() and int(hp) > 1024 else Net.PORT, String(Game.args.get("name", "")))
 	play()
+
+
+## A dedicated server: hosts a match with no player of its own. Bots hold both sides until people
+## take their places; the match waits while nobody is connected and starts afresh for the first
+## player in. The console logs who comes and goes, chat and results. Run it headless:
+##   godot --headless --path godot -- --server --map=depot --mode=defuse --size=5
+func start_server() -> void:
+	Game.dedicated = true
+	Engine.max_fps = 128                     # nothing to draw: don't spin the CPU between ticks
+	var key := String(Game.args.get("map", "depot"))
+	if not Level.MAPS.has(key):
+		printerr("Unknown map \"%s\". Maps: %s" % [key, ", ".join(Level.MAPS.keys())])
+		get_tree().quit(1)
+		return
+	var size := clampi(int(Game.args.get("size", "5")), 1, 8)
+	var fill := String(Game.args.get("fill", "1")) != "0"
+	var mode := String(Game.args.get("mode", "defuse"))
+	var diff := String(Game.args.get("diff", "normal"))
+	var length := String(Game.args.get("len", "standard"))
+	var cfg := {"map": key, "mode": mode if mode == "skirmish" else "defuse", "ranked": false, "diff": diff if Profile.DIFFS.has(diff) else "normal",
+		"team": "0", "allies": size if fill else 0, "enemies": size if fill else 0, "len": length if Match.LENGTHS.has(length) else "standard",
+		"ff": String(Game.args.get("ff", "0")) == "1", "mp": true, "size": size, "fill": fill}
+	load_map(key)
+	Session.begin(cfg)
+	var pa := String(Game.args.get("port", str(Net.PORT)))
+	var port := int(pa) if pa.is_valid_int() and int(pa) > 1024 and int(pa) < 65535 else Net.PORT
+	var err := Net.host(cfg, port, String(Game.args.get("name", "Dedicated server")).left(24))
+	if err != "":
+		printerr(err)
+		get_tree().quit(1)
+		return
+	Game.state = "play"
+	Net.log_line("%s · %s · %s · %d per side%s · port %d (LAN list on %d)" % [Net.host_name, Level.MAPS[key].name, "Defuse" if cfg.mode == "defuse" else "Skirmish",
+		size, ", bots fill" if fill else "", port, Net.LAN_PORT])
+	var addrs := Net.local_addresses()
+	Net.log_line("Players join from Multiplayer > Join a game%s" % (" (this PC: %s)" % ", ".join(addrs) if not addrs.is_empty() else ""))
 
 
 ## Build a map in place: level, entities, effects, nav, the local player and the actors.
@@ -142,6 +181,8 @@ func _physics_process(_delta: float) -> void:
 	var paused := Game.state != "play" or Game.freeze or Game.L == null
 	if Net.is_host() and Game.L != null and Game.state != "loading" and not Game.freeze:
 		paused = false      # the game goes on for everyone else while the host is in a menu
+	if Game.dedicated and Net.server and Net.server.humans() == 0:
+		paused = true       # an empty dedicated server waits
 	if paused:
 		return
 	sim_tick(TICK)
@@ -423,6 +464,10 @@ func handle_hotkeys() -> void:
 		Settings.set_value("showHints", not shown)
 	if Controls.pressed("buy"):
 		HUD.toggle_buy()
+	if Controls.pressed("chat"):
+		HUD.open_chat(false)
+	elif Controls.pressed("teamchat"):
+		HUD.open_chat(true)
 	if HUD.buy_open:
 		for n in range(1, 10):
 			if Controls.pressed("slot%d" % n):
@@ -440,6 +485,10 @@ func _process(dt: float) -> void:
 	if Game.L == null or Game.state == "loading":
 		return
 	dt = minf(dt, 0.1)
+	if Game.dedicated:
+		Actors.render(dt, 1.0)       # nothing on screen, but hitboxes follow the poses
+		FX.update(dt)                # and effects still age out
+		return
 	var me := Actors.me
 	var pl := Game.player
 	var held := Game.loadout.active

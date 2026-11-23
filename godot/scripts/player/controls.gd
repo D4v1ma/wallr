@@ -9,7 +9,7 @@ const KEYS := {
 	"slot1": [KEY_1], "slot2": [KEY_2], "slot3": [KEY_3], "slot4": [KEY_4], "slot5": [KEY_5],
 	"slot6": [KEY_6], "slot7": [KEY_7], "slot8": [KEY_8], "slot9": [KEY_9],
 	"buy": [KEY_B], "scores": [KEY_TAB], "noclip": [KEY_V], "debug": [KEY_F1, KEY_QUOTELEFT], "hints": [KEY_H],
-	"pause": [KEY_ESCAPE], "chat": [KEY_Y],
+	"pause": [KEY_ESCAPE], "chat": [KEY_Y], "teamchat": [KEY_U],
 }
 const IDLE := {
 	"fwd": 0.0, "side": 0.0, "jump": false, "jumpHeld": false, "duck": false, "walk": false, "fire": false, "alt": false,
@@ -27,6 +27,7 @@ var mdy := 0.0
 var wheel := 0
 var ui_capture := false      ## a menu (buy menu) owns number keys and the mouse buttons
 var active := false          ## gameplay input on (mouse captured or free-look mode)
+var typing := false          ## the chat box has the keyboard: keys and buttons don't reach the game
 var test_hold: Dictionary = {}   ## tests: command fields forced on every tick
 
 
@@ -40,7 +41,7 @@ func _ready() -> void:
 func _input(e: InputEvent) -> void:
 	if e is InputEventKey:
 		var k := e as InputEventKey
-		if k.echo:
+		if k.echo or typing:
 			return
 		var code := k.physical_keycode if k.physical_keycode != 0 else k.keycode
 		var a: String = _by_key.get(code, "")
@@ -58,7 +59,7 @@ func _input(e: InputEvent) -> void:
 			wheel -= 1
 		elif m.button_index == MOUSE_BUTTON_WHEEL_DOWN and m.pressed:
 			wheel += 1
-		elif m.button_index >= 1 and m.button_index <= 3:
+		elif m.button_index >= 1 and m.button_index <= 3 and not typing:
 			var i: int = [0, 0, 2, 1][m.button_index]
 			if m.pressed and not mouse[i]:
 				mouse_edge[i] = true

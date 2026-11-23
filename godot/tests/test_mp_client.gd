@@ -118,6 +118,16 @@ func run(r: Node) -> void:
 	var g2 := Game.loadout.active as Gun
 	check("client: our gun fires (predicted, then confirmed)", g2 != null and g2.ammo < ammo0, "%d -> %d" % [ammo0, g2.ammo if g2 else -1])
 	check("client: snapshots keep coming", Net.client.snap_tick > 0 and Net.client.bytes_in > 0, "%d bytes in, tick %d" % [Net.client.bytes_in, Net.client.snap_tick])
+	# a chat line to the host (it comes back to us too)
+	Net.say("hello host", false)
+	var heard := false
+	for i in 30:
+		await r.get_tree().create_timer(0.1).timeout
+		for c: Dictionary in HUD.chat_lines:
+			heard = heard or (String(c.name) == me.name and String(c.text) == "hello host")
+		if heard:
+			break
+	check("client: chat goes through the host and back", heard)
 	_finish(r)
 
 
@@ -184,5 +194,19 @@ func _shots(r: Node) -> void:
 	await r.get_tree().create_timer(0.3).timeout
 	r.get_viewport().get_texture().get_image().save_png(out.path_join("mp-scoreboard.png"))
 	Controls.held["scores"] = false
+	# chat: a line of ours, the host's, then the box open for a team line
+	Net.say("two on the left, by the crates", false)
+	await r.get_tree().create_timer(1.2).timeout
+	HUD.open_chat(true)
+	HUD.chat_box.text = "rotate to B after this"
+	HUD.chat_box.caret_column = HUD.chat_box.text.length()
+	await r.get_tree().create_timer(0.3).timeout
+	r.get_viewport().get_texture().get_image().save_png(out.path_join("mp-chat.png"))
+	HUD.close_chat()
+	# the pause menu in a network game (switch sides)
+	Game.main.pause()
+	await r.get_tree().create_timer(0.4).timeout
+	r.get_viewport().get_texture().get_image().save_png(out.path_join("mp-pause.png"))
+	Game.main.play()
 	check("client: saved its view and the scoreboard", FileAccess.file_exists(out.path_join("mp-client.png")), out)
 

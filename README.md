@@ -1,8 +1,9 @@
 # wallr
 
 An original round-based tactical shooter where **wallbanging** is the point: load a wallbang
-round and your next shot goes through every wall in its way. You play up to 8v8 against bots on
-three large two-site defuse maps, with rounds, money, a buy menu, attachments and camos, levels,
+round and your next shot goes through every wall in its way. You play up to 8v8 on three large
+two-site defuse maps, against bots or with other people over your network or the internet (bots
+fill the places nobody takes), with rounds, money, a buy menu, attachments and camos, levels,
 ranks and accounts saved on your computer.
 
 The game runs in **Godot 4.7** (the `godot/` folder) on the Forward+ renderer: physically based
@@ -67,6 +68,64 @@ godot --headless --path godot --export-release "Linux" build/linux/wallr.x86_64
 Builds go to `godot/build/`, which git ignores. The game's data packs into a 76 MB `.pck`
 (textures about half of it, then the models and the three big maps).
 
+## Multiplayer
+
+Play with other people on your network or over the internet. One PC hosts the match and plays
+in it too, and the others join; or a spare PC runs a **dedicated server** that only hosts. The
+host runs the match: everyone's movement, shots, damage, money and rounds are decided there, and
+bots take the places nobody fills.
+
+- **Host:** Multiplayer → Host a game. Pick the map, mode, match length, bot difficulty, your
+  side, players per side (1–8) and whether bots fill the empty places, then host. Your address
+  is on that screen and in the pause menu.
+- **Join:** Multiplayer → Join a game. Games on your network show up by themselves; or type the
+  host's address (`192.168.1.20`, a computer name, or `address:port`).
+- Joining puts you in a bot's place, and a bot comes back when you leave. In a defuse match you
+  play at once during buy time, otherwise from the next round.
+- **In a match:** **Y** chats with everyone and **U** with your team. Esc → **Switch to the
+  other side** (during a live round that costs you the round). The scoreboard shows pings, and
+  the match keeps running while you're in a menu. If the host leaves, the match ends for
+  everyone.
+- Network matches pay XP and points like casual matches; Elo stays a rating against bots, and
+  admin powers are off.
+- Everyone needs the same version of the game. A game uses **UDP port 27620**, and UDP 27621 to
+  be found on the local network. To play over the internet, the host forwards UDP 27620 on
+  their router to their PC and gives friends their public address. A full 8v8 needs about
+  2.5 Mbit/s of upload from the host.
+
+From the command line, host a 5v5 on Kilnworks (bots fill both sides; `--host=27630` picks
+another port, `--fill=0` leaves the places empty, `--name="Friday game"` names it), or join:
+
+```bash
+godot --path godot -- --menu=0 --map=kiln --mode=defuse --host --size=5
+```
+
+```bash
+godot --path godot -- --join=192.168.1.20
+```
+
+**A dedicated server** hosts without playing. Bots hold both sides until people join, the match
+waits while nobody is connected, the first player in starts a fresh match, and when a match ends
+the next one starts on the same map. The console logs connections, joins, leaves, side switches
+and chat:
+
+```bash
+godot --headless --path godot -- --server --map=frost --mode=defuse --size=8 --diff=hard
+```
+
+Its options are `--map`, `--mode`, `--size` (players per side, 1–8), `--fill=0`, `--diff`,
+`--len=short`, `--ff=1` (friendly fire), `--port` and `--name`; add `--log-file server.log`
+before the `--` to keep the log in a file. An exported build takes the same options
+(`./wallr.x86_64 --headless -- --server --map=depot`).
+
+How it plays smoothly: the host simulates at 64 ticks a second. Your client sends your inputs
+every tick and moves and shoots for you straight away with the same code (prediction),
+correcting itself when the host disagrees; everyone else is drawn about 80 ms in the past,
+smoothly between the host's 32 snapshots a second. The host checks your shots against where you
+saw your targets (lag compensation, up to 250 ms back). Each player receives about 7 KB/s in a
+2v2 and 19 KB/s in an 8v8. The details are in
+[docs/ENGINE_AND_NETCODE.md](docs/ENGINE_AND_NETCODE.md).
+
 ## Controls
 
 | Action | Keys |
@@ -82,6 +141,7 @@ Builds go to `godot/build/`, which git ignores. The game's data packs into a 76 
 | Drop the weapon in hand | G |
 | Door, pick up or swap a weapon / defuse (hold) | E |
 | Scoreboard (hold) | Tab |
+| Chat to everyone / your team (network games) | Y / U, then Enter to send or Esc |
 | Pause menu / fullscreen | Esc / F11 or Alt+Enter |
 | Noclip fly (admins) / debug readout / hints | V / F1 or ` / H |
 
@@ -402,6 +462,8 @@ godot/
   scripts/fx/          decals, particles, tracers, casings, smoke, blood, dynamic lights
   scripts/audio/       positional sound, buses with a compressor and limiter
   scripts/meta/        accounts, profile (XP, points, Elo), admin, match sessions, menu camera
+  scripts/net/         network play: the ENet host and client, the wire format, snapshots,
+                       prediction, interpolation, lag compensation, LAN discovery
   scripts/ui/          HUD and buy menu, menus, the UI toolkit, rank emblems
   tests/               test runner and suites (left out of exports)
 ```
@@ -486,6 +548,27 @@ plant and hold spot is reachable for the bots (`--dump=dir` writes the clear sig
 godot --headless --path godot res://tests/runner.tscn -- --test=mapcheck
 ```
 
+Network play, each test with real Godot processes talking over ENet on this computer:
+
+```bash
+godot --headless --path godot res://tests/runner.tscn -- --test=mp,mp_dedicated,mp_lag
+```
+
+- `mp` (29 checks): hosts a 2v2 on Saltpan Depot and starts a second Godot process as a client.
+  The client finds the game on the LAN, joins in a bot's place, buys through the host, walks
+  (prediction corrections stay under 24 units), sees the others move, fires and chats; the host
+  sees it move, fire and buy, gets a bot back when it leaves, and switches sides itself; a
+  second client is told when the host ends the game.
+- `mp_dedicated` (13): starts a dedicated server process and joins it: it's listed with nobody
+  playing, the match starts afresh for the first player, chat through the Y box, switching
+  sides, the server running on when everyone has left, and its console log.
+- `mp_lag` (4): a client taps shots at the host strafing across its view; with lag compensation
+  every one lands (without it, `--nolagcomp`, 18–44% do).
+
+`--netsim=delay,loss,jitter` (milliseconds, percent, milliseconds) adds latency, packet loss and
+jitter at both ends: `--netsim=50,2,15` gives 100 ms round trips. `mp_shots` (needs a display)
+saves a client's view, scoreboard, chat and pause menu.
+
 Screenshots for a visual check (needs a display; on a Linux server put `xvfb-run -a` in front;
 `--vm=all` adds every viewmodel in the sun and indoors, and a line-up of characters):
 
@@ -529,7 +612,11 @@ screenshot tools are in `tools/` (`node-*-check.mjs`, `gameplay*-check.mjs`).
   is a little brighter.
 - Your attachments and camo show in first person only; the third-person and dropped models stay
   stock. Bots never use attachments.
-- Rating against bots is a single-player measure: there is no matchmaking against people yet.
+- Network play has no server list beyond your own network: over the internet you need the
+  host's address and a forwarded port. Enemies behind walls are still sent to every client (no
+  wallhack culling yet), snapshots aren't delta-compressed, the dedicated server stays on one
+  map and takes no console commands, and the Web build can't play online (browsers have no UDP).
+- Profiles, Elo and accounts stay on each player's computer; Elo is a rating against bots.
 - Bots don't use cover deliberately; no fall damage; ragdolls are scripted falls.
 - The Godot version has no touch controls.
 - No finished executables have been built and tried yet. The game data has been exported as a
@@ -540,6 +627,7 @@ screenshot tools are in `tools/` (`node-*-check.mjs`, `gameplay*-check.mjs`).
 
 ## Next
 
-See [docs/ENGINE_AND_NETCODE.md](docs/ENGINE_AND_NETCODE.md): multiplayer on the Godot version
-with server authority, client prediction and lag compensation; the profile and Elo would then
-move to the server.
+The network groundwork is in (see [docs/ENGINE_AND_NETCODE.md](docs/ENGINE_AND_NETCODE.md)).
+Next on that side: a map rotation and console for the dedicated server, an internet server
+list, culling what each client can't see, then accounts, profiles and Elo on a server so ranked
+play against people becomes possible.

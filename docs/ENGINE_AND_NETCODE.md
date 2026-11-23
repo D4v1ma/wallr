@@ -1,157 +1,174 @@
-# wallr: multiplayer on the Godot version
+# wallr: the engine port and network play
 
 This document had two tracks: port the browser prototype to a real engine, then add
-multiplayer. **The engine port is done**: the game runs in Godot 4.7 (`godot/`); how it was done
-is at the end. What's left is **multiplayer with server authority, client prediction and lag
-compensation**, now planned against the Godot code.
+multiplayer. **Both are done**: the game runs in Godot 4.7 (`godot/`, how the port was done is
+at the end), and it plays over the network with host authority, client prediction,
+interpolation and lag compensation. This part describes the network code as built and what is
+still to do.
 
-The port kept the shape that makes networking an addition rather than a rewrite:
+The port kept the shape that made networking an addition rather than a rewrite:
 
 - The simulation is a fixed **64 Hz tick** (`main.sim_tick` from `_physics_process`) driven by
   **input commands**: `Controls.build_cmd()` produces `{ fwd, side, jump, jumpHeld, duck, walk,
-  fire, alt, reload, use, useHeld, drop, inspect, slot, last, cycle, wallbang }`, and the view
-  angles come from `Controls.take_look()`.
+  fire, alt, reload, use, useHeld, drop, inspect, slot, last, cycle, wallbang }` plus the view
+  angles.
 - Rendering only interpolates between ticks (`prev`/`pos` with
   `Engine.get_physics_interpolation_fraction()`).
 - Players and bots run the same movement, weapon and damage code: `Player.tick(cmd, dt)`,
   `Loadout.tick(cmd, …)`, `Combat`, `Ballistics`, `Actors.hitscan`. A bot's `BotBrain.think()`
-  returns the same command a keyboard does.
-- The whole game runs headless (`godot --headless`): the match suite plays complete bot rounds
-  without a window, at about 2 ms per tick for 16 players (8v8 on the big maps).
-- Randomness in the simulation is already seeded (`U.Rng`, mulberry32): `Gun.rnd` per weapon,
-  `Ballistics.rnd`, `Bots.rnd`, `Tactics.rnd`.
-
-That is the shape a server-authoritative networked shooter needs.
+  returns the same command a keyboard does, and so does a remote player's queue on the host.
+- The whole game runs headless (`godot --headless`), which is what a dedicated server is.
 
 ---
 
-## Multiplayer (server authority, client prediction, lag compensation)
+## Network play (as built)
 
 ### Architecture
 
 ```
- clients (Godot)                            dedicated server (the same project, headless)
- ───────────────                            ─────────────────────────────────────────────
- input → usercmd #n ──────────────────────▶ queue per player, applied in order each tick
- predict own movement/weapon (same code)    authoritative sim: movement, shots, damage,
- interpolate others ~100 ms in the past      economy, rounds, the charge, bots (64 Hz)
- render                ◀──────────────────── snapshots (20–32 Hz, delta-compressed)
-                                             history of every player's hitboxes (1 s)
+ clients                                     the host (a player's PC, or a dedicated server)
+ ───────                                     ───────────────────────────────────────────────
+ input → cmd #n, sent with #n-1 and #n-2 ──▶ queue per player, one cmd applied per tick
+ predict own movement and gun (same code)    the match: movement, shots, damage, money,
+ draw the others 5 ticks behind the          rounds, the charge, doors, smoke, bots (64 Hz)
+   newest snapshot, between snapshots   ◀─── snapshot every 2nd tick (32 Hz), unreliable
+ effects, sounds, kill feed, banners    ◀─── events: reliable (kills, rounds, buys, chat)
+                                             and effects (shots, steps), unreliable
+                                             1 s of everyone's positions for lag compensation
 ```
 
-- **Transport:** a `MultiplayerPeer` carrying our own packets, not node RPCs or
-  `MultiplayerSynchronizer` (a shooter wants its own snapshot format and delta compression).
-  `SceneMultiplayer.send_bytes()` sends usercmds and snapshots with
-  `TRANSFER_MODE_UNRELIABLE`, and events (kill feed, buys, chat) with `TRANSFER_MODE_RELIABLE`
-  on a second channel. The same code runs over `ENetMultiplayerPeer` on desktop and
-  `WebRTCMultiplayerPeer` for the Web export (`WebSocketMultiplayerPeer`, reliable only, is
-  fine for LAN and testing).
-- **Server:** the same project started with `--server` under `--headless`. The viewmodel, HUD,
-  menus, effects and sound already sit idle headless (the tests run that way). A "dedicated
-  server" export preset strips the textures and sounds. Run one process per match at 64 Hz.
+- **Transport:** `ENetMultiplayerPeer` used as a raw packet pipe (`put_packet` with a target,
+  transfer mode and channel; no RPCs, no `SceneMultiplayer`, no synchronizer nodes), with
+  ENet's range coder compression. Channel 0 is reliable (handshake, roster, events), channel 1
+  unreliable (commands and snapshots), channel 2 unreliable (effects). The first byte of every
+  packet is the message type. `scripts/net/net.gd` (the `Net` autoload) owns the peer, the LAN
+  discovery and the network simulator; `net_server.gd` is the host's side, `net_client.gd` the
+  client's, `wire.gd` the binary format.
+- **Who hosts:** a player's own game (a listen server: the host plays and its menus don't pause
+  the match), or a **dedicated server**: the same project started with `--server` under
+  `--headless`. On a dedicated server the local player exists only as a viewpoint (it is not in
+  `Actors.list`), profiles aren't touched, the match idles while nobody is connected and
+  restarts for the first player in, and `Net.log_line` writes a console log.
+- **Ports:** UDP 27620 for the game; UDP 27621 for LAN discovery (a client broadcasts
+  `WALLR?` to the network and to 127.0.0.1; every host answers with its name, map, mode,
+  players and port as JSON).
+- **Up to 16 players** (8 a side). People take bots' places when they join and bots come back
+  when they leave (`fill`).
+
+### Joining
+
+1. Client → `HELLO`: protocol version, name (`Guest 123` for a guest), the attachments on its
+   guns (so its weapons behave the same on the host), preferred side.
+2. Host → `WELCOME`: the map, the match settings, the game's name, the host's tick; or
+   `REJECT` with a reason (another version, the game is full). Names are made unique.
+3. The client loads the map, then → `READY`. The host gives it an actor on a side (removing a
+   bot there if the side is full), sends `ROSTER` to everyone and `STATE` (score, round
+   history, rules) to the joiner. In a defuse match the joiner plays at once during buy time,
+   otherwise from the next round.
 
 ### Messages
 
-- **usercmd** (client → server, every tick, also carrying the previous 2–3 in case of packet
-  loss): sequence number, client tick, a bitfield of buttons, move axes (fixed-point),
-  yaw/pitch (16-bit each), weapon slot.
-- **snapshot** (server → client): server tick, the last usercmd sequence processed for this
-  client, then per-entity state, delta-compressed against the last snapshot the client
-  acknowledged:
-  - players: position, velocity, yaw/pitch, duck amount, health, armor, active weapon, weapon
-    state and animation clock, alive;
-  - items, the charge, doors, round phase and clock, money for your own team, wallbang rounds
-    left (your own).
-- **events** (reliable): kills (killer, victim, weapon id, headshot, wallbang), round start and
-  end, plants and defuses, buy results, sounds that matter (footsteps are derived client-side
-  from movement).
+- **Commands** (client → host, every tick, unreliable): sequence number, buttons (13 bits),
+  move axes, weapon slot and wheel, yaw and pitch as floats, and the tick the client is drawing
+  the others at (in 1/16 ticks), 24 bytes each. Every packet repeats the two before it, so a
+  lost packet costs nothing. The host drops duplicates and old ones, applies one per tick, and
+  when a burst piles up more than 6 it walks the oldest as movement only so positions stay in
+  step; a starved queue repeats the held buttons of the last command.
+- **Snapshots** (host → each client, 32 a second, unreliable): the host tick, the last command
+  applied for this client, its actor id; the round (phase, clock, score, half); the charge
+  (state, carrier, defuser, fuse and defuse timers, position, site); every player (flags,
+  position, velocity in half floats, yaw and pitch, duck, health, armor, weapon, a spawn
+  counter, and every 8th snapshot the slow columns: money, kills, deaths, damage, headshots,
+  plants, defuses, wallbang rounds, squad, ping); weapons on the ground; grenades in flight;
+  doors; and for this client only: stamina, landing slowdown, the active weapon and every
+  weapon's ammo. Each player receives about 7 KB/s in a 2v2 and 19 KB/s in an 8v8, before
+  compression.
+- **Events** (reliable unless marked): `roster`, `round`, `go`, `end`, `plant`, `defused`,
+  `explode`, `kill` (killer, weapon, headshot, wallbang, death direction), `hurt` and `hit`
+  (to the player concerned), `buy` (the result of a purchase), `pickup`, `note`, `wb` (wallbang
+  round state), `door`, `smoke` (a cloud's seed, so it billows the same everywhere), `snd`
+  (positional sounds such as the charge being defused), `chat` and `sys` (joins, leaves and
+  side switches in the chat); and as effects (unreliable): `shot` (tracer, impacts with the
+  brush and plane they hit, bodies hit), `knife`, `step`, `eject`.
+- Client → host, reliable: `BUY` (the host runs `Match.buy`), `TEAM` (switch sides), `CHAT`
+  (rate-limited).
 
 ### Client-side prediction and reconciliation
 
-1. The client applies its own usercmd immediately with the **same** `Player.tick` and
-   `Loadout.tick` code. It keeps a ring buffer of `{ seq, cmd, predicted state }`.
-2. When a snapshot says "processed up to seq N, your state was S", the client sets its player
-   to S and **replays** every buffered cmd after N. That gives the corrected present.
-3. Small errors are smoothed over ~100 ms (blend the camera, never the simulation). Large ones
-   (teleports, respawns) snap.
-4. Predict weapons too: fire rate, ammo, recoil index, reload timing, muzzle flash, sounds and
-   viewmodel animation, so shooting feels instant. **Never** predict damage or kills;
-   hitmarkers come from server events.
-5. Spread must match between client and server: seed it per shot from `(player id, usercmd
-   seq)` so the client draws tracers and decals where the server will actually hit.
-
-Code changes this needs:
-
-- Per-shot seeds: `Gun.rnd` and `Ballistics.rnd` are seeded per weapon today; reseed them from
-  `(player id, seq)` for each shot. Cosmetic randomness (`FX.rnd`, `randf()` in effects, items
-  and sound) can stay local.
-- Serialisable state: `to_state()` / `from_state()` on `Player`, `Loadout` and the weapons
-  (position, velocity, duck, timers, ammo, recoil and spray index, the weapon's state machine).
-- Split the predicted local player from interpolated remote actors: today every `Actor`
-  interpolates one tick (`prev`/`pos`); remote ones get a snapshot buffer instead.
-- `main.sim_tick` becomes two loops: on the server, apply each player's queued cmds, tick,
-  snapshot; on a client, predict yourself and interpolate the rest.
+1. Each tick the client builds its command, sends it and applies it at once to its own player
+   with the **same** `Player.tick` and `Loadout.tick` the host runs (with the host's
+   restrictions: frozen in buy time, pinned while defusing). It keeps the commands the host
+   hasn't confirmed.
+2. When a snapshot says "applied up to command N, you are at S", the client takes S and
+   **replays** every command after N. The difference between the old and the replayed position
+   goes into a camera offset that fades out over about 80 ms; the simulation itself is never
+   blended. A respawn (the spawn counter changed) takes the host's state and view outright.
+3. Weapons are predicted too: fire rate, ammo, recoil, reload, switching, the viewmodel and the
+   sound, so shooting feels instant. Ammo and the active weapon only take the host's value once
+   it has seen the trigger pull or switch that changed them. Damage and kills are **never**
+   predicted: hitmarkers, hurt flashes and the kill feed come from the host.
+4. **Spread is seeded per shot** from `(shooter id, command sequence)` (`Wire.shot_seed`), for
+   both the gun's jitter and every pellet, so the tracer and the impacts the client draws are
+   where the host's shot actually goes.
 
 ### Entity interpolation
 
-- Render remote players at `serverTime − interpDelay` (about 100 ms: 2 snapshot intervals plus a
-  margin for jitter).
-- Interpolate position, angles and duck between the two snapshots around that time; the
-  one-tick `prev`/`pos` path generalises to snapshot buffers.
-- Animation is procedural from movement state (`PlayerModel.update`), so it needs no animation
-  sync.
-- Extrapolate at most 100–200 ms when packets are late, then freeze.
+- Everyone else is drawn 5 ticks (78 ms) behind the newest snapshot, between the two snapshots
+  around that time: position, velocity, yaw, pitch and duck. The client's estimate of the host
+  tick advances one per tick and drifts toward the snapshots' ticks.
+- A player whose snapshots are late keeps moving on its last velocity for up to 8 ticks, then
+  stops.
+- Animation is procedural from the movement state (`PlayerModel.update`), so it needs no
+  syncing. Grenades, dropped weapons, doors and the charge come from the snapshots.
 
 ### Lag compensation
 
-When the server processes a shot from player P with usercmd `seq`, it:
+1. The host keeps 64 ticks (one second) of every player's position and yaw.
+2. Each command says which tick the client was drawing the others at. Before tracing a remote
+   player's shot or knife (wallbang rounds included), the host moves everyone else's hitboxes
+   to where they were at that tick, interpolated between the two recorded ticks around it, at
+   most 16 ticks (250 ms) back: beyond that, the lag is the shooter's.
+3. It runs the usual `Combat.shot` / `Ballistics` / `PlayerModel.hit_test` path, puts everyone
+   back and applies the damage in the present.
 
-1. works out the time P was looking at: `t = cmdTime − P.interpDelay` (the client sends its
-   interp delay; latency is implicit in `cmdTime`);
-2. rewinds every other player's hitboxes to time `t` from a ring buffer of per-tick poses
-   (position, yaw, duck, gait phase, so `PlayerModel` can rebuild its bones; the hitboxes are
-   already bone-local boxes tested by `PlayerModel.hit_test`);
-3. runs the existing `Ballistics` / `Actors.hitscan` path against the rewound poses (wallbang
-   rounds included; walls are static, doors use their pose at `t` via
-   `CollisionWorld.move_brush`);
-4. restores the present and applies damage now.
+In the `mp_lag` test a client taps 16 shots at the host strafing across its view: all 16 land
+with compensation at a 100 ms round trip, against 18% without it (44% on localhost).
 
-Cap the rewind at 200 ms; beyond that the shooter's latency is their own problem. Log rewind
-distances to spot abuse. This is the model the classic games use; "shot behind a wall"
-complaints are its known trade-off.
+### Authority
 
-### Authority and anti-cheat basics
+- The host owns movement (it simulates from commands, so a client can't move faster than the
+  rules allow), fire rate and ammo, wallbang rounds, money and buying, the charge, rounds, doors,
+  grenades and all damage. A client's own state is only ever a prediction.
+- Admin powers are off in network games. Network matches pay XP and points like casual matches
+  on each player's own profile; Elo stays a rating against bots.
 
-- **The server owns** movement (it simulates from cmds, so speedhacks simply don't move you),
-  fire rate and ammo, wallbang rounds (count and unlock time), money and buying (`Match.buy`
-  runs only there), the charge, rounds and all damage.
-- **Admin powers move to the server.** Today the passcode is checked on the player's own
-  computer; online, admin is a server-side role, and x-ray and radar positions are sent only to
-  admins.
-- **Clamp** view-angle deltas per tick and cmd rates per second. Drop cmds from the future
-  (client tick ahead of server tick plus slack).
-- **Don't send** what the client shouldn't know: cull enemies behind walls per client with a
-  line-of-sight test (`CollisionWorld.ray`) against hull corners, with a margin of a few ticks
-  of movement. That is enough against basic wallhacks.
-- **Accounts, profiles and Elo** move to a server too: the current accounts in
-  `user://accounts/` are local, single-player saves.
+### Testing it
 
-### Milestones
+- `--netsim=delay,loss,jitter` holds every outgoing packet for `delay` ms (unreliable ones up
+  to `jitter` ms longer, so they can arrive out of order as on the internet) and drops `loss`
+  percent of the unreliable ones, at whichever end it's given (the tests pass it to both).
+  Reliable messages keep their order.
+- The suites start real Godot processes on one computer: `mp` (a host and two clients),
+  `mp_dedicated` (a dedicated server and a client), `mp_lag` (hit rates with and without lag
+  compensation) and `mp_shots` (a rendered client's screenshots). The client process writes
+  its checks to the tests' data folder and the host process reports them.
 
-1. `--server` mode: the headless project hosts a match over ENet; clients send cmds and render
-   server snapshots (no prediction yet; laggy but working).
-2. Client prediction and reconciliation for movement, then weapons; per-shot seeds.
-3. Snapshot delta compression and interpolation buffers. Godot has no built-in network
-   simulator, so add a test transport between `send_bytes` and the peer that adds latency,
-   jitter and loss (100–200 ms, 2–5%).
-4. Lag compensation with hitbox history; a debug overlay comparing the client's hitboxes with
-   the server's rewound ones.
-5. Web export over WebRTC; lobby and matchmaking (rooms of up to 16, bots filling empty slots, which
-   already works; up to 16 per match); accounts, profiles and Elo on a server.
+### Still to do
 
-Each milestone gets a suite in `tests/`: for example a server and two clients in one process
-over ENet on localhost, checking that a predicted position matches the server's within a unit
-after scripted input, and that a lag-compensated shot at 150 ms hits.
+1. **Dedicated server:** a map rotation (send `WELCOME` again so clients reload), console
+   commands (kick, change map, say), a "dedicated server" export preset without the textures
+   and sounds.
+2. **Internet play without addresses:** a small master server that hosts register with and
+   clients list, plus NAT punch-through or relays.
+3. **Bandwidth:** delta-compress snapshots against the last one the client acknowledged, and
+   send far-away players less often.
+4. **Don't send what a client shouldn't know:** cull enemies behind walls per client with a
+   line-of-sight test (`CollisionWorld.ray`) against their hull corners, with a margin of a few
+   ticks of movement; clamp view-angle changes and command rates.
+5. **Web:** WebRTC for the Web export (`WebRTCMultiplayerPeer` with a signalling server);
+   browsers have no UDP, so ENet is desktop only.
+6. **Accounts, profiles and Elo on a server**, so ranked play against people is possible, and
+   admin as a server-side role.
 
 ---
 
@@ -175,7 +192,7 @@ as a fallback. Where the port differs from the original plan, it was to keep the
 | Viewmodel | Second camera or SubViewport | A SubViewport with its own world, field of view, sun and MSAA |
 | Sound | Pre-rendered WAV, `AudioStreamPlayer3D` | As planned, with buses (compressor and limiter) |
 | HUD, radar, menus | `Control` nodes | `Control` menus built in code; the HUD draws immediate-mode; the radar is the exported overview in a shader |
-| Tests | GUT or C# unit tests | A small runner (`tests/runner.tscn`) with 87 checks (including the map layout checks) plus the match and screenshot suites |
+| Tests | GUT or C# unit tests | A small runner (`tests/runner.tscn`) with 87 checks (including the map layout checks) plus the match, network and screenshot suites |
 
 ### Where each browser module went
 

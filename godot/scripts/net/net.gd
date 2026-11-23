@@ -96,8 +96,49 @@ func host(cfg: Dictionary, port: int = PORT, name: String = "") -> String:
 		_lan_udp = null           # another host on this PC answers the LAN; ours still takes addresses
 	error = ""
 	status = "Hosting on port %d" % port
+	if Actors.me and not Game.dedicated:
+		Actors.me.name = player_name()
 	state_changed.emit()
 	return ""
+
+
+var _guest_tag := 0
+
+
+## Your name in network games: your account's, or "Guest 123" for a guest (fixed for this run).
+func player_name() -> String:
+	if not Accounts.is_guest():
+		return Accounts.display_name()
+	if _guest_tag == 0:
+		_guest_tag = 100 + randi() % 900
+	return "Guest %d" % _guest_tag
+
+
+## Say something in a network game (everyone, or your team only): the host sends it on.
+func say(text: String, team_only: bool) -> void:
+	text = text.strip_edges().left(120)
+	if text == "" or not active():
+		return
+	if is_client():
+		send_msg(1, M_CHAT, {"text": text, "team": team_only})
+	elif server and Actors.me:
+		server.chat(Actors.me, text, team_only)
+
+
+## Ask to play on the other side (the host decides; a full side says no).
+func switch_team(team: int) -> void:
+	if is_client():
+		send_msg(1, M_TEAM, {"team": team})
+	elif server and Actors.me:
+		var why := server.switch_actor(Actors.me, team)
+		if why != "":
+			HUD.note(why)
+
+
+## A dedicated server's console: what happened, with the time.
+func log_line(text: String) -> void:
+	if Game.dedicated:
+		print("[%s] %s" % [Time.get_time_string_from_system(), text])
 
 
 func default_game_name() -> String:
@@ -156,6 +197,8 @@ func leave(reason: String = "") -> void:
 		error = reason
 	if was != "off":
 		Actors.after_network(was == "client")
+		if Actors.me:
+			Actors.me.name = Accounts.display_name()
 		state_changed.emit()
 
 

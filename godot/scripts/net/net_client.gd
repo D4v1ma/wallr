@@ -42,7 +42,7 @@ func send_hello() -> void:
 	var kits := {}
 	for gun: String in ["pistol", "smg", "shotgun", "rifle", "sniper"]:
 		kits[gun] = Arsenal.kit_for(gun)
-	Net.send_msg(1, Net.M_HELLO, {"v": Net.VERSION, "name": Accounts.display_name(), "kits": kits, "team": int(Settings.get_value("mpTeam")) if Settings.v.has("mpTeam") else -1})
+	Net.send_msg(1, Net.M_HELLO, {"v": Net.VERSION, "name": Net.player_name(), "kits": kits, "team": int(Settings.get_value("mpTeam")) if Settings.v.has("mpTeam") else -1})
 
 
 func on_msg(type: int, data: Variant) -> void:
@@ -551,6 +551,8 @@ func event(e: Array) -> void:
 			Match.client_event(e)
 		"chat":
 			HUD.chat_line(String(e[2]), int(e[3]), String(e[4]), bool(e[5]))
+		"sys":
+			HUD.chat_line("", -1, String(e[1]), false)
 
 
 func _shot(e: Array) -> void:

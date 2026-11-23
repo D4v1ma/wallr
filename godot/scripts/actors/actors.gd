@@ -33,6 +33,10 @@ func init() -> void:
 		Game.world_root.add_child(models_root)
 	var a := Actor.new(int(Settings.get_value("team")), "You", false, true)
 	me = a
+	if Game.dedicated:
+		a.team = 0                  # a dedicated server's viewpoint only: it never plays
+		a.alive = false
+		return
 	list.append(a)
 	Viewmodel.set_team(a.team)
 	a.spawn()

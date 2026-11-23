@@ -71,6 +71,18 @@ func run(r: Node) -> void:
 			break
 		await r.get_tree().create_timer(0.1).timeout
 	r.check("host: the player left and a bot took its place again", not Actors.list.has(remote) and _sides() == before, "sides %s" % str(_sides()))
+	var heard := false
+	for c: Dictionary in HUD.chat_lines:
+		heard = heard or String(c.text) == "hello host"
+	r.check("host: the client's chat line reached us", heard)
+	# the host changes sides itself: a bot goes the other way, squads (and so the score) stay right
+	var t0 := Actors.me.team
+	Net.switch_team(1 - t0)
+	var squads_ok := true
+	for a: Actor in Actors.list:
+		squads_ok = squads_ok and Match.squad_on_side(a.team) == a.squad
+	r.check("host: switching sides from the pause menu (a bot swaps back, squads stay right)", Actors.me.team == 1 - t0 and _sides() == before and squads_ok,
+		"%s, sides %s" % [Actors.TEAMS[Actors.me.team].name, str(_sides())])
 	for i in 100:
 		if not OS.is_process_running(pid):
 			break

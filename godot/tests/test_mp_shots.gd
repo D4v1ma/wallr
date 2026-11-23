@@ -44,6 +44,8 @@ func run(r: Node) -> void:
 		(mates[0] as Actor).player.spawn(base + Vector3(140, 0, 150), deg_to_rad(-70.0))
 		(mates[0] as Actor).alive = true
 	me_out_of_the_way()
+	await r.get_tree().create_timer(2.6).timeout
+	Net.say("good luck all", false)
 	for i in 300:
 		if not OS.is_process_running(pid):
 			break

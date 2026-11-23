@@ -24,6 +24,7 @@ class Client:
 	var last_seq := 0
 	var last_cmd: Dictionary = {}
 	var starved := 0
+	var chat_at := -10000          ## msec of the last chat line (a little flood control)
 
 
 var clients: Dictionary = {}     ## peer id -> Client
@@ -55,7 +56,7 @@ func size_per_side() -> int:
 
 
 func humans() -> int:
-	var n := 1
+	var n := 0 if Game.dedicated else 1
 	for c: Client in clients.values():
 		if c.ready:
 			n += 1
@@ -74,6 +75,8 @@ func on_connect(peer: int) -> void:
 	var c := Client.new()
 	c.peer = peer
 	clients[peer] = c
+	var pp := Net.peer.get_peer(peer) if Net.peer else null
+	Net.log_line("Connection from %s" % (pp.get_remote_address() if pp else "?"))
 
 
 func on_disconnect(peer: int) -> void:
@@ -83,7 +86,7 @@ func on_disconnect(peer: int) -> void:
 		return
 	var team := c.actor.team
 	Actors.remove_actor(c.actor)
-	ev(["note", "%s left" % c.name])
+	announce("%s left" % c.name, " (%d playing)" % humans())
 	if bool(cfg.get("fill", true)) and Actors.on_side(team) < size_per_side():
 		Actors.add_bot(team)
 	roster_dirty = true
@@ -104,9 +107,13 @@ func on_msg(peer: int, type: int, data: Variant) -> void:
 				ev(["buy", r.ok, r.msg], peer)
 		Net.M_TEAM:
 			if c.actor and data is Dictionary:
-				_switch(c, int(data.get("team", -1)))
+				var why := switch_actor(c.actor, int(data.get("team", -1)))
+				if why != "":
+					ev(["note", why], peer)
 		Net.M_CHAT:
-			if c.actor and data is Dictionary:
+			var now := Time.get_ticks_msec()
+			if c.actor and data is Dictionary and now - c.chat_at >= 400:
+				c.chat_at = now
 				chat(c.actor, String(data.get("text", "")), bool(data.get("team", false)))
 
 
@@ -120,12 +127,31 @@ func _hello(c: Client, d: Variant) -> void:
 	c.name = String(d.get("name", "Player")).strip_edges().left(18)
 	if c.name == "":
 		c.name = "Player"
+	c.name = _unique_name(c, c.name)
 	c.kits = d.get("kits", {}) if d.get("kits") is Dictionary else {}
 	c.team_pref = int(d.get("team", -1))
 	Net.send_msg(c.peer, Net.M_WELCOME, {"map": cfg.map, "cfg": cfg, "name": name, "tick": Game.ticks})
 
 
+## Two people called the same: the second becomes "Name (2)".
+func _unique_name(c: Client, n: String) -> String:
+	var taken := {}
+	for a: Actor in Actors.list:
+		taken[a.name] = true
+	for o: Client in clients.values():
+		if o != c:
+			taken[o.name] = true
+	if not taken.has(n):
+		return n
+	for i in range(2, 100):
+		var m := "%s (%d)" % [n, i]
+		if not taken.has(m):
+			return m
+	return n
+
+
 func _reject(c: Client, why: String) -> void:
+	Net.log_line("Turned away %s: %s" % [c.name, why])
 	Net.send_msg(c.peer, Net.M_REJECT, {"why": why})
 	clients.erase(c.peer)
 	Net.peer.disconnect_peer(c.peer, false)
@@ -143,7 +169,9 @@ func _ready_client(c: Client) -> void:
 	_make_room(team)
 	c.actor = Actors.add_remote(c.peer, c.name, team, c.kits)
 	roster_dirty = true
-	ev(["note", "%s joined the %s" % [c.name, Actors.TEAMS[team].name]], 0, c.peer)
+	announce("%s joined the %s" % [c.name, Actors.TEAMS[team].name], " (%d playing)" % humans())
+	if Game.dedicated and humans() == 1 and Match.active:
+		Match.start_match()       # the server sat empty: the first player starts a fresh match
 	Net.send_msg(c.peer, Net.M_STATE, {"history": Match.history, "score": Match.score, "len": Match.len, "ff": Actors.ff})
 
 
@@ -176,18 +204,34 @@ func _make_room(team: int) -> void:
 			return
 
 
-func _switch(c: Client, team: int) -> void:
-	if (team != 0 and team != 1) or c.actor.team == team or _human_count(team) >= size_per_side():
-		return
+## A player asks to play on the other side (the host's own player too). Returns why not, or "".
+## Switching while alive costs you the round (you die, as if you had left it).
+func switch_actor(a: Actor, team: int) -> String:
+	if (team != 0 and team != 1) or a.team == team:
+		return ""
+	if _human_count(team) >= size_per_side():
+		return "The %s are full" % Actors.TEAMS[team].name
 	_make_room(team)
-	var a := c.actor
+	var squad := Match.squad_on_side(team)      # before the side changes (it is counted from the host's player)
 	if a.alive:
 		a.damage(999.0, "chest", a, {"name": "switched sides", "id": ""}, a.player.pos)
 	Actors.set_side(a, team)
-	a.squad = Match.squad_on_side(team) if Match.active else 0
+	a.squad = squad if Match.active else 0
+	if a.is_me:
+		Viewmodel.set_team(team)
 	if bool(cfg.get("fill", true)) and Actors.on_side(1 - team) < size_per_side():
 		Actors.add_bot(1 - team)
 	roster_dirty = true
+	announce("%s switched to the %s" % [a.name, Actors.TEAMS[team].name])
+	return ""
+
+
+## Someone joined, left or changed sides: a line in everyone's chat (and the server console).
+func announce(text: String, log_extra: String = "") -> void:
+	ev(["sys", text])
+	if not Game.dedicated:
+		HUD.chat_line("", -1, text, false)
+	Net.log_line(text + log_extra)
 
 
 func chat(from: Actor, text: String, team_only: bool) -> void:
@@ -195,6 +239,7 @@ func chat(from: Actor, text: String, team_only: bool) -> void:
 	if text == "":
 		return
 	var line := ["chat", from.id, from.name, from.team, text, team_only]
+	Net.log_line("%s%s: %s" % ["(team) " if team_only else "", from.name, text])
 	if team_only:
 		for c: Client in clients.values():
 			if c.ready and c.actor and c.actor.team == from.team:

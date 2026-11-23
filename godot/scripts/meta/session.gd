@@ -27,7 +27,8 @@ func begin(c: Dictionary) -> void:
 	Settings.v.ff = bool(cfg.get("ff", false))
 	Settings.v.team = float(team)
 	Settings.v.map = String(cfg.map)
-	Settings.save()
+	if not Game.dedicated:
+		Settings.save()
 	HUD.toggle_buy(false)
 	Actors.remove_bots()
 	Actors.ff = bool(cfg.get("ff", false))
@@ -113,6 +114,9 @@ func exit_outcome(st: Dictionary) -> String:
 ## Fold the match into the profile (saved to the signed-in account) exactly once.
 func record(outcome: String) -> Dictionary:
 	done = true
+	if Game.dedicated:
+		results = {}              # nobody's profile on a dedicated server
+		return results
 	if admin_used:
 		results = Profile.admin_results(cfg, stats(Actors.me), outcome)
 	else:
@@ -123,7 +127,7 @@ func record(outcome: String) -> Dictionary:
 
 ## Kept up to date every round, so an exit still counts if the game dies.
 func checkpoint() -> void:
-	if not active or done or Accounts.is_guest() or admin_used:
+	if not active or done or Accounts.is_guest() or admin_used or Game.dedicated:
 		return
 	var st := stats(Actors.me)
 	Accounts.checkpoint({"matchId": match_id, "cfg": cfg, "st": st, "outcome": exit_outcome(st), "at": Time.get_unix_time_from_system()})

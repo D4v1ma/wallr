@@ -305,7 +305,7 @@ func _render_ready() -> void:
 
 
 func _render_pause() -> void:
-	var s := _sheet("Paused", null, 560.0, false, 380.0)
+	var s := _sheet("Paused", null, 560.0, false, 450.0 if Net.active() else 380.0)
 	var c := Session.cfg
 	var info := "Practice"
 	if Session.active and not c.is_empty():
@@ -319,11 +319,20 @@ func _render_pause() -> void:
 		s.body.add_child(UI.note("The match keeps running while you're in this menu. Leaving ends it for everyone."))
 	elif Net.is_client() and Net.client:
 		s.body.add_child(UI.note("Connected to %s · ping %d ms · the match keeps running while you're in this menu." % [Net.client.host_name, Net.ping_of(1)], UI.OK))
+	if Net.active():
+		s.body.add_child(UI.note("Y to chat with everyone, U with your team. Switching sides during a live round costs you that round."))
 	if Session.active and c.get("ranked", false) and not Session.done:
 		s.body.add_child(UI.note("Leaving a ranked match that has started counts as a loss.", UI.DANGER))
 	s.body.add_child(UI.note("Playing as a guest: this match won’t be saved." if Accounts.is_guest() else "Progress saves to %s on this device when the match ends or you leave it." % Accounts.cur.name))
 	var col := UI.vbox(8)
 	col.add_child(UI.button("Resume", func() -> void: Game.main.play(), "primary"))
+	if Net.active() and Session.active and Actors.me:
+		var other := 1 - Actors.me.team
+		var sw := UI.button("Switch to the %s" % Actors.TEAMS[other].name, func() -> void:
+			Net.switch_team(other)
+			Game.main.play())
+		sw.tooltip_text = "Switching in a live round costs you the round"
+		col.add_child(sw)
 	col.add_child(UI.button("Settings", func() -> void: show_screen("settings")))
 	var leave_txt := "End the game for everyone" if Net.is_host() else ("Leave the game" if Net.is_client() else ("Leave match" if Session.active and not Session.done else "Main menu"))
 	col.add_child(UI.button(leave_txt, func() -> void: Session.leave()))
@@ -1421,18 +1430,22 @@ func _render_mp() -> void:
 	var s := _sheet("Multiplayer", null, 780.0, true, 440.0)
 	if mp_message != "":
 		s.body.add_child(UI.note(mp_message, UI.DANGER))
+	var web := OS.has_feature("web")
+	if web:
+		s.body.add_child(UI.note("Network play needs the desktop version of wallr: a browser can't open the UDP ports it uses.", UI.DANGER))
 	var row := UI.hbox(14)
 	var host := UI.card("HOST A GAME", "Play on this PC. Others on your network find it in their list, or join by your address. Bots fill the empty places.",
-		func() -> void: _open_mphost(), true, false, null, Vector2(340, 120))
+		func() -> void: _open_mphost(), true, web, null, Vector2(340, 120))
 	host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(host)
 	var join := UI.card("JOIN A GAME", "Games on your network show up by themselves; or type the host's address.", func() -> void: mp_message = ""; Net.error = ""; show_screen("mpjoin"),
-		false, false, null, Vector2(340, 120))
+		false, web, null, Vector2(340, 120))
 	join.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(join)
 	s.body.add_child(row)
 	s.body.add_child(UI.note("Everyone needs the same version of wallr. A game uses UDP port %d (and %d to be found on the network). To play over the internet, the host forwards that port on their router and gives friends their public address." % [Net.PORT, Net.LAN_PORT]))
 	s.body.add_child(UI.note("Network matches pay XP and points like casual matches; Elo stays a rating against bots for now."))
+	s.body.add_child(UI.note("A spare PC can also run a dedicated server that hosts without playing (start the game with --server; the README has the details)."))
 	s.foot.add_child(UI.spacer())
 	s.foot.add_child(UI.button("Back", back))
 

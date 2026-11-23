@@ -476,6 +476,8 @@ func next_round() -> void:
 			a.money = START_MONEY
 			a.alive = false
 			a.kit = false
+		if Game.dedicated and Actors.me:
+			Actors.me.team = 1 - Actors.me.team     # the server's viewpoint follows squad 0, so scores stay with their squads
 		if Net.is_host():
 			Net.server.roster_dirty = true
 	start_round()

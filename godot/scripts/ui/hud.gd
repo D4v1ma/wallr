@@ -45,7 +45,9 @@ var _spot_t := 0.0
 var buy_open := false
 var buy_msg := ""
 var buy_msg_t := 0.0
-var chat_lines: Array = []       ## network games: {name, team, text, team_only, age}
+var chat_lines: Array = []       ## network games: {name, team, text, team_only, age}; name "" = the game's own line
+var chat_box: LineEdit = null    ## Y / U: what you're typing
+var chat_team := false
 var scope_on := false
 var main_cam: Camera3D = null
 var active := false
@@ -80,6 +82,7 @@ func _ready() -> void:
 	canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
 	canvas.draw.connect(_draw_hud)
 	add_child(canvas)
+	_make_chat_box()
 	for id in ["rifle", "pistol", "knife", "smoke", "smg", "shotgun", "sniper", "charge"]:
 		var p := "res://assets/ui/icon_%s.png" % id
 		if ResourceLoader.exists(p):
@@ -106,6 +109,7 @@ func set_active(on: bool) -> void:
 	if not on:
 		buy_open = false
 		Controls.ui_capture = false
+		close_chat()
 
 
 func level_changed(L: Level) -> void:
@@ -198,7 +202,6 @@ func update(dt: float, cam: Camera3D) -> void:
 	main_cam = cam
 	for c: Dictionary in chat_lines:
 		c.age += dt
-	chat_lines = chat_lines.filter(func(c: Dictionary) -> bool: return float(c.age) < 12.0)
 	if not active:
 		return
 	note_t = maxf(0.0, note_t - dt)
@@ -479,22 +482,102 @@ func _draw_alive(cx: float, y: float) -> void:
 			canvas.draw_rect(Rect2(x, y, 6, 10), col)
 
 
-## A chat line from a network game (Y to type comes later; the host's notes come here too).
+## A chat line from a network game, or the game's own line (someone joined, left, switched sides).
 func chat_line(n: String, team: int, text: String, team_only: bool) -> void:
 	chat_lines.append({"name": n, "team": team, "text": text, "team_only": team_only, "age": 0.0})
-	if chat_lines.size() > 6:
+	if chat_lines.size() > 8:
 		chat_lines.pop_front()
 
 
+func _make_chat_box() -> void:
+	chat_box = LineEdit.new()
+	chat_box.visible = false
+	chat_box.max_length = 120
+	chat_box.anchor_top = 1.0
+	chat_box.anchor_bottom = 1.0
+	chat_box.offset_left = GAP
+	chat_box.offset_right = GAP + 470.0
+	chat_box.offset_top = -178.0
+	chat_box.offset_bottom = -148.0
+	chat_box.add_theme_font_override("font", fb)
+	chat_box.add_theme_font_size_override("font_size", 15)
+	chat_box.add_theme_color_override("font_color", HUD_COL)
+	chat_box.add_theme_color_override("font_placeholder_color", DIM)
+	chat_box.add_theme_color_override("caret_color", ACCENT)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.031, 0.039, 0.035, 0.84)
+	sb.border_color = Color(ACCENT, 0.85)
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(3)
+	sb.content_margin_left = 10.0
+	sb.content_margin_right = 10.0
+	for st in ["normal", "focus", "read_only"]:
+		chat_box.add_theme_stylebox_override(st, sb)
+	chat_box.text_submitted.connect(_chat_send)
+	chat_box.gui_input.connect(_chat_key)
+	chat_box.focus_exited.connect(close_chat)
+	add_child(chat_box)
+
+
+func typing() -> bool:
+	return chat_box != null and chat_box.visible
+
+
+## Y (everyone) or U (your team) in a network game: type a line, Enter sends it, Esc puts it away.
+## The game goes on meanwhile; you stand still.
+func open_chat(team_only: bool) -> void:
+	if not Net.active():
+		note("Chat is for network games")
+		return
+	toggle_buy(false)
+	chat_team = team_only
+	chat_box.text = ""
+	chat_box.placeholder_text = ("Say to your team" if team_only else "Say to everyone") + " · Enter sends · Esc cancels"
+	chat_box.visible = true
+	Controls.release_all()
+	Controls.typing = true
+	chat_box.grab_focus()
+
+
+func close_chat() -> void:
+	Controls.typing = false
+	if chat_box == null or not chat_box.visible:
+		return
+	chat_box.visible = false
+	if chat_box.has_focus():
+		chat_box.release_focus()
+
+
+func _chat_send(t: String) -> void:
+	Net.say(t, chat_team)
+	close_chat()
+
+
+func _chat_key(e: InputEvent) -> void:
+	var k := e as InputEventKey
+	if k and k.pressed and (k.physical_keycode == KEY_ESCAPE or k.keycode == KEY_ESCAPE):
+		chat_box.accept_event()
+		close_chat()
+
+
 func _draw_chat(H: float) -> void:
-	var y := H - 190.0 - 22.0 * (chat_lines.size() - 1)
-	for c: Dictionary in chat_lines:
-		var alpha := clampf((12.0 - float(c.age)) / 2.0, 0.0, 1.0)
-		var col: Color = T_COL[clampi(int(c.team), 0, 1)]
-		col.a = alpha
+	var open := typing()
+	var shown := chat_lines.filter(func(c: Dictionary) -> bool: return open or float(c.age) < 12.0)
+	if shown.is_empty():
+		return
+	var y := H - 190.0 - 22.0 * (shown.size() - 1)
+	if open:
+		canvas.draw_rect(Rect2(GAP - 6.0, y - 17.0, 482.0, 22.0 * shown.size() + 4.0), Color(0.031, 0.039, 0.035, 0.5))
+	for c: Dictionary in shown:
+		var alpha := 1.0 if open else clampf((12.0 - float(c.age)) / 2.0, 0.0, 1.0)
 		var x := GAP
-		x += _str(Vector2(x, y), ("(team) " if c.team_only else "") + String(c.name) + ": ", 14, col)
-		_str(Vector2(x, y), String(c.text), 14, Color(HUD_COL, alpha))
+		if String(c.name) == "":
+			_str(Vector2(x, y), String(c.text), 14, Color(DIM, DIM.a * alpha), fb)
+		else:
+			var col: Color = T_COL[clampi(int(c.team), 0, 1)]
+			col.a = alpha
+			x += _str(Vector2(x, y), ("(team) " if c.team_only else "") + String(c.name) + ": ", 14, col)
+			_str(Vector2(x, y), String(c.text), 14, Color(HUD_COL, alpha))
 		y += 22.0
 
 
@@ -821,6 +904,8 @@ func _draw_hints(H: float) -> void:
 		return
 	var lines := ["WASD move · Space jump · Ctrl crouch · Shift walk", "Mouse 1 fire · Mouse 2 scope in · R reload · E use", "X wallbang round · 1–5 weapons · Q last · G drop",
 		"B buy · Tab scores · F inspect · H hide hints · Esc menu"]
+	if Net.active():
+		lines.append("Y chat · U team chat · Esc menu to switch sides")
 	var y := H * 0.5 - 40.0
 	canvas.draw_rect(Rect2(GAP, y - 18, 340, lines.size() * 20 + 12), Color(0.031, 0.039, 0.035, 0.48))
 	for l: String in lines:
